@@ -9,6 +9,14 @@ class AppColors {
   static const Color primary = Color(0xFF7000FF);
   static const Color secondary = Color(0xFF21FFC3);
 
+  // Warm accent — used for matching/report contexts (S08, S09).
+  // Same family as AppGradients.coral but darker for AA contrast on white.
+  static const Color coral = Color(0xFFE85470);
+
+  // Mint accent — used for connection/inbox tab.
+  // Darker than gradientEnd (#21FFC3) for AA contrast on white.
+  static const Color mint = Color(0xFF00BFA5);
+
   static const Color background = Color(0xFFFFFFFF);
   static const Color surface = Color(0xFFFFFFFF);
   static const Color surfaceMuted = Color(0xFFF7F8FA);

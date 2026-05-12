@@ -7,10 +7,29 @@ import '../../features/onboarding/kyc_block_screen.dart';
 import '../../features/onboarding/signup_screen.dart';
 import '../../features/onboarding/splash_screen.dart';
 import '../../features/onboarding/walkthrough_screen.dart';
+import '../../features/home/agent_chat_screen.dart';
 import '../../features/home/home_screen.dart';
+import '../../features/matching/free_lock_report_screen.dart';
+import '../../features/matching/full_report_screen.dart';
+import '../../features/matching/locked_report_screen.dart';
+import '../../features/matching/match_list_screen.dart';
+import '../../features/matching/paywall_screen.dart';
+import '../../features/meet/chat_screen.dart';
+import '../../features/meet/feedback_screen.dart';
+import '../../features/meet/inbox_screen.dart';
+import '../../features/meet/meet_request_receive_screen.dart';
+import '../../features/meet/meet_request_send_screen.dart';
+import '../../features/meet/quota_exceeded_screen.dart';
+import '../../features/meet/request_declined_screen.dart';
+import '../../features/meet/request_status_screen.dart';
+import '../../features/meet/request_timeout_screen.dart';
+import '../../features/meet/scheduling_screen.dart';
 import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
 import '../../features/persona/scenario_player_screen.dart';
+import '../../features/profile/profile_screen.dart';
+import '../../features/profile/push_preview_screen.dart';
+import '../../features/profile/settings_screen.dart';
 import 'app_routes.dart';
 
 class AppRouter {
@@ -62,28 +81,115 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.agentChat,
-        pageBuilder: (context, state) => _slidePage(
-            state, const _ComingSoon(title: 'S07-AgentChat · AI ↔ AI 시뮬레이션')),
+        pageBuilder: (context, state) =>
+            _slidePage(state, const AgentChatScreen()),
       ),
       GoRoute(
         path: AppRoutes.matchList,
         pageBuilder: (context, state) =>
-            _fadePage(state, const _ComingSoon(title: 'S08 · 매칭 리스트')),
+            _fadePage(state, const MatchListScreen()),
       ),
       GoRoute(
         path: AppRoutes.lockedReport,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          LockedReportScreen(matchId: state.uri.queryParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.paywall,
         pageBuilder: (context, state) =>
-            _slidePage(state, const _ComingSoon(title: 'S09 · 잠금 리포트 프리뷰')),
+            _slidePage(state, const PaywallScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.fullReport,
+        pageBuilder: (context, state) => _fadePage(
+          state,
+          FullReportScreen(matchId: state.uri.queryParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.meetRequestSend,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          MeetRequestSendScreen(matchId: state.uri.queryParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.quotaExceeded,
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const QuotaExceededScreen(),
+          opaque: false,
+          barrierColor: Colors.transparent,
+          transitionDuration: const Duration(milliseconds: 240),
+          transitionsBuilder: (_, anim, _, child) => FadeTransition(
+            opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+            child: child,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.requestStatus,
+        pageBuilder: (context, state) =>
+            _fadePage(state, const RequestStatusScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.requestDeclined,
+        pageBuilder: (context, state) =>
+            _fadePage(state, const RequestDeclinedScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.requestTimeout,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const RequestTimeoutScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.meetRequestReceive,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const MeetRequestReceiveScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.chat,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          ChatScreen(conversationId: state.uri.queryParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.scheduling,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const SchedulingScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.feedback,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const FeedbackScreen()),
       ),
       GoRoute(
         path: AppRoutes.inbox,
         pageBuilder: (context, state) =>
-            _fadePage(state, const _ComingSoon(title: 'S15 · 받은편지함')),
+            _fadePage(state, const InboxScreen()),
       ),
       GoRoute(
         path: AppRoutes.profile,
         pageBuilder: (context, state) =>
-            _fadePage(state, const _ComingSoon(title: 'S20 · 프로필 / 설정')),
+            _fadePage(state, const ProfileScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.freeLockReport,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const FreeLockReportScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.settings,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const SettingsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.pushPreview,
+        pageBuilder: (context, state) =>
+            _fadePage(state, const PushPreviewScreen()),
       ),
       GoRoute(
         path: AppRoutes.login,

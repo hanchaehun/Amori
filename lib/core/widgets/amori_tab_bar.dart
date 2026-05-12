@@ -8,6 +8,47 @@ import '../theme/app_typography.dart';
 
 enum AmoriTab { home, match, connect, profile }
 
+class _TabConfig {
+  const _TabConfig({
+    required this.tab,
+    required this.icon,
+    required this.label,
+    required this.activeColor,
+  });
+
+  final AmoriTab tab;
+  final IconData icon;
+  final String label;
+  final Color activeColor;
+}
+
+const List<_TabConfig> _tabs = [
+  _TabConfig(
+    tab: AmoriTab.home,
+    icon: Icons.home_rounded,
+    label: '홈',
+    activeColor: AppColors.primary,
+  ),
+  _TabConfig(
+    tab: AmoriTab.match,
+    icon: Icons.favorite_rounded,
+    label: '매칭',
+    activeColor: AppColors.coral,
+  ),
+  _TabConfig(
+    tab: AmoriTab.connect,
+    icon: Icons.chat_bubble_rounded,
+    label: '연결',
+    activeColor: AppColors.mint,
+  ),
+  _TabConfig(
+    tab: AmoriTab.profile,
+    icon: Icons.person_rounded,
+    label: '프로필',
+    activeColor: AppColors.ink900,
+  ),
+];
+
 class AmoriTabBar extends StatelessWidget {
   const AmoriTabBar({super.key, required this.active});
 
@@ -42,30 +83,14 @@ class AmoriTabBar extends StatelessWidget {
           height: 60,
           child: Row(
             children: [
-              _TabItem(
-                icon: Icons.home_rounded,
-                label: '홈',
-                selected: active == AmoriTab.home,
-                onTap: () => _onTap(context, AmoriTab.home),
-              ),
-              _TabItem(
-                icon: Icons.favorite_rounded,
-                label: '매칭',
-                selected: active == AmoriTab.match,
-                onTap: () => _onTap(context, AmoriTab.match),
-              ),
-              _TabItem(
-                icon: Icons.chat_bubble_rounded,
-                label: '연결',
-                selected: active == AmoriTab.connect,
-                onTap: () => _onTap(context, AmoriTab.connect),
-              ),
-              _TabItem(
-                icon: Icons.person_rounded,
-                label: '프로필',
-                selected: active == AmoriTab.profile,
-                onTap: () => _onTap(context, AmoriTab.profile),
-              ),
+              for (final cfg in _tabs)
+                _TabItem(
+                  icon: cfg.icon,
+                  label: cfg.label,
+                  activeColor: cfg.activeColor,
+                  selected: cfg.tab == active,
+                  onTap: () => _onTap(context, cfg.tab),
+                ),
             ],
           ),
         ),
@@ -78,18 +103,20 @@ class _TabItem extends StatelessWidget {
   const _TabItem({
     required this.icon,
     required this.label,
+    required this.activeColor,
     required this.selected,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final Color activeColor;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.ink300;
+    final color = selected ? activeColor : AppColors.ink300;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -103,14 +130,14 @@ class _TabItem extends StatelessWidget {
               children: [
                 Icon(icon, size: 24, color: color),
                 if (selected)
-                  const Positioned(
+                  Positioned(
                     top: -8,
                     child: SizedBox(
                       width: 6,
                       height: 6,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
+                          color: activeColor,
                           shape: BoxShape.circle,
                         ),
                       ),

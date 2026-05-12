@@ -83,33 +83,16 @@ class _TopBar extends StatelessWidget {
       ),
       child: SizedBox(
         height: 56,
-        child: Row(
-          children: [
-            GradientText(
-              'amori',
-              style: AppTypography.titleLarge.copyWith(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.8,
-              ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: GradientText(
+            'amori',
+            style: AppTypography.titleLarge.copyWith(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.8,
             ),
-            const Spacer(),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.menu_rounded,
-                  size: 24, color: AppColors.ink900),
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content:
-                        Text('앱 메뉴 (계정 설정 · 언어 설정 · 앱 정보) — 다음 턴 작업 예정'),
-                  ),
-                );
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -178,7 +161,7 @@ class _HeroAICardState extends State<_HeroAICard> {
               const _LiveBadge(),
               AppSpacing.vMd,
               Text(
-                '3명과 가상 소개팅\n진행 중',
+                '소개팅 시뮬레이션\n진행 중',
                 style: AppTypography.titleLarge.copyWith(
                   color: AppColors.ink900,
                   fontSize: 22,

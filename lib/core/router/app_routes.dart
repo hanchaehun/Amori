@@ -34,6 +34,7 @@ class AppRoutes {
   // Phase 4
   static const String freeLockReport = '/free/locked';
   static const String profile = '/profile';
+  static const String settings = '/settings';
   static const String pushPreview = '/push';
 
   // Login (placeholder)
