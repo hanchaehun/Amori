@@ -43,3 +43,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# AMORI source materials (not for distribution)
+AMORI Screens _standalone_.html
+AMORI_에이전트_질문지.pdf
+변경 전 테마.png
+변경 후 테마.png
+
+# Bundle extraction artifacts (dev-only)
+_extracted/
+_extract*.py
+
+# Local Claude Code settings (user-specific, not project)
+.claude/settings.local.json
