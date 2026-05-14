@@ -18,9 +18,9 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  void _onPushPreview(BuildContext context) {
+  void _onNotificationSettings(BuildContext context) {
     HapticFeedback.lightImpact();
-    context.push(AppRoutes.pushPreview);
+    context.push(AppRoutes.notificationSettings);
   }
 
   @override
@@ -54,7 +54,7 @@ class SettingsScreen extends StatelessWidget {
               SettingsRow(
                 icon: Icons.notifications_outlined,
                 label: '알림 설정',
-                onTap: () => _onPushPreview(context),
+                onTap: () => _onNotificationSettings(context),
                 last: true,
               ),
             ],

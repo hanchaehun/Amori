@@ -35,6 +35,7 @@ class AppRoutes {
   static const String freeLockReport = '/free/locked';
   static const String profile = '/profile';
   static const String settings = '/settings';
+  static const String notificationSettings = '/settings/notifications';
   static const String pushPreview = '/push';
 
   // Login (placeholder)

@@ -27,6 +27,7 @@ import '../../features/meet/scheduling_screen.dart';
 import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
 import '../../features/persona/scenario_player_screen.dart';
+import '../../features/profile/notification_settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/profile/push_preview_screen.dart';
 import '../../features/profile/settings_screen.dart';
@@ -185,6 +186,11 @@ class AppRouter {
         path: AppRoutes.settings,
         pageBuilder: (context, state) =>
             _slidePage(state, const SettingsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.notificationSettings,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const NotificationSettingsScreen()),
       ),
       GoRoute(
         path: AppRoutes.pushPreview,
