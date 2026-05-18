@@ -56,3 +56,32 @@ _extract*.py
 
 # Local Claude Code settings (user-specific, not project)
 .claude/settings.local.json
+
+# Python (혹시 backend/llm 이 Python 으로 가는 경우)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Node (혹시 backend 가 Node 로 가는 경우)
+node_modules/
+
+# Env / secrets — 절대 커밋 금지
+.env
+.env.local
+*.service-account.json
+*-credentials.json
+
+# LLM weights / cache — 절대 커밋 금지
+*.bin
+*.safetensors
+**/models/
+**/.cache/
+
+# 제안서 / 개인 자료
+제안서.pdf

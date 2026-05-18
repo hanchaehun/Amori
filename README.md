@@ -1,17 +1,45 @@
-# amori
+# AMORI
 
-A new Flutter project.
+AI Pre-Dating 플랫폼입니다. 사용자의 AI 에이전트가 백그라운드에서 가상 소개팅을 진행하고,
+케미가 검증된 인연만 오프라인으로 연결합니다.
 
-## Getting Started
+> 2026 인공지능 루키 대회 — 국내 AI 트랙 도전 과제
 
-This project is a starting point for a Flutter application.
+## 모노레포 구조
 
-A few resources to get you started if this is your first Flutter project:
+```
+amori/
+├── lib/                  Flutter 앱 (iOS·Android)               ─ 한채훈
+├── backend/              BFF (FastAPI / Node / 기타 — 자유)        ─ 손지민
+├── llm/                  KT Mi:dm 2.0 추론 + 프롬프트              ─ 이현정
+├── matching/             매칭 알고리즘 + 시뮬 오케스트레이션          ─ 명세현
+└── shared/schemas/       LLM 입출력 JSON 스키마 (계약, 고정)
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+각 폴더의 `README.md` 에 책임과 요구사항이 정리되어 있습니다. 기술 스택은 owner 가 자유롭게 선택합니다.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 역할 분담
+
+| 영역 | 담당 | 브랜치 prefix | 작업 시점 |
+|---|---|---|---|
+| Flutter 앱 (프론트엔드) | 한채훈 | `feat/fe-*` | 발표 전까지 |
+| 백엔드 | 손지민 | `be/*` | 발표 전까지 |
+| LLM | 이현정 | `llm/*` | 발표 전까지 |
+| 매칭 알고리즘 | 명세현 | `match/*` | LLM + 백엔드 완료 후 |
+| 공유 계약 (`shared/`) | 모두 리뷰 | `shared/*` | 상시 |
+
+## 핵심 원칙
+
+1. **`shared/schemas/` 가 유일한 강제 계약입니다.** 그 외 모든 것(스택·구조·도구)은 각 owner 가 자유롭게 선택합니다.
+2. **LLM provider 추상화가 필수입니다.** 발표(6월 8일) 전까지는 mock, 예선 통과 후에는 대회 GPU 에 셀프호스팅된 LLM 모듈로 환경변수만 스위치할 수 있도록 구현합니다.
+3. **`main` 에 직접 푸시하지 않습니다.** 변경은 모두 PR 로 진행하며, 리뷰어는 작성자가 직접 지정합니다.
+4. **다른 사람의 디렉토리는 수정하지 않습니다.** `shared/schemas/` 변경은 양쪽 리뷰가 필수입니다.
+
+## 마일스톤
+
+| 시점 | 마일스톤 |
+|---|---|
+| 2026-06-08 | 예선 발표 — GPU 없이 mock 으로 작동하는 LLM + 백엔드 완성 |
+| 예선 통과 후 | 대회 GPU 에 LLM 모듈 셀프호스팅 전환, 명세현 매칭 알고리즘 작업 시작 |
+| 2026-08 | MVP 출시 (iOS·Android 베타), 시드 유저 100명 |
+| 2026-11 | PMF 검증 |

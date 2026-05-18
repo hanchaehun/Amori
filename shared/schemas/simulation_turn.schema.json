@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amori.app/schemas/simulation_turn.json",
+  "title": "SimulationTurn",
+  "description": "두 페르소나가 multi-turn으로 대화할 때 한 턴의 메시지. SSE로 한 턴씩 스트리밍.",
+  "type": "object",
+  "required": ["turn_index", "speaker", "text", "ai_generated"],
+  "properties": {
+    "turn_index": { "type": "integer", "minimum": 0 },
+    "speaker": {
+      "type": "string",
+      "enum": ["me", "them", "system"],
+      "description": "me/them = 두 에이전트, system = 분석 코멘트 (예: '🔍 가치관 분석: ...')"
+    },
+    "text": { "type": "string" },
+    "signal": {
+      "type": ["string", "null"],
+      "description": "Flutter UI의 SignalChip에 표시될 태그. 예: '여행 시그널', '취향 일치', '음악 취향 +18%'"
+    },
+    "ai_generated": { "type": "boolean", "const": true }
+  }
+}

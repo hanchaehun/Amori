@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amori.app/schemas/persona.json",
+  "title": "Persona",
+  "description": "사용자의 24문항 답변을 LLM이 분석해 만든 페르소나 카드. pgvector에 임베딩과 함께 저장된다.",
+  "type": "object",
+  "required": ["user_id", "traits", "communication_style", "humor_style", "value_keywords", "ai_generated"],
+  "properties": {
+    "user_id": { "type": "string" },
+    "traits": {
+      "type": "array",
+      "description": "8개 카테고리별 성향 요약 (연락 템포 / 유머 / 갈등 / 데이트 / 돈·시간 / 관계 속도 / 경계선 / 위로)",
+      "items": {
+        "type": "object",
+        "required": ["category", "summary", "keywords"],
+        "properties": {
+          "category": { "type": "string" },
+          "summary": { "type": "string", "description": "한 문장 요약" },
+          "keywords": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "minItems": 8,
+      "maxItems": 8
+    },
+    "communication_style": { "type": "string", "description": "예: '느린 일상·진심형'" },
+    "humor_style": { "type": "string", "description": "예: '잔잔한 유머·드라이톤'" },
+    "value_keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "가치관 핵심 키워드 3~7개"
+    },
+    "embedding": {
+      "type": ["array", "null"],
+      "items": { "type": "number" },
+      "description": "한국어 임베딩 모델로 생성한 벡터. 차원은 모델별 (BGE-Korean=1024, KoSimCSE=768)."
+    },
+    "ai_generated": {
+      "type": "boolean",
+      "const": true,
+      "description": "AI 기본법 준수: AI 생성물 라벨"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amori.app/schemas/starter.json",
+  "title": "ChatStarters",
+  "description": "인간 채팅에서 추천하는 대화 시작 문구 묶음. lib/features/meet/chat_screen.dart의 _Starter와 매칭.",
+  "type": "object",
+  "required": ["starters", "ai_generated"],
+  "properties": {
+    "starters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "message"],
+        "properties": {
+          "label": { "type": "string", "description": "예: '💬 여행 얘기'" },
+          "message": { "type": "string", "description": "실제로 입력란에 채워질 문구" }
+        }
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "ai_generated": { "type": "boolean", "const": true }
+  }
+}

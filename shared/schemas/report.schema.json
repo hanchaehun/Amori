@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amori.app/schemas/report.json",
+  "title": "ChemistryReport",
+  "description": "시뮬레이션 결과로 만든 케미 리포트. lib/features/matching/full_report_screen.dart의 _Finding/_GuideItem과 1:1 매칭.",
+  "type": "object",
+  "required": ["match_id", "score", "findings", "warnings", "places", "starters", "ai_generated"],
+  "properties": {
+    "match_id": { "type": "string" },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "findings": {
+      "type": "array",
+      "description": "AI가 발견한 공통점. _Finding(emoji, title, sub)",
+      "items": {
+        "type": "object",
+        "required": ["emoji", "title", "sub"],
+        "properties": {
+          "emoji": { "type": "string" },
+          "title": { "type": "string" },
+          "sub": { "type": "string" }
+        }
+      },
+      "minItems": 2,
+      "maxItems": 5
+    },
+    "warnings": {
+      "type": "array",
+      "description": "주의할 점. _WarningCard(title, body)",
+      "items": {
+        "type": "object",
+        "required": ["title", "body"],
+        "properties": {
+          "title": { "type": "string" },
+          "body": { "type": "string" }
+        }
+      }
+    },
+    "places": {
+      "type": "array",
+      "description": "추천 장소. _GuideItem(emoji, title, sub)",
+      "items": {
+        "type": "object",
+        "required": ["emoji", "title", "sub"],
+        "properties": {
+          "emoji": { "type": "string" },
+          "title": { "type": "string" },
+          "sub": { "type": "string" }
+        }
+      },
+      "minItems": 2,
+      "maxItems": 4
+    },
+    "starters": {
+      "type": "array",
+      "description": "첫 만남 대화 시작 문구",
+      "items": { "type": "string" },
+      "minItems": 2,
+      "maxItems": 5
+    },
+    "tip": {
+      "type": ["string", "null"],
+      "description": "한 가지 팁 (_TipCard)"
+    },
+    "ai_generated": { "type": "boolean", "const": true }
+  }
+}
