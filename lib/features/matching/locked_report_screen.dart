@@ -28,12 +28,12 @@ class LockedReportScreen extends StatelessWidget {
 
   void _onUnlock(BuildContext context) {
     HapticFeedback.lightImpact();
-    context.push(AppRoutes.paywall);
+    context.push('${AppRoutes.paywall}?id=${matchId ?? kMatches.first.id}');
   }
 
   void _onSubscribe(BuildContext context) {
     HapticFeedback.selectionClick();
-    context.push(AppRoutes.paywall);
+    context.push('${AppRoutes.paywall}?id=${matchId ?? kMatches.first.id}');
   }
 
   @override
@@ -81,13 +81,13 @@ class LockedReportScreen extends StatelessWidget {
                       _TopicChips(topics: match.recommendedTopics),
                       AppSpacing.vXl,
                       const _SectionLabel(
-                          text: '더 자세한 인사이트', trailingLock: true),
+                        text: '더 자세한 인사이트',
+                        trailingLock: true,
+                      ),
                       AppSpacing.vSm,
-                      const _LockedInsightCard(
-                          title: 'AI 대화 로그 요약', lines: 3),
+                      const _LockedInsightCard(title: 'AI 대화 로그 요약', lines: 3),
                       AppSpacing.vSm,
-                      const _LockedInsightCard(
-                          title: '첫 만남 추천 가이드', lines: 2),
+                      const _LockedInsightCard(title: '첫 만남 추천 가이드', lines: 2),
                       AppSpacing.vXl,
                     ],
                   ),
@@ -120,14 +120,16 @@ class _Header extends StatelessWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.close_rounded,
-                  color: Colors.white, size: 22),
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
               onPressed: onClose,
             ),
             const Spacer(),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(99),
@@ -135,8 +137,11 @@ class _Header extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.check_rounded,
-                      size: 14, color: AppColors.coral),
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 14,
+                    color: AppColors.coral,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '리포트 완성',
@@ -176,8 +181,7 @@ class _Hero extends StatelessWidget {
           children: [
             _AvatarRing(initial: myInitial),
             const SizedBox(width: 16),
-            const Icon(Icons.favorite_rounded,
-                color: Colors.white, size: 28),
+            const Icon(Icons.favorite_rounded, color: Colors.white, size: 28),
             const SizedBox(width: 16),
             _AvatarRing(initial: themInitial),
           ],
@@ -327,8 +331,11 @@ class _SectionLabel extends StatelessWidget {
         ),
         if (trailingLock) ...[
           const Spacer(),
-          Icon(Icons.lock_outline_rounded,
-              size: 16, color: Colors.white.withValues(alpha: 0.85)),
+          Icon(
+            Icons.lock_outline_rounded,
+            size: 16,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
         ],
       ],
     );
@@ -347,8 +354,7 @@ class _TopicChips extends StatelessWidget {
       children: [
         for (final t in topics)
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(99),
@@ -427,8 +433,11 @@ class _LockedInsightCard extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.55),
                 borderRadius: AppRadius.rMd,
               ),
-              child: const Icon(Icons.lock_rounded,
-                  size: 22, color: AppColors.coral),
+              child: const Icon(
+                Icons.lock_rounded,
+                size: 22,
+                color: AppColors.coral,
+              ),
             ),
           ),
         ],
@@ -488,8 +497,11 @@ class _BottomCtaState extends State<_BottomCta> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.lock_rounded,
-                        size: 18, color: AppColors.coral),
+                    const Icon(
+                      Icons.lock_rounded,
+                      size: 18,
+                      color: AppColors.coral,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       '전체 리포트 열람하기',

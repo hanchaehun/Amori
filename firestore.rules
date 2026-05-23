@@ -1,0 +1,151 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isParticipant(matchId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/matches/$(matchId))
+        && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.participantIds;
+    }
+
+    function unchanged(field) {
+      return !(field in request.resource.data)
+        || (field in resource.data && request.resource.data[field] == resource.data[field]);
+    }
+
+    function hasOnlyFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    match /users/{userId} {
+      allow create: if isSelf(userId)
+        && hasOnlyFields([
+          'displayName',
+          'birthDate',
+          'gender',
+          'interestGender',
+          'photoUrl',
+          'kycStatus',
+          'entitlements',
+          'dailyQuota',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.kycStatus in ['pending', 'verified', 'blocked'];
+
+      allow read, update: if isSelf(userId)
+        && unchanged('createdAt')
+        && unchanged('kycStatus')
+        && unchanged('entitlements')
+        && unchanged('dailyQuota');
+
+      allow delete: if isSelf(userId);
+
+      match /private/{docId} {
+        allow read, write: if isSelf(userId);
+      }
+    }
+
+    match /personas/{userId} {
+      allow create, update: if isSelf(userId)
+        && request.resource.data.userId == userId
+        && request.resource.data.aiGenerated == true
+        && request.resource.data.embedding is list
+        && request.resource.data.embedding.size() == 1024;
+
+      allow read: if isSelf(userId);
+      allow delete: if false;
+    }
+
+    match /matches/{matchId} {
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.participantIds
+        && request.resource.data.participantIds is list
+        && request.resource.data.participantIds.size() == 2;
+
+      allow read, update: if signedIn()
+        && request.auth.uid in resource.data.participantIds
+        && unchanged('participantIds')
+        && unchanged('createdAt');
+
+      allow delete: if false;
+    }
+
+    match /simulationJobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.requestedBy == request.auth.uid
+        && isParticipant(request.resource.data.matchId)
+        && request.resource.data.status in ['queued', 'running'];
+
+      allow read: if signedIn()
+        && (resource.data.requestedBy == request.auth.uid || isParticipant(resource.data.matchId));
+
+      allow update: if signedIn()
+        && resource.data.requestedBy == request.auth.uid
+        && unchanged('requestedBy')
+        && unchanged('matchId')
+        && request.resource.data.status in ['queued', 'running', 'completed', 'failed', 'cancelled'];
+
+      allow delete: if false;
+    }
+
+    match /reports/{matchId} {
+      allow create, update: if isParticipant(matchId)
+        && request.resource.data.matchId == matchId
+        && request.resource.data.aiGenerated == true;
+
+      allow read: if isParticipant(matchId);
+      allow delete: if false;
+    }
+
+    match /meetRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.requesterId == request.auth.uid
+        && isParticipant(request.resource.data.matchId)
+        && request.resource.data.status == 'pending';
+
+      allow read: if signedIn()
+        && (resource.data.requesterId == request.auth.uid || isParticipant(resource.data.matchId));
+
+      allow update: if signedIn()
+        && isParticipant(resource.data.matchId)
+        && unchanged('requesterId')
+        && unchanged('matchId')
+        && request.resource.data.status in ['pending', 'accepted', 'declined', 'expired', 'cancelled'];
+
+      allow delete: if false;
+    }
+
+    match /feedback/{feedbackId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isParticipant(request.resource.data.matchId);
+
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /notificationTokens/{tokenId} {
+      allow create, update: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /publicConfig/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

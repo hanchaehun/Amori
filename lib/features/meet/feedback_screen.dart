@@ -11,31 +11,32 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
+import '../../data/backend/amori_backend.dart';
 
 enum _Impression { good, ok, bad }
 
 extension on _Impression {
   String get emoji => switch (this) {
-        _Impression.good => '😊',
-        _Impression.ok => '😐',
-        _Impression.bad => '😞',
-      };
+    _Impression.good => '😊',
+    _Impression.ok => '😐',
+    _Impression.bad => '😞',
+  };
 
   String get label => switch (this) {
-        _Impression.good => '좋았어요',
-        _Impression.ok => '보통이에요',
-        _Impression.bad => '별로였어요',
-      };
+    _Impression.good => '좋았어요',
+    _Impression.ok => '보통이에요',
+    _Impression.bad => '별로였어요',
+  };
 }
 
 enum _NextStep { keepDating, friends, finish }
 
 extension on _NextStep {
   String get label => switch (this) {
-        _NextStep.keepDating => '💞  계속 만나고 싶어요',
-        _NextStep.friends => '🤝  친구로 지내요',
-        _NextStep.finish => '🙏  정중히 마무리할게요',
-      };
+    _NextStep.keepDating => '💞  계속 만나고 싶어요',
+    _NextStep.friends => '🤝  친구로 지내요',
+    _NextStep.finish => '🙏  정중히 마무리할게요',
+  };
 }
 
 class FeedbackScreen extends StatefulWidget {
@@ -49,6 +50,8 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   _Impression? _impression;
   double _accuracy = 0.75;
   _NextStep? _nextStep;
+  final AmoriBackend _backend = AmoriBackend();
+  bool _submitting = false;
 
   bool get _canSubmit => _impression != null && _nextStep != null;
 
@@ -61,8 +64,29 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     }
   }
 
-  void _onSubmit() {
+  Future<void> _onSubmit() async {
     HapticFeedback.mediumImpact();
+    setState(() => _submitting = true);
+    if (_backend.currentUser != null) {
+      try {
+        final matches = await _backend.fetchMatches();
+        await _backend.submitFeedback(
+          matchId: matches.isEmpty ? 'minjun' : matches.first.id,
+          impression: _impression!.name,
+          accuracy: _accuracy,
+          nextStep: _nextStep!.name,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('피드백 저장에 실패했어요. 잠시 후 다시 시도해주세요.')),
+          );
+        }
+        if (mounted) setState(() => _submitting = false);
+        return;
+      }
+    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('소중한 피드백 감사해요. AI가 더 정확해질 수 있어요.')),
     );
@@ -72,10 +96,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      appBar: BackAppBar(
-        title: '만남 피드백',
-        onBack: _onClose,
-      ),
+      appBar: BackAppBar(title: '만남 피드백', onBack: _onClose),
       body: Column(
         children: [
           Expanded(
@@ -134,13 +155,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               children: [
                 GradientButton(
                   label: '피드백 보내기',
-                  onPressed: _canSubmit ? _onSubmit : null,
+                  onPressed: _canSubmit && !_submitting ? _onSubmit : null,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '피드백은 익명 처리되며 상대방에게 공개되지 않습니다',
-                  style: AppTypography.caption
-                      .copyWith(color: AppColors.ink500),
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.ink500,
+                  ),
                 ),
               ],
             ),
@@ -196,8 +218,11 @@ class _Hero extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
-                  child: const Icon(Icons.check_rounded,
-                      size: 12, color: Colors.white),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    size: 12,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -207,17 +232,12 @@ class _Hero extends StatelessWidget {
         Text(
           '$name님과의 만남\n어땠어요?',
           textAlign: TextAlign.center,
-          style: AppTypography.titleLarge.copyWith(
-            fontSize: 22,
-            height: 1.3,
-          ),
+          style: AppTypography.titleLarge.copyWith(fontSize: 22, height: 1.3),
         ),
         const SizedBox(height: 6),
         Text(
           date,
-          style: AppTypography.bodySmall.copyWith(
-            color: AppColors.ink500,
-          ),
+          style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
         ),
       ],
     );
@@ -342,8 +362,10 @@ class _AccuracySlider extends StatelessWidget {
         final width = constraints.maxWidth;
         const thumbSize = 28.0;
         final fillWidth = (width * value).clamp(0.0, width);
-        final thumbLeft =
-            (width * value - thumbSize / 2).clamp(0.0, width - thumbSize);
+        final thumbLeft = (width * value - thumbSize / 2).clamp(
+          0.0,
+          width - thumbSize,
+        );
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (d) {
@@ -424,10 +446,10 @@ class _SliderLabels extends StatelessWidget {
   Widget build(BuildContext context) {
     final bucket = _activeBucket;
     TextStyle base(bool active) => AppTypography.caption.copyWith(
-          color: active ? AppColors.primary : AppColors.ink500,
-          fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-          fontSize: 11,
-        );
+      color: active ? AppColors.primary : AppColors.ink500,
+      fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+      fontSize: 11,
+    );
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -498,15 +520,17 @@ class _NextStepRow extends StatelessWidget {
                 option.label,
                 style: AppTypography.bodyLarge.copyWith(
                   color: selected ? AppColors.primary : AppColors.ink900,
-                  fontWeight:
-                      selected ? FontWeight.w800 : FontWeight.w500,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                   fontSize: 15,
                 ),
               ),
             ),
             if (selected)
-              const Icon(Icons.check_circle_rounded,
-                  size: 20, color: AppColors.primary),
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 20,
+                color: AppColors.primary,
+              ),
           ],
         ),
       ),

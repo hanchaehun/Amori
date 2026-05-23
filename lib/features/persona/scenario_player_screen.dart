@@ -11,6 +11,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
+import '../../data/backend/scenario_answers_store.dart';
 import '../../data/dummy/scenarios.dart';
 
 class ScenarioPlayerScreen extends StatefulWidget {
@@ -41,6 +42,21 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     if (_selectedLetter == null) return;
     HapticFeedback.lightImpact();
     if (_isLast) {
+      ScenarioAnswersStore.save(
+        _answers.entries.map((entry) {
+          final scenario = kScenarios[entry.key];
+          final choice = scenario.choices.firstWhere(
+            (choice) => choice.letter == entry.value,
+          );
+          return ScenarioAnswer(
+            code: scenario.code,
+            category: scenario.category,
+            question: scenario.question,
+            answerLetter: choice.letter,
+            answerText: choice.text,
+          );
+        }).toList(),
+      );
       context.go(AppRoutes.personaLoading);
     } else {
       setState(() => _index += 1);
@@ -198,8 +214,11 @@ class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.close_rounded,
-                  color: AppColors.ink900, size: 22),
+              icon: const Icon(
+                Icons.close_rounded,
+                color: AppColors.ink900,
+                size: 22,
+              ),
               onPressed: onClose,
             ),
             const SizedBox(width: 4),
@@ -304,8 +323,10 @@ class _SituationCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(99),
@@ -445,8 +466,11 @@ class _ChoiceCard extends StatelessWidget {
             ),
             if (selected) ...[
               const SizedBox(width: 8),
-              const Icon(Icons.check_rounded,
-                  color: AppColors.primary, size: 20),
+              const Icon(
+                Icons.check_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
             ],
           ],
         ),
@@ -470,10 +494,7 @@ class _ExitConfirmDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '지금 나가시겠어요?',
-              style: AppTypography.titleLarge,
-            ),
+            Text('지금 나가시겠어요?', style: AppTypography.titleLarge),
             AppSpacing.vSm,
             Text(
               '지금까지의 답변이 사라져요.\n다시 처음부터 시작해야 합니다.',
@@ -493,10 +514,13 @@ class _ExitConfirmDialog extends StatelessWidget {
                       foregroundColor: AppColors.ink900,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const RoundedRectangleBorder(
-                          borderRadius: AppRadius.rMd),
+                        borderRadius: AppRadius.rMd,
+                      ),
                     ),
-                    child: Text('계속하기',
-                        style: AppTypography.label.copyWith(fontSize: 15)),
+                    child: Text(
+                      '계속하기',
+                      style: AppTypography.label.copyWith(fontSize: 15),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -508,13 +532,16 @@ class _ExitConfirmDialog extends StatelessWidget {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const RoundedRectangleBorder(
-                          borderRadius: AppRadius.rMd),
+                        borderRadius: AppRadius.rMd,
+                      ),
                     ),
-                    child: Text('나가기',
-                        style: AppTypography.label.copyWith(
-                          fontSize: 15,
-                          color: Colors.white,
-                        )),
+                    child: Text(
+                      '나가기',
+                      style: AppTypography.label.copyWith(
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ],

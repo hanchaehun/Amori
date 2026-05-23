@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/dev_skip_button.dart';
+import '../../data/backend/amori_backend.dart';
 
 class PersonaLoadingScreen extends StatefulWidget {
   const PersonaLoadingScreen({super.key});
@@ -32,6 +33,7 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
   ];
 
   Timer? _completeTimer;
+  Future<void>? _backendTask;
 
   @override
   void initState() {
@@ -48,9 +50,12 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
 
     _progress.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _completeTimer = Timer(const Duration(milliseconds: 700), _goHome);
+        _completeTimer = Timer(const Duration(milliseconds: 700), () {
+          _goHome();
+        });
       }
     });
+    _backendTask = AmoriBackend().completeStoredPersonaBuild();
     _progress.forward();
   }
 
@@ -62,7 +67,13 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
     super.dispose();
   }
 
-  void _goHome() {
+  Future<void> _goHome() async {
+    if (!mounted) return;
+    try {
+      await _backendTask;
+    } catch (_) {
+      // Dev-skip and unauthenticated preview flows still continue with local UI.
+    }
     if (!mounted) return;
     context.go(AppRoutes.home);
   }
@@ -105,8 +116,7 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
                   AnimatedBuilder(
                     animation: Listenable.merge([_pulse, _progress]),
                     builder: (_, _) {
-                      final pulseT =
-                          Curves.easeInOut.transform(_pulse.value);
+                      final pulseT = Curves.easeInOut.transform(_pulse.value);
                       final progressT = _progress.value;
                       final percent = (progressT * 100).round();
                       return Column(
@@ -144,13 +154,15 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
                           AppSpacing.vLg,
                           Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.huge),
+                              horizontal: AppSpacing.huge,
+                            ),
                             child: _ProgressTrack(value: progressT),
                           ),
                           const Spacer(flex: 3),
                           Padding(
                             padding: const EdgeInsets.only(
-                                bottom: AppSpacing.xl),
+                              bottom: AppSpacing.xl,
+                            ),
                             child: Text(
                               '잠시만 기다려주세요. 약 30초 소요됩니다',
                               style: AppTypography.bodySmall.copyWith(
@@ -215,11 +227,20 @@ class _GlowOrb extends StatelessWidget {
             ),
             const Positioned(top: 20, right: 28, child: _Dot(size: 8)),
             const Positioned(
-                bottom: 30, left: 18, child: _Dot(size: 6, opacity: 0.7)),
+              bottom: 30,
+              left: 18,
+              child: _Dot(size: 6, opacity: 0.7),
+            ),
             const Positioned(
-                top: 56, left: 8, child: _Dot(size: 4, opacity: 0.5)),
+              top: 56,
+              left: 8,
+              child: _Dot(size: 4, opacity: 0.5),
+            ),
             const Positioned(
-                bottom: 40, right: 18, child: _Dot(size: 5, opacity: 0.6)),
+              bottom: 40,
+              right: 18,
+              child: _Dot(size: 5, opacity: 0.6),
+            ),
           ],
         ),
       ),

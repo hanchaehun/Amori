@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../../features/onboarding/kyc_block_screen.dart';
+import '../../features/onboarding/login_screen.dart';
 import '../../features/onboarding/signup_screen.dart';
 import '../../features/onboarding/splash_screen.dart';
 import '../../features/onboarding/walkthrough_screen.dart';
@@ -42,8 +43,7 @@ class AppRouter {
     routes: [
       GoRoute(
         path: AppRoutes.splash,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const SplashScreen()),
+        pageBuilder: (context, state) => _fadePage(state, const SplashScreen()),
       ),
       GoRoute(
         path: AppRoutes.walkthrough,
@@ -77,8 +77,7 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.home,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const HomeScreen()),
+        pageBuilder: (context, state) => _fadePage(state, const HomeScreen()),
       ),
       GoRoute(
         path: AppRoutes.agentChat,
@@ -99,8 +98,10 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.paywall,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const PaywallScreen()),
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          PaywallScreen(matchId: state.uri.queryParameters['id']),
+        ),
       ),
       GoRoute(
         path: AppRoutes.fullReport,
@@ -169,8 +170,7 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.inbox,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const InboxScreen()),
+        pageBuilder: (context, state) => _fadePage(state, const InboxScreen()),
       ),
       GoRoute(
         path: AppRoutes.profile,
@@ -199,8 +199,7 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.login,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const _ComingSoon(title: '로그인')),
+        pageBuilder: (context, state) => _slidePage(state, const LoginScreen()),
       ),
     ],
     errorBuilder: (context, state) =>
@@ -233,7 +232,10 @@ class AppRouter {
       child: child,
       transitionDuration: const Duration(milliseconds: 320),
       transitionsBuilder: (context, animation, _, c) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
@@ -282,13 +284,15 @@ class _ComingSoon extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.construction_rounded,
-                size: 56, color: AppColors.ink300),
+            const Icon(
+              Icons.construction_rounded,
+              size: 56,
+              color: AppColors.ink300,
+            ),
             const SizedBox(height: 16),
             Text(
               '곧 만들어집니다',
-              style:
-                  AppTypography.bodyLarge.copyWith(color: AppColors.ink500),
+              style: AppTypography.bodyLarge.copyWith(color: AppColors.ink500),
             ),
             const SizedBox(height: 32),
             TextButton.icon(

@@ -1,0 +1,35 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "amori-260523",
+          "appId": "1:482461771256:android:ce6b7cbb07d8c8f3c4e20d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "amori-260523",
+          "configurations": {
+            "android": "1:482461771256:android:ce6b7cbb07d8c8f3c4e20d",
+            "ios": "1:482461771256:ios:992a597be8c6ded9c4e20d",
+            "web": "1:482461771256:web:f94dd84cd8f4aedcc4e20d"
+          }
+        }
+      }
+    }
+  }
+}

@@ -32,14 +32,14 @@ class _FullReportScreenState extends State<FullReportScreen> {
 
   void _onShare() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('리포트 공유 — 다음 턴 작업 예정')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('리포트 공유 — 다음 턴 작업 예정')));
   }
 
   void _onRequestMeet() {
     HapticFeedback.lightImpact();
-    context.push(AppRoutes.meetRequestSend);
+    context.push('${AppRoutes.meetRequestSend}?id=${_match.id}');
   }
 
   @override
@@ -50,8 +50,11 @@ class _FullReportScreenState extends State<FullReportScreen> {
         trailing: IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          icon: const Icon(Icons.ios_share_rounded,
-              size: 20, color: AppColors.ink900),
+          icon: const Icon(
+            Icons.ios_share_rounded,
+            size: 20,
+            color: AppColors.ink900,
+          ),
           onPressed: _onShare,
         ),
       ),
@@ -116,8 +119,11 @@ class _HeroSection extends StatelessWidget {
           _Avatar(initial: '지'),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Icon(Icons.favorite_rounded,
-                size: 16, color: AppColors.primary),
+            child: Icon(
+              Icons.favorite_rounded,
+              size: 16,
+              color: AppColors.primary,
+            ),
           ),
           _Avatar(initial: match.initial),
           AppSpacing.hMd,
@@ -170,8 +176,11 @@ class _HeroSection extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_open_rounded,
-                    size: 12, color: AppColors.success),
+                const Icon(
+                  Icons.lock_open_rounded,
+                  size: 12,
+                  color: AppColors.success,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   '잠금 해제됨',
@@ -259,11 +268,10 @@ class _TabBar extends StatelessWidget {
                   child: Text(
                     tabs[i],
                     style: AppTypography.label.copyWith(
-                      color: i == active
-                          ? AppColors.primary
-                          : AppColors.ink500,
-                      fontWeight:
-                          i == active ? FontWeight.w800 : FontWeight.w600,
+                      color: i == active ? AppColors.primary : AppColors.ink500,
+                      fontWeight: i == active
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                       fontSize: 14,
                     ),
                   ),
@@ -281,12 +289,9 @@ class _SummaryTab extends StatelessWidget {
   final MatchProfile match;
 
   static const _findings = [
-    _Finding('🎵', '둘 다 인디 음악을 즐겨 들음',
-        '취향 키워드: 잔잔한 멜로디, 어쿠스틱 기반'),
-    _Finding('📚', '비슷한 독서 취향',
-        '에세이·소설을 주로 읽고, 자기계발서엔 거리감 있음'),
-    _Finding('🌱', '가치관: 안정성과 자유로움 균형 추구',
-        '둘 다 큰 변화보다는 점진적 성장을 선호'),
+    _Finding('🎵', '둘 다 인디 음악을 즐겨 들음', '취향 키워드: 잔잔한 멜로디, 어쿠스틱 기반'),
+    _Finding('📚', '비슷한 독서 취향', '에세이·소설을 주로 읽고, 자기계발서엔 거리감 있음'),
+    _Finding('🌱', '가치관: 안정성과 자유로움 균형 추구', '둘 다 큰 변화보다는 점진적 성장을 선호'),
   ];
 
   @override
@@ -454,16 +459,18 @@ class _ChatLogTab extends StatelessWidget {
       ),
       children: [
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.primary.withValues(alpha: 0.06),
             borderRadius: AppRadius.rSm,
           ),
           child: Row(
             children: [
-              const Icon(Icons.bolt_rounded,
-                  size: 16, color: AppColors.primary),
+              const Icon(
+                Icons.bolt_rounded,
+                size: 16,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: RichText(
@@ -589,29 +596,18 @@ class _GuideTab extends StatelessWidget {
         AppSpacing.md,
       ),
       children: [
-        Text(
-          '추천 장소',
-          style: AppTypography.titleMedium.copyWith(fontSize: 17),
-        ),
+        Text('추천 장소', style: AppTypography.titleMedium.copyWith(fontSize: 17)),
         AppSpacing.vMd,
-        for (final p in _places) ...[
-          _GuideCard(item: p),
-          AppSpacing.vSm,
-        ],
+        for (final p in _places) ...[_GuideCard(item: p), AppSpacing.vSm],
         AppSpacing.vLg,
-        Text(
-          '대화 시작법',
-          style: AppTypography.titleMedium.copyWith(fontSize: 17),
-        ),
+        Text('대화 시작법', style: AppTypography.titleMedium.copyWith(fontSize: 17)),
         AppSpacing.vMd,
-        for (final s in _starters) ...[
-          _StarterCard(text: s),
-          AppSpacing.vSm,
-        ],
+        for (final s in _starters) ...[_StarterCard(text: s), AppSpacing.vSm],
         AppSpacing.vLg,
         const _TipCard(
           title: '한 가지 팁',
-          body: '민준님은 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — '
+          body:
+              '민준님은 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — '
               '본인 페이스로 답해도 충분히 매력적으로 받아들여집니다.',
         ),
       ],

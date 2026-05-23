@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "482461771256",
+    "project_id": "amori-260523",
+    "storage_bucket": "amori-260523.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:482461771256:android:ce6b7cbb07d8c8f3c4e20d",
+        "android_client_info": {
+          "package_name": "com.example.amori"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7fISUI-38MfscqWietCDA39uvM4CAiO0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
