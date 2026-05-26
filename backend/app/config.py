@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = True
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

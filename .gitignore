@@ -82,6 +82,7 @@ backend/alembic/versions/*.py
 .env.local
 *.service-account.json
 *-credentials.json
+*firebase-adminsdk*.json
 
 # LLM weights / cache — 절대 커밋 금지
 *.bin
