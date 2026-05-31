@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/persona_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -57,6 +58,7 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
           );
         }).toList(),
       );
+      PersonaStore.answers = Map.from(_answers);
       context.go(AppRoutes.personaLoading);
     } else {
       setState(() => _index += 1);

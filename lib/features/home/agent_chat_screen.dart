@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/state/persona_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../data/models/conversation_message.dart';
 
 enum _Sender { me, them, system }
 
@@ -32,7 +34,8 @@ const _meInitial = '지';
 const _themName = '민준-AI';
 const _themInitial = '민';
 
-const List<_ChatMessage> _messages = [
+// LLM 대화가 없을 때 표시할 폴백 더미 데이터
+const List<_ChatMessage> _fallbackMessages = [
   _ChatMessage(
     sender: _Sender.me,
     name: _meName,
@@ -46,20 +49,6 @@ const List<_ChatMessage> _messages = [
     avatarInitial: _themInitial,
     text: '저는 주로 성수나 연남 카페에서 책 읽거나, 여행 준비해요. 최근엔 후쿠오카 다녀왔어요 ✈️',
     signal: '여행+카페 매치',
-  ),
-  _ChatMessage(
-    sender: _Sender.me,
-    name: _meName,
-    avatarInitial: _meInitial,
-    text: '와 저도 이번에 오사카 다녀왔는데! 음악도 좋아하시나요?',
-    signal: '취향 일치',
-  ),
-  _ChatMessage(
-    sender: _Sender.them,
-    name: _themName,
-    avatarInitial: _themInitial,
-    text: '잔잔한 인디 위주로 들어요. 새소년이나 잠비나이 같은.',
-    signal: '음악 취향 +18%',
   ),
   _ChatMessage(
     sender: _Sender.system,
@@ -81,6 +70,21 @@ const List<_ChatMessage> _messages = [
   ),
 ];
 
+List<_ChatMessage> _fromStore(List<ConversationMessage> msgs) {
+  return msgs.map((m) {
+    if (m.isSystem) {
+      return _ChatMessage(sender: _Sender.system, text: m.text);
+    }
+    return _ChatMessage(
+      sender: m.isMe ? _Sender.me : _Sender.them,
+      name: m.isMe ? _meName : _themName,
+      avatarInitial: m.isMe ? _meInitial : _themInitial,
+      text: m.text,
+      signal: m.signal,
+    );
+  }).toList();
+}
+
 class AgentChatScreen extends StatefulWidget {
   const AgentChatScreen({super.key});
 
@@ -91,6 +95,11 @@ class AgentChatScreen extends StatefulWidget {
 class _AgentChatScreenState extends State<AgentChatScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _typing;
+
+  List<_ChatMessage> get _messages {
+    final stored = PersonaStore.conversation;
+    return stored.isNotEmpty ? _fromStore(stored) : _fallbackMessages;
+  }
 
   @override
   void initState() {

@@ -622,20 +622,23 @@ class _InputBar extends StatelessWidget {
             GestureDetector(
               onTap: hasText ? onSend : null,
               behavior: HitTestBehavior.opaque,
-              child: AnimatedContainer(
+              child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: ShapeDecoration(
-                  gradient: hasText ? amori.primaryGradient : null,
-                  color: hasText ? null : AppColors.ink100,
-                  shape: const CircleBorder(),
-                ),
-                child: Icon(
-                  Icons.arrow_upward_rounded,
-                  size: 20,
-                  color: hasText ? Colors.white : AppColors.ink300,
+                child: Container(
+                  key: ValueKey(hasText),
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: ShapeDecoration(
+                    gradient: hasText ? amori.primaryGradient : null,
+                    color: hasText ? null : AppColors.ink100,
+                    shape: const CircleBorder(),
+                  ),
+                  child: Icon(
+                    Icons.arrow_upward_rounded,
+                    size: 20,
+                    color: hasText ? Colors.white : AppColors.ink300,
+                  ),
                 ),
               ),
             ),

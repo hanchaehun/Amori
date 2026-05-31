@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/persona_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
+import '../../data/models/compatibility_report.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
@@ -29,6 +31,9 @@ class _FullReportScreenState extends State<FullReportScreen> {
 
   MatchProfile get _match =>
       widget.matchId == null ? kMatches.first : findMatchById(widget.matchId!);
+
+  CompatibilityReport? get _report => PersonaStore.report;
+  int get _score => _report?.score ?? _match.score;
 
   void _onShare() {
     HapticFeedback.selectionClick();
@@ -60,7 +65,7 @@ class _FullReportScreenState extends State<FullReportScreen> {
       ),
       body: Column(
         children: [
-          _HeroSection(match: _match),
+          _HeroSection(match: _match, score: _score),
           _TabBar(
             active: _tabIndex,
             tabs: _tabs,
@@ -75,9 +80,9 @@ class _FullReportScreenState extends State<FullReportScreen> {
               child: KeyedSubtree(
                 key: ValueKey(_tabIndex),
                 child: switch (_tabIndex) {
-                  0 => _SummaryTab(match: _match),
+                  0 => _SummaryTab(match: _match, report: _report),
                   1 => _ChatLogTab(themInitial: _match.initial),
-                  _ => _GuideTab(match: _match),
+                  _ => _GuideTab(match: _match, report: _report),
                 },
               ),
             ),
@@ -102,8 +107,9 @@ class _FullReportScreenState extends State<FullReportScreen> {
 }
 
 class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.match});
+  const _HeroSection({required this.match, required this.score});
   final MatchProfile match;
+  final int score;
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +141,7 @@ class _HeroSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${match.score}점',
+                      '$score점',
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w900,
@@ -285,10 +291,11 @@ class _TabBar extends StatelessWidget {
 }
 
 class _SummaryTab extends StatelessWidget {
-  const _SummaryTab({required this.match});
+  const _SummaryTab({required this.match, this.report});
   final MatchProfile match;
+  final CompatibilityReport? report;
 
-  static const _findings = [
+  static const _fallbackFindings = [
     _Finding('🎵', '둘 다 인디 음악을 즐겨 들음', '취향 키워드: 잔잔한 멜로디, 어쿠스틱 기반'),
     _Finding('📚', '비슷한 독서 취향', '에세이·소설을 주로 읽고, 자기계발서엔 거리감 있음'),
     _Finding('🌱', '가치관: 안정성과 자유로움 균형 추구', '둘 다 큰 변화보다는 점진적 성장을 선호'),
@@ -296,6 +303,14 @@ class _SummaryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final findings = report != null
+        ? report!.findings
+            .map((f) => _Finding(f.emoji, f.title, f.detail))
+            .toList()
+        : _fallbackFindings;
+
+    final warnings = report?.warnings ?? [];
+
     return ListView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
@@ -310,7 +325,7 @@ class _SummaryTab extends StatelessWidget {
           style: AppTypography.titleMedium.copyWith(fontSize: 17),
         ),
         AppSpacing.vMd,
-        for (final f in _findings) ...[
+        for (final f in findings) ...[
           _FindingCard(finding: f),
           AppSpacing.vSm,
         ],
@@ -326,10 +341,16 @@ class _SummaryTab extends StatelessWidget {
           ],
         ),
         AppSpacing.vMd,
-        const _WarningCard(
-          title: '대화 페이스 차이',
-          body: '민준님이 다소 빠른 편 — 충분히 듣고 답하는 시간을 가져보세요',
-        ),
+        if (warnings.isNotEmpty)
+          for (final w in warnings) ...[
+            _WarningCard(title: w.title, body: w.detail),
+            AppSpacing.vSm,
+          ]
+        else
+          const _WarningCard(
+            title: '대화 페이스 차이',
+            body: '민준님이 다소 빠른 편 — 충분히 듣고 답하는 시간을 가져보세요',
+          ),
       ],
     );
   }
@@ -438,7 +459,7 @@ class _ChatLogTab extends StatelessWidget {
   const _ChatLogTab({required this.themInitial});
   final String themInitial;
 
-  static const _previewMessages = [
+  static const _fallbackMessages = [
     _PreviewMsg(true, '안녕하세요! 주말에는 보통 어떻게 보내세요?'),
     _PreviewMsg(false, '저는 주로 성수나 연남 카페에서 책 읽거나, 여행 준비해요.'),
     _PreviewMsg(true, '와 저도 이번에 오사카 다녀왔는데! 음악도 좋아하시나요?'),
@@ -449,6 +470,17 @@ class _ChatLogTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // PersonaStore에서 최대 6개 미리보기, 없으면 폴백
+    final stored = PersonaStore.conversation
+        .where((m) => !m.isSystem)
+        .take(6)
+        .map((m) => _PreviewMsg(m.isMe, m.text))
+        .toList();
+    final previewMessages = stored.isNotEmpty ? stored : _fallbackMessages;
+    final total = PersonaStore.conversation.isEmpty
+        ? 24
+        : PersonaStore.conversation.length;
+
     return ListView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
@@ -479,11 +511,11 @@ class _ChatLogTab extends StatelessWidget {
                       color: AppColors.ink700,
                       fontWeight: FontWeight.w600,
                     ),
-                    children: const [
-                      TextSpan(text: '24개 메시지 중 '),
+                    children: [
+                      TextSpan(text: '$total개 메시지 중 '),
                       TextSpan(
-                        text: '6개 미리보기',
-                        style: TextStyle(
+                        text: '${previewMessages.length}개 미리보기',
+                        style: const TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w800,
                         ),
@@ -496,7 +528,7 @@ class _ChatLogTab extends StatelessWidget {
           ),
         ),
         AppSpacing.vLg,
-        for (final m in _previewMessages) ...[
+        for (final m in previewMessages) ...[
           _PreviewBubble(message: m),
           AppSpacing.vSm,
         ],
@@ -570,16 +602,17 @@ class _PreviewBubble extends StatelessWidget {
 }
 
 class _GuideTab extends StatelessWidget {
-  const _GuideTab({required this.match});
+  const _GuideTab({required this.match, this.report});
   final MatchProfile match;
+  final CompatibilityReport? report;
 
-  static const _places = [
+  static const _fallbackPlaces = [
     _GuideItem('🍵', '조용한 동네 카페', '대화 페이스에 맞는 차분한 분위기'),
     _GuideItem('🌳', '연남동 산책 코스', '걸으며 자연스럽게 대화 — 첫 만남 부담 ↓'),
     _GuideItem('🖼', '작은 독립 전시', '취향 공통분모(독서·예술)를 자연스럽게 공유'),
   ];
 
-  static const _starters = [
+  static const _fallbackStarters = [
     '"최근에 본 전시 중에 가장 기억에 남는 거 있어요?"',
     '"인디 추천해주실 만한 거 있나요? 요즘 새로 듣고 싶은데요."',
     '"여행 가서 꼭 들르는 카페 같은 거 있어요?"',
@@ -587,6 +620,20 @@ class _GuideTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final places = report != null
+        ? report!.recommendedPlaces
+            .map((p) => _GuideItem(p.emoji, p.title, p.detail))
+            .toList()
+        : _fallbackPlaces;
+
+    final starters = report?.conversationStarters.isNotEmpty == true
+        ? report!.conversationStarters
+        : _fallbackStarters;
+
+    final tip = report?.tip.isNotEmpty == true
+        ? report!.tip
+        : '민준님은 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — 본인 페이스로 답해도 충분히 매력적으로 받아들여집니다.';
+
     return ListView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
@@ -598,18 +645,17 @@ class _GuideTab extends StatelessWidget {
       children: [
         Text('추천 장소', style: AppTypography.titleMedium.copyWith(fontSize: 17)),
         AppSpacing.vMd,
-        for (final p in _places) ...[_GuideCard(item: p), AppSpacing.vSm],
+        for (final p in places) ...[_GuideCard(item: p), AppSpacing.vSm],
         AppSpacing.vLg,
         Text('대화 시작법', style: AppTypography.titleMedium.copyWith(fontSize: 17)),
         AppSpacing.vMd,
-        for (final s in _starters) ...[_StarterCard(text: s), AppSpacing.vSm],
+        for (final s in starters) ...[
+          _StarterCard(text: s),
+          AppSpacing.vSm,
+        ],
         AppSpacing.vLg,
-        const _TipCard(
-          title: '한 가지 팁',
-          body:
-              '민준님은 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — '
-              '본인 페이스로 답해도 충분히 매력적으로 받아들여집니다.',
-        ),
+        _TipCard(title: '한 가지 팁', body:
+              tip),
       ],
     );
   }
