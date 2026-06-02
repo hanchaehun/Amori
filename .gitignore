@@ -88,6 +88,9 @@ backend/alembic/versions/*.py
 *.bin
 *.safetensors
 **/models/
+# Flutter 데이터 모델은 예외
+!lib/data/models/
+!lib/data/models/**
 **/.cache/
 
 # 제안서 / 개인 자료
