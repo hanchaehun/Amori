@@ -4,7 +4,7 @@
   "title": "Persona",
   "description": "사용자의 24문항 답변을 LLM이 분석해 만든 페르소나 카드. pgvector에 임베딩과 함께 저장된다.",
   "type": "object",
-  "required": ["user_id", "traits", "communication_style", "humor_style", "value_keywords", "ai_generated"],
+  "required": ["user_id", "traits", "communication_style", "humor_style", "value_keywords", "speech_style", "sample_messages", "ai_generated"],
   "properties": {
     "user_id": { "type": "string" },
     "traits": {
@@ -29,10 +29,30 @@
       "items": { "type": "string" },
       "description": "가치관 핵심 키워드 3~7개"
     },
+    "speech_style": {
+      "type": "object",
+      "description": "에이전트 발화 충실도의 핵심. 객관식 24답변에서는 말투가 안 나오므로 현재는 LLM이 추론한다. 자유 텍스트 입력(자기소개·평소 메시지)이 추가되면 추론 대신 그 텍스트에서 직접 추출한다 — 스키마는 그대로 유지(voice-ready).",
+      "required": ["formality", "emoji_usage", "laugh_style", "sentence_length", "tone_keywords"],
+      "properties": {
+        "formality": { "type": "string", "enum": ["반말", "존댓말", "혼용"] },
+        "emoji_usage": { "type": "string", "enum": ["거의 안 씀", "가끔", "자주"] },
+        "laugh_style": { "type": "string", "description": "웃음 표현 습관. 예: 'ㅋㅋ', 'ㅎㅎ', '안 씀'" },
+        "sentence_length": { "type": "string", "enum": ["짧고 간결", "보통", "길게 풀어 씀"] },
+        "tone_keywords": { "type": "array", "items": { "type": "string" }, "description": "말투 톤 키워드 2~4개. 예: 담백, 장난스러움, 차분" },
+        "verbal_habits": { "type": "string", "description": "자주 쓰는 표현이나 말버릇 (선택)" }
+      }
+    },
+    "sample_messages": {
+      "type": "array",
+      "description": "이 사람이 소개팅 대화에서 쓸 법한 메시지 예시 3개. 시뮬레이션 시 few-shot 앵커로 주입해 말투를 고정한다. 자유 텍스트 입력이 생기면 실제 사용자 문장으로 대체.",
+      "items": { "type": "string" },
+      "minItems": 3,
+      "maxItems": 3
+    },
     "embedding": {
       "type": ["array", "null"],
       "items": { "type": "number" },
-      "description": "한국어 임베딩 모델로 생성한 벡터. 차원은 모델별 (BGE-Korean=1024, KoSimCSE=768)."
+      "description": "Gemini 임베딩으로 생성한 1024차원 정규화 벡터 (pgvector 인덱스 차원 고정)."
     },
     "ai_generated": {
       "type": "boolean",

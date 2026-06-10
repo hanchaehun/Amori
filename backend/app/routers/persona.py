@@ -40,6 +40,8 @@ async def build_persona(
         persona.communication_style = result["communication_style"]
         persona.humor_style = result["humor_style"]
         persona.value_keywords = result["value_keywords"]
+        persona.speech_style = result["speech_style"]
+        persona.sample_messages = result["sample_messages"]
         persona.embedding = result.get("embedding")
     else:
         persona = Persona(
@@ -48,6 +50,8 @@ async def build_persona(
             communication_style=result["communication_style"],
             humor_style=result["humor_style"],
             value_keywords=result["value_keywords"],
+            speech_style=result["speech_style"],
+            sample_messages=result["sample_messages"],
             embedding=result.get("embedding"),
         )
         db.add(persona)
@@ -91,5 +95,7 @@ async def get_my_persona(
         communication_style=persona.communication_style,
         humor_style=persona.humor_style,
         value_keywords=persona.value_keywords,
+        speech_style=persona.speech_style,
+        sample_messages=persona.sample_messages,
         embedding=list(persona.embedding) if persona.embedding is not None else None,
     )

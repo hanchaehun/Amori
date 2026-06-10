@@ -128,17 +128,22 @@ async def run_simulation(
     await db.refresh(job)
 
     # 5. Build persona dicts for the LLM
+    #    speech_style·sample_messages를 포함해야 에이전트가 '그 사람 말투'로 발화한다.
     my_persona_dict = {
         "traits": my_persona.traits,
         "communication_style": my_persona.communication_style,
         "humor_style": my_persona.humor_style,
         "value_keywords": my_persona.value_keywords,
+        "speech_style": my_persona.speech_style,
+        "sample_messages": my_persona.sample_messages,
     }
     their_persona_dict = {
         "traits": their_persona.traits,
         "communication_style": their_persona.communication_style,
         "humor_style": their_persona.humor_style,
         "value_keywords": their_persona.value_keywords,
+        "speech_style": their_persona.speech_style,
+        "sample_messages": their_persona.sample_messages,
     }
 
     # 6. Return SSE stream

@@ -65,6 +65,19 @@ class MockLLMProvider(LLMProvider):
             "communication_style": "사려깊은 경청형",
             "humor_style": "잔잔한 드라이 유머",
             "value_keywords": ["진정성", "개인 존중", "일상의 소소함", "솔직한 소통", "느긋한 사랑"],
+            "speech_style": {
+                "formality": "존댓말",
+                "emoji_usage": "가끔",
+                "laugh_style": "ㅎㅎ",
+                "sentence_length": "보통",
+                "tone_keywords": ["담백", "차분", "다정"],
+                "verbal_habits": "'~인 것 같아요' 처럼 부드럽게 의견을 냄",
+            },
+            "sample_messages": [
+                "오늘 하루 어떻게 보내셨어요? ㅎㅎ",
+                "저는 주말엔 보통 동네 산책하면서 쉬는 편이에요.",
+                "그 얘기 들으니까 왠지 좀 더 궁금해지는데요?",
+            ],
             "embedding": _random_embedding(),
         }
 

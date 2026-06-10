@@ -23,7 +23,7 @@ from app.llm.prompts import (
     build_starters_user_message,
 )
 from app.llm.prompts.persona import persona_embedding_text
-from app.schemas.persona import PersonaTrait
+from app.schemas.persona import PersonaTrait, SpeechStyle
 from app.schemas.report import Finding, Place, Warning
 from app.services.simulation import run_two_agent_simulation
 
@@ -35,6 +35,8 @@ class _PersonaOutput(BaseModel):
     communication_style: str
     humor_style: str
     value_keywords: list[str] = Field(min_length=3, max_length=7)
+    speech_style: SpeechStyle
+    sample_messages: list[str] = Field(min_length=3, max_length=3)
 
 
 class _SpeechOutput(BaseModel):

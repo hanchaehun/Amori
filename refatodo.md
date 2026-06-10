@@ -48,6 +48,26 @@
 - [ ] Riverpod 도입 검토 (현재는 최소 변경인 ChangeNotifier 적용 상태)
 - [ ] 실서비스 전환 시 Gemini 유료 티어 전환 (무료 티어는 프롬프트 학습 사용 가능 — 실유저 PII 유입 전 필수)
 
+## 페르소나 충실도 (voice) — 에이전트가 "나처럼" 말하기
+
+> 진단: 24문항이 전부 객관식이라 "성향"(매칭 궁합엔 충분)은 잡지만 "말투"는 못 잡음.
+> 게다가 24답변 → 8 trait → 발화의 이중 lossy 변환으로 목소리가 두 번 희석되어,
+> 에이전트들이 Gemini 기본 말투로 수렴할 위험. → voice 소스 확보가 핵심.
+> 방향: 단계적 (1차 백엔드 추론으로 구조부터, 2차 자유 텍스트로 실제 목소리 주입).
+
+### 1차 — 백엔드 추론 (질문지 불변, 완료)
+
+- [x] persona 계약에 `speech_style`(formality/emoji/laugh/sentence_length/tone/habits) + `sample_messages`(발화 예시 3개) 추가 — `shared/schemas/persona.schema.json`, Pydantic, DB 모델, alembic 0001 동시 반영 (voice-ready: 자유 텍스트 입력 추가 시 스키마 불변으로 추출만 교체)
+- [x] 생성 프롬프트가 객관식 답변에서 말투를 추론하고 그 말투를 반영한 sample_messages 3개를 함께 생성
+- [x] `build_agent_system_prompt`에 `[당신의 말투]` 섹션 + 발화 예시 few-shot 주입 — persona→simulation 라우터→에이전트까지 voice 결선
+- [x] mock provider에도 voice 필드 (오프라인 데모/스모크 유지)
+
+### 2차 — 자유 텍스트 입력 (제품 결정, 팀/질문지 변경 필요)
+
+- [ ] 질문지에 주관식 1~2개 추가 (예: "친구한테 약속 잡는 메시지를 평소처럼 써보세요") — `lib/data/dummy/scenarios.dart` + 질문지 PDF + 한채훈 합의
+- [ ] `build_persona`가 speech_style을 *추론* 대신 자유 텍스트에서 *추출*, sample_messages를 실제 사용자 문장으로 대체 (스키마는 그대로)
+- [ ] (선택) 매칭 임베딩에 말투 신호 일부 반영할지 검토 — 단 궁합은 성향 기반이 맞아 신중히
+
 ## README 갱신
 
 - [x] `README.md` (루트) — 모노레포 구조·역할·마일스톤을 피벗 이후 기준으로
