@@ -3,6 +3,22 @@
 > 근거 문서: `docs/AMORI_리팩토링_방향.docx` (2026-06-10)
 > 핵심 한 줄: **"LLM 호출 경로를 Flutter→Groq에서 Flutter→BFF→Gemini로 일원화하고, 그 전제 작업으로 존재하지 않는 DB 모델부터 작성한다."**
 
+---
+
+## ▶ 다음 작업 (여기서부터 시작)
+
+**실제 Gemini E2E 검증.** 지금까지는 mock 스모크만 통과 — 실 LLM로는 한 번도 안 돌려봤고, 특히 에이전트 말투(voice) 품질은 mock으로 검증 불가.
+
+1. [Google AI Studio](https://aistudio.google.com/apikey)에서 `GEMINI_API_KEY` 발급 (무료, 카드 X)
+2. `backend/.env` — `LLM_PROVIDER=gemini` + `GEMINI_API_KEY=...`
+3. `cd backend && docker-compose up -d db && .venv/Scripts/alembic upgrade head`
+4. `uvicorn app.main:app --reload` → `/persona/build` → `/simulation/run`(SSE) → `/report`
+5. **확인 포인트**: speech_style·sample_messages가 자연스럽게 나오는지, 시뮬레이션 대화에서 두 에이전트 말투가 실제로 구분되는지. 안 살면 `backend/app/llm/prompts/` 조정 (이현정).
+
+현재 코드는 전부 `hoom` 브랜치에 푸시됨 (리팩토링 본체 `adf2921`, voice `7064498`). 팀 승인 후 main 머지 예정.
+
+---
+
 ## P0 — 백엔드를 살린다 (다른 모든 것의 전제)
 
 - [x] `backend/app/models/database.py` 작성 — User, Persona, Match, SimulationJob, Report, MeetRequest, Feedback, LLMCallLog (pgvector 1024차원 + HNSW 인덱스)
