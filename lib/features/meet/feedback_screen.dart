@@ -11,7 +11,9 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
+import '../../core/state/agent_session_store.dart';
 import '../../data/backend/amori_backend.dart';
+import '../../data/repositories/feedback_repository.dart';
 
 enum _Impression { good, ok, bad }
 
@@ -67,11 +69,13 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Future<void> _onSubmit() async {
     HapticFeedback.mediumImpact();
     setState(() => _submitting = true);
-    if (_backend.currentUser != null) {
+    // 피드백은 매칭 학습 루프의 입력 — BFF(Postgres)로 전송.
+    // 백엔드 Match가 없는 더미 데모 플로우에서는 저장 없이 진행한다.
+    final matchId = AgentSessionStore.instance.activeMatchId;
+    if (_backend.currentUser != null && matchId != null) {
       try {
-        final matches = await _backend.fetchMatches();
-        await _backend.submitFeedback(
-          matchId: matches.isEmpty ? 'minjun' : matches.first.id,
+        await FeedbackRepository().submit(
+          matchId: matchId,
           impression: _impression!.name,
           accuracy: _accuracy,
           nextStep: _nextStep!.name,

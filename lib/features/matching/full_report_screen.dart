@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
-import '../../core/state/persona_store.dart';
+import '../../core/state/agent_session_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../data/models/compatibility_report.dart';
 import '../../core/theme/app_colors.dart';
@@ -32,7 +32,7 @@ class _FullReportScreenState extends State<FullReportScreen> {
   MatchProfile get _match =>
       widget.matchId == null ? kMatches.first : findMatchById(widget.matchId!);
 
-  CompatibilityReport? get _report => PersonaStore.report;
+  CompatibilityReport? get _report => AgentSessionStore.instance.report;
   int get _score => _report?.score ?? _match.score;
 
   void _onShare() {
@@ -471,15 +471,15 @@ class _ChatLogTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // PersonaStore에서 최대 6개 미리보기, 없으면 폴백
-    final stored = PersonaStore.conversation
+    final stored = AgentSessionStore.instance.conversation
         .where((m) => !m.isSystem)
         .take(6)
         .map((m) => _PreviewMsg(m.isMe, m.text))
         .toList();
     final previewMessages = stored.isNotEmpty ? stored : _fallbackMessages;
-    final total = PersonaStore.conversation.isEmpty
+    final total = AgentSessionStore.instance.conversation.isEmpty
         ? 24
-        : PersonaStore.conversation.length;
+        : AgentSessionStore.instance.conversation.length;
 
     return ListView(
       physics: const BouncingScrollPhysics(),

@@ -1,15 +1,32 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db
 from app.auth.firebase import get_current_user
-from app.models.database import Persona, User
+from app.dependencies import get_db
+from app.matching import find_candidates
+from app.models.database import Match, Persona
 from app.schemas.common import MatchResponse
 
 router = APIRouter()
+
+
+async def get_or_create_match(
+    db: AsyncSession, uid_a: str, uid_b: str
+) -> Match:
+    """두 사용자의 Match 행을 찾거나 생성한다. match_id는 항상 실제 UUID."""
+    sorted_uids = sorted([uid_a, uid_b])
+    result = await db.execute(
+        select(Match).where(Match.participant_ids == sorted_uids)
+    )
+    match_obj = result.scalar_one_or_none()
+    if not match_obj:
+        match_obj = Match(participant_ids=sorted_uids, status="candidate")
+        db.add(match_obj)
+        await db.flush()
+    return match_obj
 
 
 @router.get("/find", response_model=list[MatchResponse])
@@ -36,49 +53,25 @@ async def find_matches(
             },
         )
 
-    user_embedding = my_persona.embedding
-
-    # Query pgvector for top_k most similar personas (exclude self)
-    candidates = await db.execute(
-        select(Persona)
-        .where(Persona.user_id != user["uid"])
-        .where(Persona.embedding.isnot(None))
-        .order_by(Persona.embedding.cosine_distance(user_embedding))
-        .limit(top_k)
+    candidates = await find_candidates(
+        db, my_persona.embedding, exclude_user_id=user["uid"], top_k=top_k
     )
-    candidate_personas = candidates.scalars().all()
 
-    # Build match responses
+    # 후보마다 Match 행을 find-or-create — 응답의 match_id가 곧 DB UUID라
+    # report/meet 라우터의 UUID 파싱과 일치한다 (구 uid_uid 문자열 버그 수정)
     matches: list[MatchResponse] = []
-    for candidate in candidate_personas:
-        # Calculate score: (1 - cosine_distance) * 100
-        # Fetch cosine distance via Python; pgvector returns ordered results
-        # We re-compute the distance for the score value
-        distance_result = await db.execute(
-            select(
-                Persona.embedding.cosine_distance(user_embedding).label("distance")
-            ).where(Persona.id == candidate.id)
-        )
-        distance = distance_result.scalar_one()
-        score = round((1 - distance) * 100, 2)
-
-        # Build match_id from sorted UIDs for deterministic ID
-        sorted_uids = sorted([user["uid"], candidate.user_id])
-        match_id = f"{sorted_uids[0]}_{sorted_uids[1]}"
-
-        # Fetch display_name from users table
-        user_result = await db.execute(
-            select(User.display_name).where(User.id == candidate.user_id)
-        )
-        display_name = user_result.scalar_one_or_none()
-
+    for candidate in candidates:
+        match_obj = await get_or_create_match(db, user["uid"], candidate.user_id)
+        if match_obj.score != candidate.score:
+            match_obj.score = candidate.score
         matches.append(
             MatchResponse(
-                match_id=match_id,
+                match_id=str(match_obj.id),
                 user_id=candidate.user_id,
-                display_name=display_name,
-                score=score,
+                display_name=candidate.display_name,
+                score=candidate.score,
             )
         )
+    await db.commit()
 
     return matches

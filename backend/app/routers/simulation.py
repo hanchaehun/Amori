@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,11 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.auth.firebase import get_current_user
+from app.config import settings
 from app.dependencies import get_db, get_llm_provider
 from app.llm.base import LLMProvider
 from app.middleware.rate_limit import check_simulation_quota
 from app.models.database import Match, Persona, SimulationJob
+from app.routers.matches import get_or_create_match
 from app.schemas.simulation import SimulationRunRequest, SimulationJobResponse
+from app.services.llm_log import log_llm_call
 
 router = APIRouter()
 
@@ -27,6 +31,7 @@ async def simulation_event_generator(
 ):
     """Yield SSE events for each simulation turn, then finalize the job."""
     turns: list[dict] = []
+    started = time.monotonic()
     try:
         async for turn in llm.run_simulation(my_persona_dict, their_persona_dict, max_turns):
             turns.append(turn)
@@ -38,6 +43,16 @@ async def simulation_event_generator(
         job.completed_at = func.now()
         match.status = "simulated"
         await db.commit()
+
+        await log_llm_call(
+            db,
+            endpoint="simulation/run",
+            provider=settings.llm_provider,
+            request_body={"max_turns": max_turns, "total_turns": len(turns)},
+            response_status=200,
+            response_time_ms=int((time.monotonic() - started) * 1000),
+            user_id=job.requested_by,
+        )
 
         yield {
             "event": "done",
@@ -100,18 +115,7 @@ async def run_simulation(
         )
 
     # 3. Find existing match by participant_ids, or create a new one
-    sorted_uids = sorted([user["uid"], body.target_user_id])
-    result = await db.execute(
-        select(Match).where(Match.participant_ids == sorted_uids)
-    )
-    match_obj = result.scalar_one_or_none()
-    if not match_obj:
-        match_obj = Match(
-            participant_ids=sorted_uids,
-            status="candidate",
-        )
-        db.add(match_obj)
-        await db.flush()
+    match_obj = await get_or_create_match(db, user["uid"], body.target_user_id)
 
     # 4. Create SimulationJob
     job = SimulationJob(

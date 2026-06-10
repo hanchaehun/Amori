@@ -1,20 +1,14 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
-import '../../core/services/conversation_service.dart';
-import '../../core/services/debug_storage_service.dart';
-import '../../core/services/persona_service.dart';
-import '../../core/state/persona_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/dev_skip_button.dart';
-import '../../data/backend/amori_backend.dart';
+import '../../data/repositories/agent_flow.dart';
 
 class PersonaLoadingScreen extends StatefulWidget {
   const PersonaLoadingScreen({super.key});
@@ -36,10 +30,8 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
     '호환성 분석 중...',
   ];
 
-  Timer? _completeTimer;
-  Future<void>? _backendTask;
   bool _animationDone = false;
-  bool _llmDone = false;
+  bool _pipelineDone = false;
 
   @override
   void initState() {
@@ -57,47 +49,17 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
     _progress.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _animationDone = true;
-        if (_llmDone) _goHome();
+        if (_pipelineDone) _goHome();
       }
     });
-    _backendTask = AmoriBackend().completeStoredPersonaBuild();
     _progress.forward();
-    _startPersonaGeneration();
-  }
 
-  Future<void> _startPersonaGeneration() async {
-    try {
-      // 1단계: 페르소나 생성
-      final profile = await PersonaService.generatePersona(
-        PersonaStore.answers,
-      );
-      PersonaStore.profile = profile;
-
-      // 2단계: AI 대화 생성
-      final conversation = await ConversationService.generate(profile);
-      PersonaStore.conversation = conversation;
-
-      // 3단계: 호환성 리포트 생성
-      final report = await ReportService.generate(profile, conversation);
-      PersonaStore.report = report;
-
-    } catch (e) {
-      // API 오류 시 더미 데이터로 진행
-      debugPrint('LLM 오류: $e');
-    } finally {
-      // 디버그: 결과를 파일/콘솔에 저장 (실패해도 앱 진행)
-      final p = PersonaStore.profile;
-      final r = PersonaStore.report;
-      if (p != null && r != null) {
-        DebugStorageService.saveAll(
-          profile: p,
-          conversation: PersonaStore.conversation,
-          report: r,
-        ).catchError((e) => debugPrint('저장 오류: $e'));
-      }
-      _llmDone = true;
+    // 페르소나 → 매칭 → 시뮬레이션 → 리포트, 전부 BFF 경유.
+    // 실패 시 AgentFlow가 스토어에 usedFallback을 표시하고 더미 플로우로 진행.
+    AgentFlow().run().whenComplete(() {
+      _pipelineDone = true;
       if (_animationDone) _goHome();
-    }
+    });
   }
 
   @override
@@ -107,20 +69,14 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
     super.dispose();
   }
 
-  Future<void> _goHome() async {
-    if (!mounted) return;
-    try {
-      await _backendTask;
-    } catch (_) {
-      // Dev-skip and unauthenticated preview flows still continue with local UI.
-    }
+  void _goHome() {
     if (!mounted) return;
     context.go(AppRoutes.home);
   }
 
   void _skip() {
     _progress.stop();
-    _llmDone = true;
+    _pipelineDone = true;
     _animationDone = true;
     _goHome();
   }

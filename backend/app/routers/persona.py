@@ -1,14 +1,18 @@
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, get_llm_provider
 from app.auth.firebase import get_current_user
+from app.config import settings
+from app.dependencies import get_db, get_llm_provider
 from app.llm.base import LLMProvider
-from app.schemas.persona import PersonaBuildRequest, PersonaResponse
 from app.models.database import Persona
+from app.routers.users import ensure_user
+from app.schemas.persona import PersonaBuildRequest, PersonaResponse
+from app.services.llm_log import log_llm_call
 
 router = APIRouter()
 
@@ -20,10 +24,13 @@ async def build_persona(
     db: AsyncSession = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
 ):
-    request_id = str(uuid.uuid4())
+    started = time.monotonic()
     result = await llm.build_persona(user["uid"], body.answers)
+    elapsed_ms = int((time.monotonic() - started) * 1000)
 
-    # Upsert persona
+    # FK 전제: User 행 보장 후 페르소나 upsert
+    await ensure_user(db, user["uid"], user.get("email"))
+
     existing = await db.execute(
         select(Persona).where(Persona.user_id == user["uid"])
     )
@@ -45,6 +52,16 @@ async def build_persona(
         )
         db.add(persona)
     await db.commit()
+
+    await log_llm_call(
+        db,
+        endpoint="persona/build",
+        provider=settings.llm_provider,
+        request_body={"answers_count": len(body.answers)},
+        response_status=200,
+        response_time_ms=elapsed_ms,
+        user_id=user["uid"],
+    )
 
     result["user_id"] = user["uid"]
     return PersonaResponse(**result)

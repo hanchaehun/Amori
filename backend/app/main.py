@@ -35,15 +35,19 @@ app.add_middleware(
 )
 
 from app.routers.health import router as health_router
+from app.routers.users import router as users_router
 from app.routers.persona import router as persona_router
 from app.routers.matches import router as matches_router
 from app.routers.simulation import router as simulation_router
 from app.routers.report import router as report_router
 from app.routers.meet import router as meet_router
+from app.routers.feedback import router as feedback_router
 
 app.include_router(health_router, tags=["health"])
+app.include_router(users_router, prefix="/users", tags=["users"])
 app.include_router(persona_router, prefix="/persona", tags=["persona"])
 app.include_router(matches_router, prefix="/matches", tags=["matches"])
 app.include_router(simulation_router, prefix="/simulation", tags=["simulation"])
 app.include_router(report_router, prefix="/report", tags=["report"])
 app.include_router(meet_router, prefix="/meet", tags=["meet"])
+app.include_router(feedback_router, prefix="/feedback", tags=["feedback"])

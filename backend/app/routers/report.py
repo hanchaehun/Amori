@@ -1,3 +1,4 @@
+import time
 import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,10 +6,12 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.firebase import get_current_user
+from app.config import settings
 from app.dependencies import get_db, get_llm_provider
 from app.llm.base import LLMProvider
 from app.models.database import Match, Persona, Report, SimulationJob
 from app.schemas.report import ReportResponse
+from app.services.llm_log import log_llm_call
 
 router = APIRouter()
 
@@ -128,9 +131,11 @@ async def get_report(
     }
 
     # 6. Call LLM to generate report
+    started = time.monotonic()
     report_data = await llm.generate_report(
         my_persona_dict, their_persona_dict, sim_job.turns,
     )
+    elapsed_ms = int((time.monotonic() - started) * 1000)
 
     # 7. Cache the report in DB
     report = Report(
@@ -145,6 +150,16 @@ async def get_report(
     )
     db.add(report)
     await db.commit()
+
+    await log_llm_call(
+        db,
+        endpoint="report/generate",
+        provider=settings.llm_provider,
+        request_body={"match_id": match_id, "turns_count": len(sim_job.turns)},
+        response_status=200,
+        response_time_ms=elapsed_ms,
+        user_id=user["uid"],
+    )
 
     # 8. Return response
     return ReportResponse(

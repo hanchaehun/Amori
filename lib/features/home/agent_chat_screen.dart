@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/state/persona_store.dart';
+import '../../core/state/agent_session_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -97,7 +97,7 @@ class _AgentChatScreenState extends State<AgentChatScreen>
   late final AnimationController _typing;
 
   List<_ChatMessage> get _messages {
-    final stored = PersonaStore.conversation;
+    final stored = AgentSessionStore.instance.conversation;
     return stored.isNotEmpty ? _fromStore(stored) : _fallbackMessages;
   }
 

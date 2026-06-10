@@ -50,7 +50,6 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      await _backend.ensureDemoMatches();
       if (mounted) context.go(AppRoutes.home);
     } on BackendException catch (error) {
       _showError(error.message);

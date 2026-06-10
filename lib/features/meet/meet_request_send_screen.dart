@@ -11,8 +11,9 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/backend/amori_backend.dart';
-import '../../data/backend/models.dart';
 import '../../data/dummy/matches.dart';
+import '../../data/repositories/match_repository.dart';
+import '../../data/repositories/meet_repository.dart';
 
 class _StarterChip {
   const _StarterChip({required this.label, required this.message});
@@ -80,23 +81,23 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
 
     setState(() => _sending = true);
     try {
-      final matchDoc = await _backend.fetchMatchById(_match.id);
-      final uid = _backend.requireUid;
-      final receiverId =
-          matchDoc?.participantIds.firstWhere(
-            (id) => id != uid,
-            orElse: () => 'demo-${_match.id}',
-          ) ??
-          'demo-${_match.id}';
-      await _backend.createMeetRequest(
-        MeetRequestDraft(
-          matchId: _match.id,
-          receiverId: receiverId,
-          message: _controller.text.trim().isEmpty
-              ? null
-              : _controller.text.trim(),
-        ),
-      );
+      // BFF 매칭 결과에서 이 match의 상대(receiver)를 찾는다.
+      // 더미 매치(kMatches) ID처럼 백엔드에 없는 매치는 데모 플로우로 진행.
+      final candidates = await MatchRepository().findMatches();
+      MatchCandidate? target;
+      for (final candidate in candidates) {
+        if (candidate.matchId == _match.id) {
+          target = candidate;
+          break;
+        }
+      }
+      if (target != null) {
+        await MeetRepository().createRequest(
+          matchId: target.matchId,
+          receiverId: target.userId,
+          message: _controller.text.trim(),
+        );
+      }
       if (mounted) context.go(AppRoutes.requestStatus);
     } catch (_) {
       if (mounted) {

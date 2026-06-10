@@ -10,8 +10,8 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../data/backend/amori_backend.dart';
-import '../../data/backend/models.dart';
 import '../../data/dummy/matches.dart';
+import '../../data/repositories/match_repository.dart';
 
 enum _MatchFilter { all, valueAlignment, humor, conversation }
 
@@ -33,15 +33,21 @@ class MatchListScreen extends StatefulWidget {
 
 class _MatchListScreenState extends State<MatchListScreen> {
   _MatchFilter _filter = _MatchFilter.all;
-  late final AmoriBackend _backend = AmoriBackend();
-  Stream<List<MatchDocument>>? _matchStream;
+  Future<List<MatchProfile>>? _matchFuture;
 
   @override
   void initState() {
     super.initState();
-    if (_backend.currentUser != null) {
-      _backend.ensureDemoMatches();
-      _matchStream = _backend.watchMatches();
+    if (AmoriBackend().currentUser != null) {
+      // BFF 벡터 매칭. 실유저 페르소나가 쌓이기 전(빈 결과·오류)에는
+      // 화면단에서 더미 kMatches 로 폴백한다 (P2에서 졸업 예정).
+      _matchFuture = MatchRepository()
+          .findMatches()
+          .then(
+            (candidates) => [
+              for (final candidate in candidates) candidate.toProfile(),
+            ],
+          );
     }
   }
 
@@ -84,7 +90,7 @@ class _MatchListScreenState extends State<MatchListScreen> {
             ),
           ),
           _MatchListSliver(
-            stream: _matchStream,
+            future: _matchFuture,
             filter: _filter,
             onTap: _onMatchTap,
           ),
@@ -96,27 +102,27 @@ class _MatchListScreenState extends State<MatchListScreen> {
 
 class _MatchListSliver extends StatelessWidget {
   const _MatchListSliver({
-    required this.stream,
+    required this.future,
     required this.filter,
     required this.onTap,
   });
 
-  final Stream<List<MatchDocument>>? stream;
+  final Future<List<MatchProfile>>? future;
   final _MatchFilter filter;
   final ValueChanged<MatchProfile> onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (stream == null) {
+    if (future == null) {
       return _cards(kMatches);
     }
 
-    return StreamBuilder<List<MatchDocument>>(
-      stream: stream,
+    return FutureBuilder<List<MatchProfile>>(
+      future: future,
       builder: (context, snapshot) {
         if (snapshot.hasError) return _cards(kMatches);
-        final docs = snapshot.data;
-        if (docs == null) {
+        final profiles = snapshot.data;
+        if (profiles == null) {
           return const SliverPadding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -129,7 +135,7 @@ class _MatchListSliver extends StatelessWidget {
             ),
           );
         }
-        final profiles = docs.map((doc) => doc.profile).toList();
+        if (profiles.isEmpty) return _cards(kMatches);
         return _cards(_filtered(profiles));
       },
     );

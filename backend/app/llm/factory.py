@@ -1,7 +1,7 @@
 """Factory that instantiates the correct LLM provider based on configuration."""
 
-from app.llm.base import LLMProvider
 from app.config import settings
+from app.llm.base import LLMProvider
 
 
 def create_llm_provider(provider_name: str | None = None) -> LLMProvider:
@@ -19,21 +19,17 @@ def create_llm_provider(provider_name: str | None = None) -> LLMProvider:
 
             return MockLLMProvider()
 
-        case "hf":
-            from app.llm.hf import HuggingFaceLLMProvider
+        case "gemini":
+            from app.llm.gemini import GeminiProvider
 
-            return HuggingFaceLLMProvider(
-                base_url=settings.llm_base_url,
-                api_token=settings.hf_api_token,
+            return GeminiProvider(
+                api_key=settings.gemini_api_key,
+                chat_model=settings.gemini_chat_model,
+                embedding_model=settings.gemini_embedding_model,
+                embedding_dim=settings.embedding_dim,
             )
-
-        case "midm_local":
-            from app.llm.midm_local import MiDMLocalProvider
-
-            return MiDMLocalProvider(base_url=settings.llm_base_url)
 
         case _:
             raise ValueError(
-                f"Unknown LLM provider: {name!r}. "
-                f"Valid options: mock, hf, midm_local"
+                f"Unknown LLM provider: {name!r}. Valid options: mock, gemini"
             )
