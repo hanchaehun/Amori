@@ -12,14 +12,20 @@ import 'api_exception.dart';
 /// 모든 요청에 Firebase ID 토큰을 Bearer 헤더로 싣고,
 /// 표준 에러 응답을 [ApiException]으로 변환한다.
 class ApiClient {
-  ApiClient({FirebaseAuth? auth, http.Client? httpClient})
-    : _auth = auth ?? FirebaseAuth.instance,
-      _http = httpClient ?? http.Client();
+  ApiClient({FirebaseAuth? auth, http.Client? httpClient, Duration? readTimeout})
+    : _auth = auth,
+      _http = httpClient ?? http.Client(),
+      _readTimeout = readTimeout ?? const Duration(seconds: 15);
 
-  final FirebaseAuth _auth;
+  // Firebase는 비-dev 인증 경로에서만 지연 참조 — DEV_UID 모드/테스트에서 초기화 불필요.
+  final FirebaseAuth? _auth;
   final http.Client _http;
 
-  static const _timeout = Duration(seconds: 90);
+  /// LLM 경유 쓰기(persona build 등)는 생성 시간이 길어 넉넉하게.
+  static const _llmTimeout = Duration(seconds: 90);
+
+  /// 일반 조회/갱신 — 서버 도달 불가 시 화면이 폴백/에러를 빨리 보여줄 수 있게 짧게.
+  final Duration _readTimeout;
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('${AppConfig.apiBaseUrl}$path').replace(
@@ -27,7 +33,14 @@ class ApiClient {
       );
 
   Future<Map<String, String>> _headers() async {
-    final user = _auth.currentUser;
+    final devUid = AppConfig.devUid;
+    if (devUid != null) {
+      return {
+        'Authorization': 'Bearer dev:$devUid',
+        'Content-Type': 'application/json',
+      };
+    }
+    final user = (_auth ?? FirebaseAuth.instance).currentUser;
     if (user == null) {
       throw const ApiException(
         '로그인이 필요합니다.',
@@ -42,24 +55,37 @@ class ApiClient {
     };
   }
 
+  /// 타임아웃을 화면이 일관되게 처리할 수 있도록 [ApiException]으로 변환한다.
+  Future<http.Response> _send(Future<http.Response> request, Duration timeout) =>
+      request.timeout(
+        timeout,
+        onTimeout: () => throw const ApiException(
+          '서버에 연결할 수 없습니다. 네트워크와 서버 상태를 확인해 주세요.',
+          errorCode: 'TIMEOUT',
+        ),
+      );
+
   Future<dynamic> getJson(String path, {Map<String, String>? query}) async {
-    final response = await _http
-        .get(_uri(path, query), headers: await _headers())
-        .timeout(_timeout);
+    final response = await _send(
+      _http.get(_uri(path, query), headers: await _headers()),
+      _readTimeout,
+    );
     return _decode(response);
   }
 
   Future<dynamic> postJson(String path, Object body) async {
-    final response = await _http
-        .post(_uri(path), headers: await _headers(), body: jsonEncode(body))
-        .timeout(_timeout);
+    final response = await _send(
+      _http.post(_uri(path), headers: await _headers(), body: jsonEncode(body)),
+      _llmTimeout,
+    );
     return _decode(response);
   }
 
   Future<dynamic> putJson(String path, Object body) async {
-    final response = await _http
-        .put(_uri(path), headers: await _headers(), body: jsonEncode(body))
-        .timeout(_timeout);
+    final response = await _send(
+      _http.put(_uri(path), headers: await _headers(), body: jsonEncode(body)),
+      _readTimeout,
+    );
     return _decode(response);
   }
 

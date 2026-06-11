@@ -25,8 +25,28 @@ SpeakFn = Callable[[str, list[dict]], Awaitable[dict]]
 OPENING_INSTRUCTION = "(소개팅 첫 메시지를 보내며 대화를 시작하세요)"
 
 # 약속이 잡혔다는 신호 — 한쪽이 제안하고 다른 쪽이 수락하면 성립
+PROPOSE_STRATEGY = "약속 제안"
 ACCEPT_STRATEGY = "약속 수락"
 WRAPUP_STRATEGY = "마무리"
+
+# 에이전트는 자기 과거 partner_read를 기억하지 못한다(컨텍스트엔 대화 텍스트뿐).
+# 연속 긍정 횟수는 엔진이 세고, 임계치에 닿은 턴에만 명시적 신호를 주입한다.
+ESCALATE_AFTER_POSITIVE_READS = 3
+
+ESCALATE_NUDGE = (
+    "(당신은 지금까지 상대 반응을 연속으로 긍정적이라고 읽었습니다. "
+    "알아가기를 반복하지 말고 이번 발화에서 구체적인 만남을 제안하세요 — strategy는 '약속 제안')"
+)
+RESPOND_TO_PROPOSAL_NUDGE = (
+    "(상대가 방금 만남을 제안했습니다. 받아들일 마음이면 구체적으로 수락하세요 — strategy는 '약속 수락'. "
+    "아직 이르다고 느끼면 부드럽게 다른 화제로 이어가세요)"
+)
+
+
+def _with_nudge(history: list[dict], nudge: str) -> list[dict]:
+    """이번 호출에만 쓰는 사본에 신호를 덧붙인다 — 영구 컨텍스트는 오염시키지 않는다."""
+    last = history[-1]
+    return [*history[:-1], {"role": last["role"], "text": f"{last['text']}\n{nudge}"}]
 
 
 async def run_two_agent_simulation(
@@ -53,16 +73,31 @@ async def run_two_agent_simulation(
 
     turn_index = 0
     end_after_next = False  # 약속 성립 후 상대의 마무리 인사 한 번을 허용하는 플래그
+    positive_reads = {"a": 0, "b": 0}  # 각 에이전트가 상대를 연속 긍정적으로 읽은 횟수
+    proposed = {"a": False, "b": False}
+    last_strategy = {"a": "", "b": ""}
 
     for step in range(max_turns):
         is_me = step % 2 == 0
+        me, them = ("a", "b") if is_me else ("b", "a")
         system_prompt = system_a if is_me else system_b
         history = history_a if is_me else history_b
 
-        out = await speak(system_prompt, history)
+        call_history = history
+        if last_strategy[them] == PROPOSE_STRATEGY:
+            call_history = _with_nudge(history, RESPOND_TO_PROPOSAL_NUDGE)
+        elif positive_reads[me] >= ESCALATE_AFTER_POSITIVE_READS and not proposed[me]:
+            call_history = _with_nudge(history, ESCALATE_NUDGE)
+
+        out = await speak(system_prompt, call_history)
         text = out["text"]
         strategy = out.get("strategy", "알아가기")
         partner_read = out.get("partner_read", "중립")
+
+        positive_reads[me] = positive_reads[me] + 1 if partner_read == "긍정적" else 0
+        if strategy == PROPOSE_STRATEGY:
+            proposed[me] = True
+        last_strategy[me] = strategy
 
         # 자기 컨텍스트엔 model 발화로, 상대 컨텍스트엔 user 발화로 쌓는다
         if is_me:

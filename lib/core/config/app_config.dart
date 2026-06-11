@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// BFF(FastAPI) 접속 설정.
@@ -16,5 +16,14 @@ class AppConfig {
     // Android 에뮬레이터는 호스트 머신이 10.0.2.2
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000';
     return 'http://localhost:8000';
+  }
+
+  /// 로컬 개발용 인증 우회 uid — 설정 시 Firebase 로그인 없이
+  /// `Bearer dev:<uid>`로 BFF에 인증한다 (백엔드 DEBUG=true 전용).
+  /// 릴리스 빌드에서는 항상 null.
+  static String? get devUid {
+    if (kReleaseMode) return null;
+    final uid = dotenv.env['DEV_UID'];
+    return (uid == null || uid.isEmpty) ? null : uid;
   }
 }

@@ -46,6 +46,40 @@ amori/
 4. **LLM provider는 환경변수로 스위치합니다.** `LLM_PROVIDER=mock`(오프라인 데모/테스트) ↔ `gemini`(실 LLM).
 5. **`main` 에 직접 푸시하지 않습니다.** 변경은 모두 PR로 진행합니다.
 
+## 로컬 개발 (USB 실기기 포함)
+
+```bash
+# 1. 백엔드 — backend/.env에 DEBUG=true 필요 (dev 인증 경로 활성화)
+cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 8000
+
+# 2. (선택) 연결 화면용 시드 — mock provider, Gemini 쿼터 0콜
+.venv/Scripts/python -X utf8 scripts/seed_dev_inbox.py
+
+# 3. Flutter — 루트 .env (gitignore) 에 아래 두 줄
+#    API_BASE_URL=http://localhost:8000
+#    DEV_UID=dev_hanchaehun        ← Firebase 로그인 없이 'Bearer dev:<uid>' 인증
+flutter run
+```
+
+**USB 실기기에서는 `adb reverse`가 필수입니다.**
+
+```bash
+adb reverse tcp:8000 tcp:8000
+```
+
+폰에서 `localhost:8000`은 폰 자신을 가리키므로, 이 명령으로 폰의 8000 포트를
+USB 너머 PC의 백엔드로 터널링합니다. 한 번 실행하면 USB가 연결된 동안 유지되며,
+**케이블 재연결·폰/PC 재부팅·`adb kill-server` 후에만 다시 실행**하면 됩니다 (앱 재실행과는 무관).
+
+| 실행 타깃 | API_BASE_URL | 비고 |
+|---|---|---|
+| USB 실기기 | `http://localhost:8000` | `adb reverse` 필수. **`10.0.2.2`는 에뮬레이터 전용 별칭이라 실기기에선 요청이 타임아웃까지 매달림** |
+| Android 에뮬레이터 | 미설정 (기본값 `10.0.2.2`) 또는 `localhost` + `adb reverse` | |
+| Windows/웹 | 미설정 (기본값 `localhost`) | |
+
+백엔드 연결 실패 시 화면은 더미 데이터로 폴백합니다 — 연결 화면에 **수아/민준/서연이 아닌
+다른 이름**(김현우 등)이 보이면 백엔드에 닿지 않은 것입니다 (콘솔에 `inbox: GET /matches 실패` 로그).
+
 ## 역할 분담
 
 | 영역 | 담당 | 브랜치 prefix |

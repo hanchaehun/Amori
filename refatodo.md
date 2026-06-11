@@ -42,15 +42,46 @@
 **검증:** 눈치 필드 실 Gemini로 정상 생성 확인(`verify_nunchi.py`), 약속조율→A수락(대기)→B수락(scheduled) mock 풀스택 통과(`verify_accept_flow.py`), flutter analyze 0 issues, 위젯 테스트 통과.
 
 **남은 seam (다음 단계):**
-- ⚠️ **inbox는 아직 더미 데이터** — 백엔드 시뮬레이션 결과(appointment_ready)가 inbox 목록을 실제로 채우도록 연결 필요. 수락도 현재는 로컬 상태(상대 수락은 시드 플래그) — 두 실유저 간 동기화는 `/matches/{id}/accept` 결선 시 완성.
-- 에스컬레이션 넛지(긍정 지속 시 약속 제안) 프롬프트는 추가했으나 쿼터 소진으로 실 Gemini 재확인 미완 — 리셋 후 `verify_nunchi.py` 재실행 (mock으론 약속수락 흐름 확인됨).
+- ~~⚠️ inbox는 아직 더미 데이터~~ → **2026-06-12 결선 완료** (아래 "inbox ↔ 백엔드 결선" 섹션)
 - 매칭 화면(match_list): "대화 후 리포트 75점↑만 표시 + 유료 리포트"는 구조상 이미 75점 게이트+페이월 존재. 단 현재는 *대화 전* 벡터후보를 보여줌 → *대화 후* 결과 기반으로 바꾸는 건 inbost↔백엔드 결선과 함께.
+
+## ✅ 실 Gemini 검증 + 에스컬레이션 엔진화 (2026-06-11 밤)
+
+**voice 2차 추출 검증 통과** (`verify_voice2.py`, flash): sample_messages가 사용자 문장 *그대로* 보존, 표지 4종(ㅋㅋ/ㅠㅠ/헉/!!) 전부 생존, formality "혼용"으로 정확 추출(중립 수렴 없음), habits "헉, 헐" 포착. 1차의 한계(객관식→수렴)가 주관식으로 실제 해소됨을 실증.
+
+**눈치 에스컬레이션 — 프롬프트 넛지로는 실패, 엔진 신호로 해결:**
+- 재현된 실패: flash 8턴 + flash-lite 10턴 모두 연속 "긍정적" 읽기에도 끝까지 "알아가기" (7턴에서 제안성 *텍스트*를 내고도 strategy 라벨은 알아가기인 불일치도 관찰). 원인: 에이전트 컨텍스트엔 대화 텍스트뿐이라 자기 과거 partner_read를 셀 수 없음 — "서너 번 연속이면"은 신호 없는 희망사항.
+- 수정 (`services/simulation.py`): 엔진이 연속 긍정 횟수·상대 제안 여부를 추적, **연속 긍정 3회면 ESCALATE_NUDGE, 상대 strategy="약속 제안" 직후엔 RESPOND_TO_PROPOSAL_NUDGE를 그 턴 호출에만 주입** (영구 컨텍스트 비오염, `_with_nudge` 사본). 프롬프트엔 strategy-text 일치 규칙 추가.
+- 검증: 오프라인 스모크(`smoke_nunchi_engine.py`) — 주입 위치·제안→수락→마무리·9턴 종료·컨텍스트 비오염 통과. **실 Gemini에서 에스컬레이션 발화 확인** — flash-lite: B "같이 재즈바 가는 건 어때요?"=약속 제안, flash: A "조용한 카페에서 이야기 나누는 건 어떠세요?"=약속 제안 (라벨-텍스트 일치, 페르소나에 맞는 제안 내용까지).
+- ⚠️ 마지막 한 단계 미검증: "약속 수락" 턴 직전에 양 모델 RPD 소진(각 20/20). **`verify_accept_turn.py` 신설 — 제안으로 끝나는 수제 history로 1콜만에 수락 판정.** 쿼터 리셋(자정 PT=한국 16시) 후 실행.
+
+## ✅ inbox ↔ 백엔드 결선 + 풀스택 검증 (2026-06-12)
+
+연결(inbox) 화면이 더미 대신 **GET /matches 실데이터**를 소비하고, [만남 수락하기]가 실제 `POST /matches/{id}/accept`를 때리도록 결선. Firebase 키 없이 로컬 개발이 가능하도록 dev 인증 경로 추가.
+
+**구현:**
+- `GET /matches` 신설 (`routers/matches.py` + `MatchListItem` 스키마) — 시뮬레이션이 있었던 매치만, 카드 미리보기용 최신 잡 1건 DISTINCT ON, 파트너 이름 일괄 조회
+- **dev 인증 우회** — 백엔드 `DEBUG=true`에서 `Bearer dev:<uid>` 허용(`auth/firebase.py`), Flutter는 `.env`의 `DEV_UID` 설정 시 자동 사용(릴리스 빌드 항상 null, `app_config.dart`)
+- `MatchRepository.listMatches()/acceptMatch()` + `inbox_screen._load()` — 백엔드 모드/더미 폴백 분기(`_fromBackend`), 수락 결과(both_accepted)에 따라 만남 예정 탭 이동 vs 상대 수락 대기
+- `scripts/seed_dev_inbox.py` — mock provider 쿼터 0콜로 수아(수락대기)/민준(상대 선수락)/서연(조율 미완) 3종 카드 시드, 재실행 멱등
+
+**풀스택 검증 통과 (실 HTTP, uvicorn 기동):**
+- 무인증 401 / `dev:dev_hanchaehun` 200 — dev 경로 정상
+- GET /matches 3건, 카드 상태·last_message·turn_count 정확
+- accept 3케이스: 민준(상대 선수락)→**scheduled·both_accepted=true**, 수아(단독)→대기, 서연(조율 미완)→**400 NOT_READY**
+- flutter analyze 0 issues, flutter test 통과. 검증 후 시드 원복 완료 — `flutter run` + `DEV_UID=dev_hanchaehun`으로 바로 데모 가능
+
+**실기기(USB 폰) 로딩 수 분 버그 수정 (2026-06-12):**
+- 원인: `AppConfig.apiBaseUrl`이 Android면 무조건 `10.0.2.2`(에뮬레이터 전용 별칭) — 실기기에선 도달 불가 주소라 요청이 90초 타임아웃까지 블랙홀 → 매 로드/새로고침 90초 후 조용히 더미 폴백(김현우/서민준/박지수가 그 증거)
+- 수정: `.env`에 `API_BASE_URL=http://localhost:8000` + `adb reverse tcp:8000 tcp:8000`(USB 실기기·에뮬레이터 공통, 기기 재연결 시 재실행 필요). ApiClient 타임아웃 분리 — GET/PUT 15초(`readTimeout`, 주입 가능), LLM 경유 POST 90초 유지. 타임아웃을 `ApiException(TIMEOUT)`으로 변환(화면 일관 처리), inbox 더미 폴백 시 debugPrint로 원인 노출
+- 검증: 회귀 테스트 `test/api_client_timeout_test.dart`(무응답 서버 → readTimeout 내 TIMEOUT 예외), 실폰 재빌드 후 백엔드 로그에 `GET /matches 200` 즉시 도착 + **실폰 화면에서 실데이터 카드 사용자 확인 완료**. analyze 0, test 전체 통과
+- adb reverse는 영속 설정이 아님 — USB 재연결·폰/PC 재부팅·`adb kill-server` 후에만 재실행하면 됨 (앱 재실행마다는 아님)
 
 ## ▶ 다음 작업
 
-1. **쿼터 리셋 후 실 Gemini 추출 검증** — `backend/scripts/verify_voice2.py` (말투 표지 ㅋㅋ/ㅠㅠ/헉/!!가 살아남는지 판정). 눈치 에스컬레이션 재확인은 `verify_nunchi.py`
-2. **inbox ↔ 백엔드 결선** — 시뮬레이션 결과를 연결 목록에 실데이터로 (눈치 엔진 seam)
-3. **카톡 import 설계 착수** — `docs/data_import_feasibility.md` 결정 반영: 카톡만, 온디바이스 파싱으로 본인 발화만 서버 전송, 별도 동의 화면. (Spotify/Instagram 보류)
+1. **`verify_accept_turn.py` 실행 (1콜)** — 약속 수락 턴 실 Gemini 확인으로 눈치 검증 완결. 현재 .env는 flash 상태. 쿼터 리셋: 자정 PT = 한국 16시.
+2. **카톡 import 설계 착수** — `docs/data_import_feasibility.md` 결정 반영: 카톡만, 온디바이스 파싱으로 본인 발화만 서버 전송, 별도 동의 화면. (Spotify/Instagram 보류)
+3. match_list를 *대화 후* 결과 기반으로 — 75점 게이트+페이월은 있으나 현재는 대화 전 벡터후보 노출 (inbox 결선 완료로 착수 가능)
 4. P2 잔여: agent_chat_screen SSE 실시간 결선
 
 ---
@@ -120,7 +151,7 @@
 - [x] `build_persona`가 [말투 샘플] 섹션에서 *추출* — 샘플 우선 원칙, sample_messages는 사용자 문장 거의 그대로. 샘플 없으면 추론 폴백 + 못 뽑는 항목은 기본값(중간/빈 문자열)
 - [x] 말투 감도 상향 — SpeechStyle에 `punctuation_habits`(ㅠㅠ/!!/…/~ 부호 습관) + `reaction_style`(공감형/논리형/중간) 추가. shared 스키마/Pydantic/mock/에이전트 프롬프트 주입까지 동기화. JSONB라 마이그레이션 불필요, 구 행 하위호환(기본값) 검증됨
 - [x] 프롬프트 토큰 최적화 — 시뮬 시스템 프롬프트(매 턴 핫패스) ~40% 압축, 페르소나 프롬프트 ~30% 압축. 제약·의미 불변, _speech_block은 빈 값 줄 생략
-- [ ] ⚠️ 실 Gemini 추출 검증 미완 — `scripts/verify_voice2.py` 준비됨(특징적 말투 샘플→추출 판정). flash·flash-lite 일일 쿼터(각 20 RPD) 소진으로 보류, 자정 PT 리셋 후 실행
+- [x] 실 Gemini 추출 검증 통과 (2026-06-11, flash) — 표지 4종(ㅋㅋ/ㅠㅠ/헉/!!) 전부 생존, 사용자 문장 그대로 sample_messages, formality "혼용" 정확 추출
 - [ ] (선택) 매칭 임베딩에 말투 신호 일부 반영할지 검토 — 단 궁합은 성향 기반이 맞아 신중히
 
 ## README 갱신

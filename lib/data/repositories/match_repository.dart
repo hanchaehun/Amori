@@ -33,6 +33,60 @@ class MatchCandidate {
   }
 }
 
+/// 연결(inbox) 화면의 대화 카드 한 장 (`GET /matches`).
+class MatchSummary {
+  const MatchSummary({
+    required this.matchId,
+    required this.partnerId,
+    required this.partnerName,
+    required this.status,
+    required this.score,
+    required this.appointmentReady,
+    required this.youAccepted,
+    required this.partnerAccepted,
+    required this.lastMessage,
+    required this.turnCount,
+    required this.updatedAt,
+  });
+
+  final String matchId;
+  final String partnerId;
+  final String? partnerName;
+  final String status; // simulated | scheduled | met
+  final double? score;
+  final bool appointmentReady;
+  final bool youAccepted;
+  final bool partnerAccepted;
+  final String? lastMessage;
+  final int turnCount;
+  final DateTime? updatedAt;
+
+  factory MatchSummary.fromJson(Map<String, dynamic> json) => MatchSummary(
+        matchId: json['match_id'] as String? ?? '',
+        partnerId: json['partner_id'] as String? ?? '',
+        partnerName: json['partner_name'] as String?,
+        status: json['status'] as String? ?? 'simulated',
+        score: (json['score'] as num?)?.toDouble(),
+        appointmentReady: json['appointment_ready'] as bool? ?? false,
+        youAccepted: json['you_accepted'] as bool? ?? false,
+        partnerAccepted: json['partner_accepted'] as bool? ?? false,
+        lastMessage: json['last_message'] as String?,
+        turnCount: json['turn_count'] as int? ?? 0,
+        updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
+      );
+}
+
+/// 수락 결과 (`POST /matches/{id}/accept`).
+class MatchAcceptResult {
+  const MatchAcceptResult({
+    required this.status,
+    required this.bothAccepted,
+  });
+
+  final String status; // simulated | scheduled
+  final bool bothAccepted;
+}
+
 /// 벡터 유사도 매칭 — BFF 경유 (Firestore 데모 시딩 대체).
 class MatchRepository {
   MatchRepository({ApiClient? api}) : _api = api ?? ApiClient();
@@ -53,5 +107,24 @@ class MatchRepository {
           score: (item['score'] as num?)?.toDouble() ?? 0,
         ),
     ];
+  }
+
+  /// 내 대화 목록 — 시뮬레이션이 있었던 매치만 (연결 화면).
+  Future<List<MatchSummary>> listMatches() async {
+    final json = await _api.getJson('/matches');
+    return [
+      for (final item in (json as List).whereType<Map<String, dynamic>>())
+        MatchSummary.fromJson(item),
+    ];
+  }
+
+  /// 만남 수락 — 양쪽 모두 수락하면 status가 'scheduled'로 올라온다.
+  Future<MatchAcceptResult> acceptMatch(String matchId) async {
+    final json = await _api.postJson('/matches/$matchId/accept', const {})
+        as Map<String, dynamic>;
+    return MatchAcceptResult(
+      status: json['status'] as String? ?? 'simulated',
+      bothAccepted: json['both_accepted'] as bool? ?? false,
+    );
   }
 }

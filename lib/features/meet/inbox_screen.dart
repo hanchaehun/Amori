@@ -9,7 +9,9 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../data/api/api_exception.dart';
 import '../../data/dummy/conversations.dart';
+import '../../data/repositories/match_repository.dart';
 
 enum _InboxTab { active, scheduled, completed }
 
@@ -23,11 +25,94 @@ class InboxScreen extends StatefulWidget {
 class _InboxScreenState extends State<InboxScreen> {
   _InboxTab _tab = _InboxTab.active;
 
-  // 더미 시드를 변경 가능한 로컬 상태로 복사 — 수락 시 목록 간 이동을 반영한다.
-  // (실연결: 백엔드 /matches/find·시뮬레이션 결과로 이 목록을 채우는 것이 다음 단계)
-  late List<Conversation> _active = [...kActiveConversations];
-  late List<Conversation> _scheduled = [...kScheduledConversations];
-  late final List<Conversation> _completed = [...kCompletedConversations];
+  final MatchRepository _matches = MatchRepository();
+  bool _loading = true;
+
+  /// 백엔드 목록을 받아왔는가. false면 더미 폴백 상태 — 수락도 로컬에서만 처리한다.
+  bool _fromBackend = false;
+
+  List<Conversation> _active = [];
+  List<Conversation> _scheduled = [];
+  List<Conversation> _completed = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// 시뮬레이션 결과(GET /matches)로 목록을 채운다. 실패 시 더미 폴백.
+  Future<void> _load() async {
+    try {
+      final items = await _matches.listMatches();
+      final convs = items.map(_toConversation).toList();
+      if (!mounted) return;
+      setState(() {
+        _fromBackend = true;
+        _loading = false;
+        _active = convs
+            .where((c) =>
+                c.status == ConversationStatus.active ||
+                c.status == ConversationStatus.scheduling)
+            .toList();
+        _scheduled = convs
+            .where((c) => c.status == ConversationStatus.scheduled)
+            .toList();
+        _completed = convs
+            .where((c) => c.status == ConversationStatus.completed)
+            .toList();
+      });
+    } catch (e) {
+      debugPrint('inbox: GET /matches 실패 — 더미 폴백으로 전환: $e');
+      if (!mounted) return;
+      setState(() {
+        _fromBackend = false;
+        _loading = false;
+        _active = [...kActiveConversations];
+        _scheduled = [...kScheduledConversations];
+        _completed = [...kCompletedConversations];
+      });
+    }
+  }
+
+  Conversation _toConversation(MatchSummary m) {
+    final name = (m.partnerName?.isNotEmpty ?? false) ? m.partnerName! : '상대';
+    final status = switch (m.status) {
+      'scheduled' => ConversationStatus.scheduled,
+      'met' => ConversationStatus.completed,
+      _ => m.appointmentReady
+          ? ConversationStatus.scheduling
+          : ConversationStatus.active,
+    };
+    return Conversation(
+      id: m.matchId,
+      name: name,
+      initial: name.substring(0, 1),
+      score: m.score?.round() ?? 0,
+      lastMessage: m.lastMessage ?? '에이전트 대화 ${m.turnCount}턴 완료',
+      time: _formatTime(m.updatedAt),
+      status: status,
+      unread: m.appointmentReady && !m.youAccepted,
+      appointmentReady: m.appointmentReady,
+      partnerAccepted: m.partnerAccepted,
+      youAccepted: m.youAccepted,
+    );
+  }
+
+  static String _formatTime(DateTime? t) {
+    if (t == null) return '';
+    final local = t.toLocal();
+    final now = DateTime.now();
+    final days = DateTime(now.year, now.month, now.day)
+        .difference(DateTime(local.year, local.month, local.day))
+        .inDays;
+    if (days <= 0) {
+      final h12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+      final mm = local.minute.toString().padLeft(2, '0');
+      return '${local.hour < 12 ? '오전' : '오후'} $h12:$mm';
+    }
+    return days == 1 ? '어제' : '$days일 전';
+  }
 
   /// '진행 중' 정렬: 약속 조율 완료 카드를 맨 위로.
   List<Conversation> get _sortedActive {
@@ -60,16 +145,32 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   /// [수락] — 양쪽이 모두 수락하면 '만남 예정'으로 이동한다.
-  void _onAccept(Conversation c) {
+  /// 백엔드 모드면 POST /matches/{id}/accept 결과를 따르고,
+  /// 더미 폴백 모드면 로컬 상태로만 처리한다.
+  Future<void> _onAccept(Conversation c) async {
     HapticFeedback.mediumImpact();
     final messenger = ScaffoldMessenger.of(context);
-    if (c.partnerAccepted) {
-      // 상대가 이미 수락 → 양쪽 수락 성립 → 만남 예정으로 이동
+
+    var bothAccepted = c.partnerAccepted;
+    if (_fromBackend) {
+      try {
+        final result = await _matches.acceptMatch(c.id);
+        bothAccepted = result.bothAccepted;
+      } on ApiException catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+        return;
+      }
+      if (!mounted) return;
+    }
+
+    if (bothAccepted) {
+      // 양쪽 수락 성립 → 만남 예정으로 이동
       setState(() {
         _active.removeWhere((x) => x.id == c.id);
         _scheduled = [
           c.copyWith(
             youAccepted: true,
+            partnerAccepted: true,
             status: ConversationStatus.scheduled,
           ),
           ..._scheduled,
@@ -107,23 +208,40 @@ class _InboxScreenState extends State<InboxScreen> {
             onChange: (t) => setState(() => _tab = t),
           ),
           Expanded(
-            child: _conversations.isEmpty
-                ? const _EmptyState()
-                : ListView.separated(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg,
-                      AppSpacing.lg,
-                      AppSpacing.lg,
-                      AppSpacing.xl,
-                    ),
-                    itemCount: _conversations.length,
-                    separatorBuilder: (_, _) => AppSpacing.vSm,
-                    itemBuilder: (_, i) => _ConversationCard(
-                      conversation: _conversations[i],
-                      onTap: () => _onConversationTap(_conversations[i]),
-                      onAccept: () => _onAccept(_conversations[i]),
-                    ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: _conversations.isEmpty
+                        ? LayoutBuilder(
+                            builder: (context, constraints) =>
+                                SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: SizedBox(
+                                height: constraints.maxHeight,
+                                child: const _EmptyState(),
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(
+                              parent: BouncingScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                              AppSpacing.xl,
+                            ),
+                            itemCount: _conversations.length,
+                            separatorBuilder: (_, _) => AppSpacing.vSm,
+                            itemBuilder: (_, i) => _ConversationCard(
+                              conversation: _conversations[i],
+                              onTap: () =>
+                                  _onConversationTap(_conversations[i]),
+                              onAccept: () => _onAccept(_conversations[i]),
+                            ),
+                          ),
                   ),
           ),
         ],
@@ -314,23 +432,26 @@ class _ConversationCardState extends State<_ConversationCard> {
                                     .copyWith(fontSize: 15),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                              child: Text(
-                                '${c.score}점',
-                                style: AppTypography.caption.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 11,
+                            if (c.score > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                                child: Text(
+                                  '${c.score}점',
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                             const Spacer(),
                             Text(
                               c.time,

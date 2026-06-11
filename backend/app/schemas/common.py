@@ -51,3 +51,19 @@ class MatchAcceptResponse(BaseModel):
     appointment_ready: bool
     accepted_by: list[str]
     both_accepted: bool
+
+
+class MatchListItem(BaseModel):
+    """연결(inbox) 화면의 대화 카드 한 장 — 시뮬레이션이 있었던 매치만."""
+
+    match_id: str
+    partner_id: str
+    partner_name: str | None = None
+    status: str  # simulated | scheduled | met
+    score: float | None = None
+    appointment_ready: bool
+    you_accepted: bool
+    partner_accepted: bool
+    last_message: str | None = None  # 최신 시뮬레이션의 마지막 발화 text
+    turn_count: int = 0
+    updated_at: str

@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.firebase import get_current_user
 from app.dependencies import get_db
 from app.matching import find_candidates
-from app.models.database import Match, Persona
-from app.schemas.common import MatchAcceptResponse, MatchResponse
+from app.models.database import Match, Persona, SimulationJob, User
+from app.schemas.common import MatchAcceptResponse, MatchListItem, MatchResponse
 
 router = APIRouter()
 
@@ -27,6 +27,69 @@ async def get_or_create_match(
         db.add(match_obj)
         await db.flush()
     return match_obj
+
+
+@router.get("", response_model=list[MatchListItem])
+async def list_my_matches(
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """내 대화 목록 — 연결(inbox) 화면이 소비한다.
+
+    시뮬레이션이 한 번이라도 돌았던 매치만 반환한다(candidate 제외).
+    클라이언트는 status로 진행 중(simulated)/만남 예정(scheduled)을 나누고,
+    appointment_ready 카드를 맨 위로 올린다.
+    """
+    uid = user["uid"]
+    result = await db.execute(
+        select(Match)
+        .where(Match.participant_ids.any(uid), Match.status != "candidate")
+        .order_by(Match.updated_at.desc())
+    )
+    matches = result.scalars().all()
+    if not matches:
+        return []
+
+    match_ids = [m.id for m in matches]
+    partner_ids = [
+        next((p for p in m.participant_ids if p != uid), uid) for m in matches
+    ]
+
+    # 매치별 최신 시뮬레이션 한 건 (DISTINCT ON) — 카드 미리보기용
+    jobs_result = await db.execute(
+        select(SimulationJob)
+        .distinct(SimulationJob.match_id)
+        .where(SimulationJob.match_id.in_(match_ids))
+        .order_by(SimulationJob.match_id, SimulationJob.created_at.desc())
+    )
+    latest_jobs = {j.match_id: j for j in jobs_result.scalars().all()}
+
+    users_result = await db.execute(select(User).where(User.id.in_(partner_ids)))
+    partner_names = {u.id: u.display_name for u in users_result.scalars().all()}
+
+    items: list[MatchListItem] = []
+    for match_obj, partner_id in zip(matches, partner_ids):
+        job = latest_jobs.get(match_obj.id)
+        turns = (job.turns if job else None) or []
+        last_text = turns[-1].get("text") if turns else None
+        items.append(
+            MatchListItem(
+                match_id=str(match_obj.id),
+                partner_id=partner_id,
+                partner_name=partner_names.get(partner_id),
+                status=match_obj.status,
+                score=match_obj.score,
+                appointment_ready=match_obj.appointment_ready,
+                you_accepted=uid in match_obj.accepted_by,
+                partner_accepted=any(
+                    p in match_obj.accepted_by for p in match_obj.participant_ids if p != uid
+                ),
+                last_message=last_text,
+                turn_count=len(turns),
+                updated_at=match_obj.updated_at.isoformat(),
+            )
+        )
+    return items
 
 
 @router.get("/find", response_model=list[MatchResponse])
