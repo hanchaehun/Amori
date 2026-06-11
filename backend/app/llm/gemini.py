@@ -8,13 +8,12 @@
 
 import asyncio
 import math
-from typing import AsyncIterator
+from typing import AsyncIterator, Literal
 
 from pydantic import BaseModel, Field
 
 from app.llm.base import LLMProvider
 from app.llm.prompts import (
-    ANALYSIS_SYSTEM_PROMPT,
     PERSONA_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
     STARTERS_SYSTEM_PROMPT,
@@ -26,6 +25,27 @@ from app.llm.prompts.persona import persona_embedding_text
 from app.schemas.persona import PersonaTrait, SpeechStyle
 from app.schemas.report import Finding, Place, Warning
 from app.services.simulation import run_two_agent_simulation
+
+
+def _quota_retry_delay(exc: Exception) -> float | None:
+    """429 응답의 RetryInfo retryDelay(예: '11s')를 초 단위로 꺼낸다.
+
+    무료 티어 RPM 쿼터는 분 단위 윈도우라 고정 백오프(1.5s)로는 못 넘는다 —
+    서버가 알려준 대기 시간을 그대로 따라야 시뮬레이션 턴 루프가 안 끊긴다.
+    """
+    if getattr(exc, "code", None) != 429:
+        return None
+    details = getattr(exc, "details", None)
+    if not isinstance(details, dict):
+        return None
+    for item in details.get("error", {}).get("details", []):
+        if item.get("@type", "").endswith("RetryInfo"):
+            delay = item.get("retryDelay", "")
+            try:
+                return float(delay.rstrip("s"))
+            except ValueError:
+                return None
+    return None
 
 
 # ---- LLM structured output 스키마 (Gemini responseSchema로 강제) ----------
@@ -40,13 +60,11 @@ class _PersonaOutput(BaseModel):
 
 
 class _SpeechOutput(BaseModel):
+    # 눈치 — 상대를 읽고(partner_read) 행동을 정한 뒤(strategy) 발화(text)한다.
+    # text만 사용자에게 노출하고 나머지는 내부 분석용(DB 저장)이다.
+    partner_read: Literal["긍정적", "중립", "미온적"]
+    strategy: Literal["알아가기", "약속 제안", "약속 수락", "마무리"]
     text: str
-
-
-class _AnalysisOutput(BaseModel):
-    has_signal: bool
-    system_text: str = ""
-    signal: str = ""
 
 
 class _ReportOutput(BaseModel):
@@ -121,7 +139,9 @@ class GeminiProvider(LLMProvider):
             except Exception as exc:  # 일시 오류(429/5xx)·파싱 실패 재시도
                 last_error = exc
                 if attempt < self._max_retries:
-                    await asyncio.sleep(1.5 * (attempt + 1))
+                    quota_delay = _quota_retry_delay(exc)
+                    delay = quota_delay + 1.0 if quota_delay is not None else 1.5 * (attempt + 1)
+                    await asyncio.sleep(delay)
         raise last_error
 
     @staticmethod
@@ -170,26 +190,17 @@ class GeminiProvider(LLMProvider):
         their_persona: dict,
         max_turns: int = 20,
     ) -> AsyncIterator[dict]:
-        async def speak(system_prompt: str, history: list[dict]) -> str:
+        async def speak(system_prompt: str, history: list[dict]) -> dict:
             output = await self._generate(
                 system_prompt,
                 self._to_contents(history),
                 _SpeechOutput,
                 temperature=0.9,
             )
-            return output.text
-
-        async def analyze(user_message: str) -> dict:
-            output = await self._generate(
-                ANALYSIS_SYSTEM_PROMPT,
-                user_message,
-                _AnalysisOutput,
-                temperature=0.3,
-            )
             return output.model_dump()
 
         async for turn in run_two_agent_simulation(
-            speak, analyze, my_persona, their_persona, max_turns
+            speak, my_persona, their_persona, max_turns
         ):
             yield turn
 

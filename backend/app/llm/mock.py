@@ -87,97 +87,65 @@ class MockLLMProvider(LLMProvider):
         their_persona: dict,
         max_turns: int = 20,
     ) -> AsyncIterator[dict]:
+        # 눈치 흐름 데모: 알아가기 → 긍정 신호 → 약속 제안 → 약속 수락 → 마무리.
+        # partner_read·strategy는 내부 분석용(사용자 비노출). 약속 수락이 나오면
+        # appointment_ready가 켜진다.
         turns = [
             {
-                "turn_index": 0,
                 "speaker": "me",
                 "text": "안녕하세요! 프로필에서 여행을 좋아하신다고 봤는데, 최근에 어디 다녀오셨어요?",
-                "signal": None,
-                "ai_generated": True,
+                "partner_read": "중립",
+                "strategy": "알아가기",
             },
             {
-                "turn_index": 1,
                 "speaker": "them",
                 "text": "안녕하세요~ 저 얼마 전에 제주도 다녀왔어요! 혹시 여행 좋아하세요?",
-                "signal": None,
-                "ai_generated": True,
+                "partner_read": "긍정적",
+                "strategy": "알아가기",
             },
             {
-                "turn_index": 2,
-                "speaker": "system",
-                "text": "🔍 공통 관심사 발견: 여행",
-                "signal": "여행 시그널",
-                "ai_generated": True,
-            },
-            {
-                "turn_index": 3,
                 "speaker": "me",
-                "text": "저도 여행 엄청 좋아해요! 제주도 좋죠~ 저는 작년에 올레길 걸었는데 진짜 힐링이었어요. 제주도에서 뭐가 제일 좋았어요?",
-                "signal": None,
-                "ai_generated": True,
+                "text": "저도 여행 엄청 좋아해요! 작년에 올레길 걸었는데 진짜 힐링이었어요. 제주도에서 뭐가 제일 좋았어요?",
+                "partner_read": "긍정적",
+                "strategy": "알아가기",
             },
             {
-                "turn_index": 4,
                 "speaker": "them",
-                "text": "저는 성산일출봉에서 본 일출이 진짜 좋았어요. 새벽에 힘들었지만 올라가고 나니까 감동이더라고요. 혹시 음악도 좋아하세요?",
-                "signal": None,
-                "ai_generated": True,
+                "text": "성산일출봉 일출이 최고였어요. 혹시 인디 음악도 좋아하세요? 소규모 공연장 분위기 좋아하거든요.",
+                "partner_read": "긍정적",
+                "strategy": "알아가기",
             },
             {
-                "turn_index": 5,
                 "speaker": "me",
-                "text": "맞아요 ㅎㅎ 인디 밴드 공연 보는 거 좋아해요. 조용한 소규모 공연장에서 듣는 거 특히 좋아하는데, 혹시 음악 취향이 어떻게 되세요?",
-                "signal": None,
-                "ai_generated": True,
+                "text": "저 완전 좋아해요 ㅎㅎ 이렇게 취향이 잘 맞는 것 같은데, 혹시 이번 주말에 홍대 쪽에서 공연 같이 보실래요?",
+                "partner_read": "긍정적",
+                "strategy": "약속 제안",
             },
             {
-                "turn_index": 6,
-                "speaker": "system",
-                "text": "🔍 공통 관심사 발견: 음악 (인디/소규모 공연)",
-                "signal": "음악 취향 +18%",
-                "ai_generated": True,
-            },
-            {
-                "turn_index": 7,
                 "speaker": "them",
-                "text": "오 저도 인디 좋아해요! 혁오나 잔나비 같은 거 자주 듣고요, 소규모 공연장 분위기 진짜 좋죠. 마포구 쪽에 괜찮은 데 많던데 혹시 아세요?",
-                "signal": None,
-                "ai_generated": True,
+                "text": "오 좋아요! 토요일 저녁 어떠세요? 홍대 라이브 클럽 제가 아는 데 있어요 ㅎㅎ",
+                "partner_read": "긍정적",
+                "strategy": "약속 수락",
             },
             {
-                "turn_index": 8,
                 "speaker": "me",
-                "text": "홍대 근처 라이브 클럽 몇 군데 가봤어요! 맛집도 많고 분위기도 좋아서 자주 가는 편이에요. 그런데 평소에는 주로 뭐 하면서 시간 보내세요?",
-                "signal": None,
-                "ai_generated": True,
-            },
-            {
-                "turn_index": 9,
-                "speaker": "them",
-                "text": "저는 카페에서 책 읽는 거 좋아해요. 요즘은 에세이를 많이 읽고 있어요. 그리고 요리도 좋아해서 주말에는 새로운 레시피 도전해 봐요 ㅎㅎ",
-                "signal": None,
-                "ai_generated": True,
-            },
-            {
-                "turn_index": 10,
-                "speaker": "me",
-                "text": "카페에서 책 읽기 저도 좋아하는데! 요리도 하시는구나, 어떤 요리 잘하세요? 저는 파스타를 좋아하는데 만들면 항상 좀 아쉬워요 ㅋㅋ",
-                "signal": None,
-                "ai_generated": True,
-            },
-            {
-                "turn_index": 11,
-                "speaker": "system",
-                "text": "💬 대화 스타일 궁합: 서로 질문을 주고받으며 관심을 표현하는 패턴",
-                "signal": "대화 템포 일치",
-                "ai_generated": True,
+                "text": "토요일 저녁 좋아요! 그럼 그때 봬요 ㅎㅎ 기대할게요!",
+                "partner_read": "긍정적",
+                "strategy": "마무리",
             },
         ]
 
-        for turn in turns:
-            if turn["turn_index"] >= max_turns:
+        for i, turn in enumerate(turns):
+            if i >= max_turns:
                 break
-            yield turn
+            yield {
+                "turn_index": i,
+                "speaker": turn["speaker"],
+                "text": turn["text"],
+                "partner_read": turn["partner_read"],
+                "strategy": turn["strategy"],
+                "ai_generated": True,
+            }
             await asyncio.sleep(0.3)
 
     async def generate_report(

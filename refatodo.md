@@ -5,17 +5,53 @@
 
 ---
 
-## ▶ 다음 작업 (여기서부터 시작)
+## ✅ 실제 Gemini E2E 검증 완료 (2026-06-11)
 
-**실제 Gemini E2E 검증.** 지금까지는 mock 스모크만 통과 — 실 LLM로는 한 번도 안 돌려봤고, 특히 에이전트 말투(voice) 품질은 mock으로 검증 불가.
+`backend/scripts/e2e_gemini.py`로 **persona(voice 포함)→matches/find(임베딩)→simulation(SSE)→report 전 구간 실 Gemini 통과**. 결과 전문: `backend/scripts/e2e_result.md`.
 
-1. [Google AI Studio](https://aistudio.google.com/apikey)에서 `GEMINI_API_KEY` 발급 (무료, 카드 X)
-2. `backend/.env` — `LLM_PROVIDER=gemini` + `GEMINI_API_KEY=...`
-3. `cd backend && docker-compose up -d db && .venv/Scripts/alembic upgrade head`
-4. `uvicorn app.main:app --reload` → `/persona/build` → `/simulation/run`(SSE) → `/report`
-5. **확인 포인트**: speech_style·sample_messages가 자연스럽게 나오는지, 시뮬레이션 대화에서 두 에이전트 말투가 실제로 구분되는지. 안 살면 `backend/app/llm/prompts/` 조정 (이현정).
+**확인된 것:**
+- speech_style·sample_messages 자연스럽게 생성됨 (A 차분/사려깊음 vs B 긍정/활발 — 톤·에너지·문장 길이 구분 뚜렷)
+- 시뮬레이션 8턴 + 시그널 분석 2회 (✨즉흥 만남 제안 → ✅약속 조율) 정상 동작
+- 리포트가 페르소나 대비를 실제로 짚음 (warnings: "즉흥성과 신중함의 차이", "유머 코드 차이") — score 75
+- 임베딩 매칭 score 86.24, 1024차원
 
-현재 코드는 전부 `hoom` 브랜치에 푸시됨 (리팩토링 본체 `adf2921`, voice `7064498`). 팀 승인 후 main 머지 예정.
+**한계 실증 (voice 2차의 근거):** 대조적 답변(신중형 vs 장난기형)을 넣어도 둘 다 존댓말/ㅎㅎ/이모지 가끔으로 **수렴** — 객관식만으로는 formality가 중립 기본값에 머묾. 진단("객관식은 말투를 못 잡는다")이 실 LLM에서 그대로 재현됨 → 질문지 주관식 추가(2차)가 차별화의 실제 병목.
+
+**이번에 고친 것 (미커밋):**
+- `backend/app/llm/gemini.py` — 429 응답의 RetryInfo retryDelay 존중 (무료 티어 RPM 쿼터에서 시뮬레이션 턴 루프가 끊기던 문제)
+- `backend/alembic.ini` — em-dash가 Windows cp949 locale에서 alembic 기동을 깨던 문제 (ASCII로 교체)
+- `backend/scripts/e2e_gemini.py` 신설 — 인증만 모킹(dependency_overrides), LLM·DB 실물. `--skip-persona`로 쿼터 절약 재실행 가능
+
+**운영 노트 — 현재 키(AQ. 선불형) 무료 쿼터가 매우 작음:** gemini-2.5-flash **5 RPM / 20 RPD**. 쿼터는 모델별이라 소진 시 `.env`의 `GEMINI_CHAT_MODEL=gemini-2.5-flash-lite`로 우회 가능 (현재 .env가 이 상태). 데모/발표 전엔 RPD 잔량 확인 필수. 실서비스 전 유료 티어 전환은 기존 P2 항목 그대로.
+
+## ✅ 눈치 엔진 + 약속조율/수락 플로우 (2026-06-11)
+
+소개팅 대화에 "눈치"(상대 반응을 읽고 행동을 정함)를 넣고, 그게 분석·케미점수·자연스러운 종료·약속조율 감지까지 하나의 메커니즘으로 묶이도록 재설계.
+
+**백엔드 (눈치):**
+- `_SpeechOutput`에 `partner_read`(긍정적/중립/미온적) + `strategy`(알아가기/약속 제안/약속 수락/마무리) 추가 — 발화 한 콜 안에서 상대를 읽고→전략을 정한 뒤→발화. **사용자에겐 text만 노출, partner_read·strategy는 DB에만 저장**(SSE에서 분리).
+- **4턴마다 돌던 분석 콜 완전 제거** — strategy/partner_read가 곧 분석 데이터. `ANALYSIS_SYSTEM_PROMPT`·`build_analysis_user_message`·`_AnalysisOutput` 삭제, `analyze` 콜백 제거. (콜 수 감소)
+- **눈치 기반 조기 종료** — `services/simulation.py`: strategy="마무리"면 종료, "약속 수락"이면 상대 마무리 한 턴 더 후 종료. 고정 max_turns → 가변 길이 (비용 절감 + 현실적).
+- **약속조율 감지** — strategy="약속 수락"이 나오면 `Match.appointment_ready=True`. `Match`에 `appointment_ready`(bool) + `accepted_by`(uid 배열) 컬럼 추가, alembic 0002.
+- **수락 엔드포인트** — `POST /matches/{id}/accept`: 멱등 수락, 양쪽 참가자 모두 수락 시 `status="scheduled"`. mock provider도 약속수락까지 가는 대화로 교체.
+
+**Flutter (연결 화면 = inbox_screen):**
+- 진행 중 탭에서 **약속조율 완료 카드를 맨 위로 정렬 + 민트 테두리 + "약속 조율 완료" 배지**.
+- 카드에 **[만남 수락하기]** 버튼 — 누르면 상대가 이미 수락한 경우 양쪽 성립 → **만남 예정 탭으로 이동**, 아니면 "상대 수락 대기" 표시. `Conversation`에 appointmentReady/partnerAccepted/youAccepted + copyWith 추가.
+
+**검증:** 눈치 필드 실 Gemini로 정상 생성 확인(`verify_nunchi.py`), 약속조율→A수락(대기)→B수락(scheduled) mock 풀스택 통과(`verify_accept_flow.py`), flutter analyze 0 issues, 위젯 테스트 통과.
+
+**남은 seam (다음 단계):**
+- ⚠️ **inbox는 아직 더미 데이터** — 백엔드 시뮬레이션 결과(appointment_ready)가 inbox 목록을 실제로 채우도록 연결 필요. 수락도 현재는 로컬 상태(상대 수락은 시드 플래그) — 두 실유저 간 동기화는 `/matches/{id}/accept` 결선 시 완성.
+- 에스컬레이션 넛지(긍정 지속 시 약속 제안) 프롬프트는 추가했으나 쿼터 소진으로 실 Gemini 재확인 미완 — 리셋 후 `verify_nunchi.py` 재실행 (mock으론 약속수락 흐름 확인됨).
+- 매칭 화면(match_list): "대화 후 리포트 75점↑만 표시 + 유료 리포트"는 구조상 이미 75점 게이트+페이월 존재. 단 현재는 *대화 전* 벡터후보를 보여줌 → *대화 후* 결과 기반으로 바꾸는 건 inbost↔백엔드 결선과 함께.
+
+## ▶ 다음 작업
+
+1. **이번 세션 수정분 커밋** (hoom): 눈치 엔진(gemini/simulation/prompts/mock), Match 컬럼+alembic 0002, 수락 엔드포인트, inbox UI, gemini.py 429 retry, alembic.ini, scripts/ 3종
+2. **inbox ↔ 백엔드 결선** — 시뮬레이션 결과를 연결 목록에 실데이터로 (위 seam)
+3. **voice 2차** — 질문지 주관식 추가 (제품 결정)
+4. P2 잔여: agent_chat_screen SSE 실시간 결선
 
 ---
 

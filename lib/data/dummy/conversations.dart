@@ -3,7 +3,7 @@ enum ConversationStatus { active, scheduling, scheduled, completed }
 extension ConversationStatusX on ConversationStatus {
   String get label => switch (this) {
         ConversationStatus.active => '🟢 대화 중',
-        ConversationStatus.scheduling => '📅 약속 조율 중',
+        ConversationStatus.scheduling => '📅 약속 조율 완료',
         ConversationStatus.scheduled => '📍 만남 예정',
         ConversationStatus.completed => '✓ 만남 완료',
       };
@@ -19,6 +19,9 @@ class Conversation {
     required this.time,
     required this.status,
     required this.unread,
+    this.appointmentReady = false,
+    this.partnerAccepted = false,
+    this.youAccepted = false,
   });
 
   final String id;
@@ -29,9 +32,58 @@ class Conversation {
   final String time;
   final ConversationStatus status;
   final bool unread;
+
+  /// 시뮬레이션 중 두 에이전트가 약속을 잡았는가(백엔드 눈치 strategy="약속 수락").
+  /// true면 '진행 중'에서 맨 위로 올라오고 테두리가 강조된다.
+  final bool appointmentReady;
+
+  /// 상대가 이미 만남을 수락했는가. 내가 수락하면 곧바로 '만남 예정'으로 넘어간다.
+  final bool partnerAccepted;
+
+  /// 내가 만남을 수락했는가.
+  final bool youAccepted;
+
+  bool get bothAccepted => partnerAccepted && youAccepted;
+
+  Conversation copyWith({
+    ConversationStatus? status,
+    String? lastMessage,
+    String? time,
+    bool? unread,
+    bool? appointmentReady,
+    bool? partnerAccepted,
+    bool? youAccepted,
+  }) {
+    return Conversation(
+      id: id,
+      name: name,
+      initial: initial,
+      score: score,
+      lastMessage: lastMessage ?? this.lastMessage,
+      time: time ?? this.time,
+      status: status ?? this.status,
+      unread: unread ?? this.unread,
+      appointmentReady: appointmentReady ?? this.appointmentReady,
+      partnerAccepted: partnerAccepted ?? this.partnerAccepted,
+      youAccepted: youAccepted ?? this.youAccepted,
+    );
+  }
 }
 
 const List<Conversation> kActiveConversations = [
+  // 약속 조율 완료 — 상대가 이미 수락한 상태라, 사용자가 수락만 누르면 '만남 예정'으로.
+  Conversation(
+    id: 'c2',
+    name: '김현우',
+    initial: '현',
+    score: 91,
+    lastMessage: '토요일 저녁 좋아요! 그럼 그때 봬요 ㅎㅎ',
+    time: '오후 1:10',
+    status: ConversationStatus.scheduling,
+    unread: true,
+    appointmentReady: true,
+    partnerAccepted: true,
+  ),
   Conversation(
     id: 'c1',
     name: '서민준',
@@ -41,16 +93,6 @@ const List<Conversation> kActiveConversations = [
     time: '오후 3:24',
     status: ConversationStatus.active,
     unread: true,
-  ),
-  Conversation(
-    id: 'c2',
-    name: '김현우',
-    initial: '현',
-    score: 91,
-    lastMessage: '주말 일정 확인하고 알려드릴게요',
-    time: '오후 1:10',
-    status: ConversationStatus.scheduling,
-    unread: false,
   ),
   Conversation(
     id: 'c3',
@@ -74,6 +116,9 @@ const List<Conversation> kScheduledConversations = [
     time: '어제',
     status: ConversationStatus.scheduled,
     unread: false,
+    appointmentReady: true,
+    partnerAccepted: true,
+    youAccepted: true,
   ),
 ];
 

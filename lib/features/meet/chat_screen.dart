@@ -394,6 +394,9 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final amori = context.amori;
     final isMe = msg.isMe;
+    // 꼬리 방향만 다른 말풍선 반경. 내 말풍선은 그라데이션 '테두리'를 위해
+    // 안쪽 반경을 테두리 두께만큼 줄인 버전(_innerRadius)을 함께 쓴다.
+    const border = 1.6;
     final radius = isMe
         ? const BorderRadius.only(
             topLeft: Radius.circular(18),
@@ -407,6 +410,20 @@ class _MessageBubble extends StatelessWidget {
             bottomLeft: Radius.circular(6),
             bottomRight: Radius.circular(18),
           );
+    const innerRadius = BorderRadius.only(
+      topLeft: Radius.circular(18 - border),
+      topRight: Radius.circular(18 - border),
+      bottomLeft: Radius.circular(18 - border),
+      bottomRight: Radius.circular(6 - border),
+    );
+    final textWidget = Text(
+      msg.text,
+      style: AppTypography.bodyMedium.copyWith(
+        color: AppColors.ink900,
+        fontSize: 15,
+        height: 1.4,
+      ),
+    );
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
@@ -417,23 +434,33 @@ class _MessageBubble extends StatelessWidget {
             constraints: BoxConstraints(
               maxWidth: MediaQuery.sizeOf(context).width * 0.78,
             ),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-              decoration: BoxDecoration(
-                gradient: isMe ? amori.primaryGradient : null,
-                color: isMe ? null : AppColors.surfaceMuted,
-                borderRadius: radius,
-              ),
-              child: Text(
-                msg.text,
-                style: AppTypography.bodyMedium.copyWith(
-                  color: isMe ? Colors.white : AppColors.ink900,
-                  fontSize: 15,
-                  height: 1.4,
-                ),
-              ),
-            ),
+            child: isMe
+                // 그라데이션 테두리: 바깥은 그라데이션, 안쪽은 흰 칸 → 텍스트가 또렷하게.
+                ? Container(
+                    decoration: BoxDecoration(
+                      gradient: amori.primaryGradient,
+                      borderRadius: radius,
+                    ),
+                    padding: const EdgeInsets.all(border),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 13, vertical: 10),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: innerRadius,
+                      ),
+                      child: textWidget,
+                    ),
+                  )
+                : Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: radius,
+                    ),
+                    child: textWidget,
+                  ),
           ),
           const SizedBox(height: 4),
           Text(

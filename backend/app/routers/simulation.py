@@ -34,14 +34,24 @@ async def simulation_event_generator(
     started = time.monotonic()
     try:
         async for turn in llm.run_simulation(my_persona_dict, their_persona_dict, max_turns):
+            # DB엔 눈치(partner_read·strategy) 포함 전체를 저장하고,
+            # 사용자에게 가는 SSE는 대화에 필요한 필드만 보낸다 (분석은 비노출).
             turns.append(turn)
-            yield {"event": "turn", "data": json.dumps(turn, ensure_ascii=False)}
+            public_turn = {
+                "turn_index": turn["turn_index"],
+                "speaker": turn["speaker"],
+                "text": turn["text"],
+            }
+            yield {"event": "turn", "data": json.dumps(public_turn, ensure_ascii=False)}
 
         # Save completed job
         job.status = "completed"
         job.turns = turns
         job.completed_at = func.now()
         match.status = "simulated"
+        # 눈치 strategy="약속 수락"이 한 번이라도 나오면 약속 조율 완료로 표시.
+        # '진행 중' 목록에서 맨 위로 올라오고 사용자가 수락을 누를 수 있게 된다.
+        match.appointment_ready = any(t.get("strategy") == "약속 수락" for t in turns)
         await db.commit()
 
         await log_llm_call(

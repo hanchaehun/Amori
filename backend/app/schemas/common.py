@@ -43,3 +43,11 @@ class MatchResponse(BaseModel):
     user_id: str
     display_name: str | None = None
     score: float
+
+
+class MatchAcceptResponse(BaseModel):
+    match_id: str
+    status: str  # simulated | scheduled
+    appointment_ready: bool
+    accepted_by: list[str]
+    both_accepted: bool
