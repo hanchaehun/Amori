@@ -48,9 +48,9 @@
 
 ## ▶ 다음 작업
 
-1. **이번 세션 수정분 커밋** (hoom): 눈치 엔진(gemini/simulation/prompts/mock), Match 컬럼+alembic 0002, 수락 엔드포인트, inbox UI, gemini.py 429 retry, alembic.ini, scripts/ 3종
-2. **inbox ↔ 백엔드 결선** — 시뮬레이션 결과를 연결 목록에 실데이터로 (위 seam)
-3. **voice 2차** — 질문지 주관식 추가 (제품 결정)
+1. **쿼터 리셋 후 실 Gemini 추출 검증** — `backend/scripts/verify_voice2.py` (말투 표지 ㅋㅋ/ㅠㅠ/헉/!!가 살아남는지 판정). 눈치 에스컬레이션 재확인은 `verify_nunchi.py`
+2. **inbox ↔ 백엔드 결선** — 시뮬레이션 결과를 연결 목록에 실데이터로 (눈치 엔진 seam)
+3. **카톡 import 설계 착수** — `docs/data_import_feasibility.md` 결정 반영: 카톡만, 온디바이스 파싱으로 본인 발화만 서버 전송, 별도 동의 화면. (Spotify/Instagram 보류)
 4. P2 잔여: agent_chat_screen SSE 실시간 결선
 
 ---
@@ -114,10 +114,13 @@
 - [x] `build_agent_system_prompt`에 `[당신의 말투]` 섹션 + 발화 예시 few-shot 주입 — persona→simulation 라우터→에이전트까지 voice 결선
 - [x] mock provider에도 voice 필드 (오프라인 데모/스모크 유지)
 
-### 2차 — 자유 텍스트 입력 (제품 결정, 팀/질문지 변경 필요)
+### 2차 — 자유 텍스트 입력 (2026-06-11 구현 완료)
 
-- [ ] 질문지에 주관식 1~2개 추가 (예: "친구한테 약속 잡는 메시지를 평소처럼 써보세요") — `lib/data/dummy/scenarios.dart` + 질문지 PDF + 한채훈 합의
-- [ ] `build_persona`가 speech_style을 *추론* 대신 자유 텍스트에서 *추출*, sample_messages를 실제 사용자 문장으로 대체 (스키마는 그대로)
+- [x] 질문지에 주관식 3문항 추가 — `scenarios.dart` 9-1(난처함 대처)/9-2(취향 티키타카)/9-3(칭찬 반응), `isFreeText`+`hint` 필드, 플레이어에 `_FreeTextCard` 입력 UI(최소 5자, "내 AI 에이전트의 말투를 조정해요" 안내), answerLetter="주관식"으로 전송 (한채훈이 직접 설계·결정)
+- [x] `build_persona`가 [말투 샘플] 섹션에서 *추출* — 샘플 우선 원칙, sample_messages는 사용자 문장 거의 그대로. 샘플 없으면 추론 폴백 + 못 뽑는 항목은 기본값(중간/빈 문자열)
+- [x] 말투 감도 상향 — SpeechStyle에 `punctuation_habits`(ㅠㅠ/!!/…/~ 부호 습관) + `reaction_style`(공감형/논리형/중간) 추가. shared 스키마/Pydantic/mock/에이전트 프롬프트 주입까지 동기화. JSONB라 마이그레이션 불필요, 구 행 하위호환(기본값) 검증됨
+- [x] 프롬프트 토큰 최적화 — 시뮬 시스템 프롬프트(매 턴 핫패스) ~40% 압축, 페르소나 프롬프트 ~30% 압축. 제약·의미 불변, _speech_block은 빈 값 줄 생략
+- [ ] ⚠️ 실 Gemini 추출 검증 미완 — `scripts/verify_voice2.py` 준비됨(특징적 말투 샘플→추출 판정). flash·flash-lite 일일 쿼터(각 20 RPD) 소진으로 보류, 자정 PT 리셋 후 실행
 - [ ] (선택) 매칭 임베딩에 말투 신호 일부 반영할지 검토 — 단 궁합은 성향 기반이 맞아 신중히
 
 ## README 갱신

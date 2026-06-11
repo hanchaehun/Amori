@@ -72,6 +72,8 @@ class MockLLMProvider(LLMProvider):
                 "sentence_length": "보통",
                 "tone_keywords": ["담백", "차분", "다정"],
                 "verbal_habits": "'~인 것 같아요' 처럼 부드럽게 의견을 냄",
+                "punctuation_habits": "",
+                "reaction_style": "공감형",
             },
             "sample_messages": [
                 "오늘 하루 어떻게 보내셨어요? ㅎㅎ",

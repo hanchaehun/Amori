@@ -31,7 +31,7 @@
     },
     "speech_style": {
       "type": "object",
-      "description": "에이전트 발화 충실도의 핵심. 객관식 24답변에서는 말투가 안 나오므로 현재는 LLM이 추론한다. 자유 텍스트 입력(자기소개·평소 메시지)이 추가되면 추론 대신 그 텍스트에서 직접 추출한다 — 스키마는 그대로 유지(voice-ready).",
+      "description": "에이전트 발화 충실도의 핵심. 주관식 [말투 샘플](9-x 문항)이 있으면 샘플에서 추출, 없으면 객관식 성향에서 추론. 샘플에서 못 뽑는 항목은 기본값(중간/빈 문자열).",
       "required": ["formality", "emoji_usage", "laugh_style", "sentence_length", "tone_keywords"],
       "properties": {
         "formality": { "type": "string", "enum": ["반말", "존댓말", "혼용"] },
@@ -39,12 +39,14 @@
         "laugh_style": { "type": "string", "description": "웃음 표현 습관. 예: 'ㅋㅋ', 'ㅎㅎ', '안 씀'" },
         "sentence_length": { "type": "string", "enum": ["짧고 간결", "보통", "길게 풀어 씀"] },
         "tone_keywords": { "type": "array", "items": { "type": "string" }, "description": "말투 톤 키워드 2~4개. 예: 담백, 장난스러움, 차분" },
-        "verbal_habits": { "type": "string", "description": "자주 쓰는 표현이나 말버릇 (선택)" }
+        "verbal_habits": { "type": "string", "description": "감탄사·말버릇 (헉/헐/아 맞다 등, 없으면 빈 문자열)" },
+        "punctuation_habits": { "type": "string", "description": "부호·감정 표지 습관 (ㅠㅠ/!!/…/~ 등, 없으면 빈 문자열)" },
+        "reaction_style": { "type": "string", "enum": ["공감형", "논리형", "중간"], "description": "반응 성향. 못 뽑으면 '중간'" }
       }
     },
     "sample_messages": {
       "type": "array",
-      "description": "이 사람이 소개팅 대화에서 쓸 법한 메시지 예시 3개. 시뮬레이션 시 few-shot 앵커로 주입해 말투를 고정한다. 자유 텍스트 입력이 생기면 실제 사용자 문장으로 대체.",
+      "description": "few-shot 발화 앵커 3개. [말투 샘플]이 있으면 사용자가 직접 쓴 문장을 거의 그대로 사용.",
       "items": { "type": "string" },
       "minItems": 3,
       "maxItems": 3

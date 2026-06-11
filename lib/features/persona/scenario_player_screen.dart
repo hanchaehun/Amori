@@ -24,9 +24,13 @@ class ScenarioPlayerScreen extends StatefulWidget {
 
 class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   int _index = 0;
+  // 객관식: 선택지 letter / 주관식: 사용자가 쓴 메시지 원문
   final Map<int, String> _answers = {};
+  final TextEditingController _freeTextController = TextEditingController();
 
-  static const int _categoryCount = 8;
+  static const int _categoryCount = 9;
+  // 주관식은 "평소 말투"가 드러날 최소 길이만 요구 (한 마디면 충분)
+  static const int _minFreeTextLength = 5;
 
   Scenario get _current => kScenarios[_index];
   bool get _isLast => _index == kScenarios.length - 1;
@@ -34,18 +38,51 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   int get _categoryIndex => int.parse(_current.code.split('-').first);
   String? get _selectedLetter => _answers[_index];
 
+  bool get _canProceed {
+    final answer = _answers[_index];
+    if (answer == null) return false;
+    if (_current.isFreeText) return answer.trim().length >= _minFreeTextLength;
+    return true;
+  }
+
+  @override
+  void dispose() {
+    _freeTextController.dispose();
+    super.dispose();
+  }
+
   void _select(String letter) {
     HapticFeedback.selectionClick();
     setState(() => _answers[_index] = letter);
   }
 
+  void _onFreeTextChanged(String text) {
+    setState(() => _answers[_index] = text);
+  }
+
+  /// 문항 이동 시 주관식 컨트롤러를 해당 문항의 저장값으로 동기화한다.
+  void _syncFreeTextController() {
+    if (_current.isFreeText) {
+      _freeTextController.text = _answers[_index] ?? '';
+    }
+  }
+
   void _next() {
-    if (_selectedLetter == null) return;
+    if (!_canProceed) return;
     HapticFeedback.lightImpact();
     if (_isLast) {
       ScenarioAnswersStore.save(
         _answers.entries.map((entry) {
           final scenario = kScenarios[entry.key];
+          if (scenario.isFreeText) {
+            return ScenarioAnswer(
+              code: scenario.code,
+              category: scenario.category,
+              question: scenario.question,
+              answerLetter: '주관식',
+              answerText: entry.value.trim(),
+            );
+          }
           final choice = scenario.choices.firstWhere(
             (choice) => choice.letter == entry.value,
           );
@@ -61,12 +98,14 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
       context.go(AppRoutes.personaLoading);
     } else {
       setState(() => _index += 1);
+      _syncFreeTextController();
     }
   }
 
   void _previous() {
     HapticFeedback.selectionClick();
     setState(() => _index -= 1);
+    _syncFreeTextController();
   }
 
   Future<void> _handleBack() async {
@@ -151,15 +190,22 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
                       ),
                     ),
                     AppSpacing.vMd,
-                    for (final c in _current.choices) ...[
-                      _ChoiceCard(
-                        letter: c.letter,
-                        text: c.text,
-                        selected: _selectedLetter == c.letter,
-                        onTap: () => _select(c.letter),
-                      ),
-                      AppSpacing.vSm,
-                    ],
+                    if (_current.isFreeText)
+                      _FreeTextCard(
+                        controller: _freeTextController,
+                        hint: _current.hint ?? '평소 말투 그대로 써주세요',
+                        onChanged: _onFreeTextChanged,
+                      )
+                    else
+                      for (final c in _current.choices) ...[
+                        _ChoiceCard(
+                          letter: c.letter,
+                          text: c.text,
+                          selected: _selectedLetter == c.letter,
+                          onTap: () => _select(c.letter),
+                        ),
+                        AppSpacing.vSm,
+                      ],
                   ],
                 ),
               ),
@@ -175,7 +221,7 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
             child: GradientButton(
               label: _isLast ? '완료' : '다음',
               trailing: _isLast ? null : const GradientArrowTrailing(),
-              onPressed: _selectedLetter == null ? null : _next,
+              onPressed: _canProceed ? _next : null,
             ),
           ),
         ],
@@ -371,6 +417,85 @@ class _SituationCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _FreeTextCard extends StatelessWidget {
+  const _FreeTextCard({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: AppRadius.rMd,
+            border: Border.all(color: AppColors.ink100, width: 1.5),
+          ),
+          child: TextField(
+            controller: controller,
+            onChanged: onChanged,
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 200,
+            cursorColor: AppColors.primary,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.ink900,
+              fontSize: 15,
+              height: 1.5,
+            ),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: AppTypography.bodyMedium.copyWith(
+                color: AppColors.ink300,
+                fontSize: 14,
+                height: 1.5,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              isDense: true,
+              counterStyle: AppTypography.caption.copyWith(
+                color: AppColors.ink300,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ),
+        AppSpacing.vSm,
+        Row(
+          children: [
+            const Icon(Icons.auto_awesome_rounded,
+                size: 14, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '내 AI 에이전트의 말투를 조정해요',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.ink500,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

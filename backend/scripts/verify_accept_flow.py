@@ -16,9 +16,28 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import httpx
+from sqlalchemy import select
 
+from app.db.session import async_session_factory
 from app.main import app
 from app.auth.firebase import get_current_user
+from app.models.database import Match
+
+
+async def reset_match_state() -> None:
+    """재실행 멱등성 — 이전 런이 남긴 수락 상태를 초기화한다."""
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(Match).where(
+                Match.participant_ids == sorted(["mock_user_a", "mock_user_b"])
+            )
+        )
+        match_obj = result.scalar_one_or_none()
+        if match_obj:
+            match_obj.accepted_by = []
+            match_obj.appointment_ready = False
+            match_obj.status = "candidate"
+            await db.commit()
 
 CURRENT = {"uid": "mock_user_a", "email": "ma@t.test", "name": "목A"}
 
@@ -35,6 +54,7 @@ def switch(uid: str) -> None:
 
 
 async def main() -> int:
+    await reset_match_state()
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://t", timeout=httpx.Timeout(120.0)

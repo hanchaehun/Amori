@@ -12,7 +12,9 @@ class Scenario {
     required this.contextLabel,
     required this.situation,
     required this.question,
-    required this.choices,
+    this.choices = const [],
+    this.isFreeText = false,
+    this.hint,
   });
 
   final String category;
@@ -22,6 +24,14 @@ class Scenario {
   final String situation;
   final String question;
   final List<ChoiceOption> choices;
+
+  /// 주관식(말투 샘플) 문항 — 사용자가 평소 말투 그대로 메시지를 직접 쓴다.
+  /// 객관식은 성향(매칭)을 잡지만 말투는 못 잡는다는 게 실 Gemini E2E에서
+  /// 실증되어, 이 답변이 에이전트 voice의 원천이 된다 (voice 2차).
+  final bool isFreeText;
+
+  /// 주관식 입력칸 placeholder.
+  final String? hint;
 }
 
 const List<Scenario> kScenarios = [
@@ -381,5 +391,43 @@ const List<Scenario> kScenarios = [
       ChoiceOption('C', '나에 대한 마음이 달라졌는지 확인하고 싶다'),
       ChoiceOption('D', '혼자 생각이 많아지는 편이다'),
     ],
+  ),
+
+  // 9. 말투 샘플 (주관식) — 사용자가 직접 쓴 문장이 에이전트 voice의 원천.
+  // 세 상황은 각각 다른 말투 단면을 트리거한다:
+  // 9-1 난처함 대처(부정 상황 톤앤매너), 9-2 취향 티키타카(말수·되묻기),
+  // 9-3 칭찬 반응(리액션 크기·수줍음·유머).
+  Scenario(
+    category: '말투 샘플',
+    code: '9-1',
+    title: '난처한 상황 메시지',
+    contextLabel: '소개팅 당일',
+    situation:
+        '오늘 만나기로 한 카페가 하필 정기 휴무라는 걸 방금 알았습니다. 약속 시간은 한 시간 뒤입니다.',
+    question: '상대에게 보낼 메시지를 평소 말투 그대로 써보세요.',
+    isFreeText: true,
+    hint: '평소 카톡 보내듯 편하게 써주세요. 이모지·ㅋㅋ·말버릇 모두 그대로!',
+  ),
+  Scenario(
+    category: '말투 샘플',
+    code: '9-2',
+    title: '취향 질문에 답하기',
+    contextLabel: '썸',
+    situation:
+        '상대가 이렇게 물어봤습니다: "스트레스 풀 때 보통 뭐 하세요? 밖에서 활동하는 파예요, 집에서 쉬는 파예요?"',
+    question: '평소 말투 그대로 답장을 써보세요.',
+    isFreeText: true,
+    hint: '단답이든 길게든, 실제로 보낼 답장 그대로면 됩니다.',
+  ),
+  Scenario(
+    category: '말투 샘플',
+    code: '9-3',
+    title: '칭찬에 답하기',
+    contextLabel: '소개팅 후',
+    situation:
+        '소개팅이 끝나고 상대에게 메시지가 왔습니다: "오늘 대화 진짜 즐거웠어요. 되게 다정하신 것 같아요 ㅎㅎ"',
+    question: '평소 말투 그대로 답장을 써보세요.',
+    isFreeText: true,
+    hint: '칭찬받았을 때 평소 반응 그대로 — 쑥스러우면 쑥스러운 대로!',
   ),
 ];

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     firebase_project_id: str = "amori-260523"
 
     # Rate limits
-    daily_simulation_limit: int = 5
+    daily_simulation_limit: int = 3
     daily_meet_request_limit: int = 1
 
     # Server
