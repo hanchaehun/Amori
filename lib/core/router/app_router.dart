@@ -15,7 +15,9 @@ import '../../features/matching/full_report_screen.dart';
 import '../../features/matching/locked_report_screen.dart';
 import '../../features/matching/match_list_screen.dart';
 import '../../features/matching/paywall_screen.dart';
+import '../../data/dummy/conversations.dart';
 import '../../features/meet/chat_screen.dart';
+import '../../features/meet/failed_matches_screen.dart';
 import '../../features/meet/feedback_screen.dart';
 import '../../features/meet/inbox_screen.dart';
 import '../../features/meet/meet_request_receive_screen.dart';
@@ -155,7 +157,12 @@ class AppRouter {
         path: AppRoutes.chat,
         pageBuilder: (context, state) => _slidePage(
           state,
-          ChatScreen(conversationId: state.uri.queryParameters['id']),
+          ChatScreen(
+            conversationId: state.uri.queryParameters['id'],
+            peer: state.extra is Conversation
+                ? state.extra as Conversation
+                : null,
+          ),
         ),
       ),
       GoRoute(
@@ -171,6 +178,17 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.inbox,
         pageBuilder: (context, state) => _fadePage(state, const InboxScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.failedMatches,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          FailedMatchesScreen(
+            items: state.extra is List<FailedMatch>
+                ? state.extra as List<FailedMatch>
+                : const [],
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.profile,

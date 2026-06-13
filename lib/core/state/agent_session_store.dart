@@ -4,6 +4,24 @@ import '../../data/models/compatibility_report.dart';
 import '../../data/models/conversation_message.dart';
 import '../../data/models/persona.dart';
 
+/// AgentFlow 파이프라인의 현재 단계 — 화면이 실시간 진행 상태를 구독한다.
+enum AgentFlowPhase {
+  idle,
+  buildingPersona,
+  matching,
+  simulating,
+  reporting,
+  done,
+  failed;
+
+  /// 파이프라인이 아직 돌고 있는가 (시뮬레이션 포함 전후 단계).
+  bool get isRunning =>
+      this == buildingPersona ||
+      this == matching ||
+      this == simulating ||
+      this == reporting;
+}
+
 /// 세션 동안 페르소나/대화/리포트를 공유하는 스토어.
 ///
 /// 구 `PersonaStore`(정적 필드 싱글톤, reset 미호출로 세션 간 누수)를 대체한다.
@@ -18,6 +36,8 @@ class AgentSessionStore extends ChangeNotifier {
   CompatibilityReport? _report;
   String? _activeMatchId;
   String? _activeMatchUserId;
+  String? _partnerName;
+  AgentFlowPhase _phase = AgentFlowPhase.idle;
   bool _usedFallback = false;
   String? _lastError;
 
@@ -29,6 +49,12 @@ class AgentSessionStore extends ChangeNotifier {
   /// 시뮬레이션/리포트가 연결된 백엔드 Match UUID (없으면 더미 플로우).
   String? get activeMatchId => _activeMatchId;
   String? get activeMatchUserId => _activeMatchUserId;
+
+  /// 매칭된 상대 표시 이름 (백엔드 display_name, 없으면 null → 더미 이름).
+  String? get partnerName => _partnerName;
+
+  /// AgentFlow 파이프라인 진행 단계 — agent_chat_screen 실시간 표시의 신호원.
+  AgentFlowPhase get phase => _phase;
 
   /// BFF 파이프라인 실패로 더미 데이터로 진행 중인지 — 실패를 삼키지 않고 노출.
   bool get usedFallback => _usedFallback;
@@ -44,9 +70,20 @@ class AgentSessionStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setActiveMatch({required String matchId, required String userId}) {
+  void setActiveMatch({
+    required String matchId,
+    required String userId,
+    String? partnerName,
+  }) {
     _activeMatchId = matchId;
     _activeMatchUserId = userId;
+    _partnerName = partnerName;
+    notifyListeners();
+  }
+
+  void setPhase(AgentFlowPhase value) {
+    if (_phase == value) return;
+    _phase = value;
     notifyListeners();
   }
 
@@ -68,6 +105,7 @@ class AgentSessionStore extends ChangeNotifier {
   void markFallback(String error) {
     _usedFallback = true;
     _lastError = error;
+    _phase = AgentFlowPhase.failed;
     notifyListeners();
   }
 
@@ -77,6 +115,8 @@ class AgentSessionStore extends ChangeNotifier {
     _report = null;
     _activeMatchId = null;
     _activeMatchUserId = null;
+    _partnerName = null;
+    _phase = AgentFlowPhase.idle;
     _usedFallback = false;
     _lastError = null;
     notifyListeners();

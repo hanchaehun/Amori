@@ -149,6 +149,16 @@ async def get_report(
         ai_generated=True,
     )
     db.add(report)
+
+    # 케미 점수가 게이트 미만이면 에이전트가 잡은 약속도 무효 —
+    # '닿지 않은 인연'으로 분류되고 수락 버튼도 뜨지 않는다.
+    # 이미 양쪽 수락으로 확정(scheduled)된 만남은 되돌리지 않는다.
+    if (
+        report_data["score"] < settings.report_pass_score
+        and match_obj.status == "simulated"
+    ):
+        match_obj.appointment_ready = False
+        match_obj.accepted_by = []
     await db.commit()
 
     await log_llm_call(

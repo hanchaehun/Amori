@@ -53,6 +53,48 @@ class MatchAcceptResponse(BaseModel):
     both_accepted: bool
 
 
+class ChatMessageItem(BaseModel):
+    """직접 채팅 메시지 한 건. kind="system"은 약속 취소 같은 안내문구."""
+
+    id: str
+    kind: str  # user | system
+    is_me: bool = False  # system이면 항상 False
+    text: str
+    created_at: str
+
+
+class AgentTurnItem(BaseModel):
+    """에이전트 시뮬레이션 발화 — 요청자 시점의 speaker(me|them)와 text만."""
+
+    speaker: str  # me | them
+    text: str
+
+
+class ChatSendRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class MatchConversationResponse(BaseModel):
+    """대화방 화면 한 번에 — 에이전트 대화 + 직접 채팅 + 입력 가능 여부."""
+
+    match_id: str
+    partner_name: str | None = None
+    status: str  # simulated | scheduled | met
+    appointment_slot: str | None = None  # 합의 일정 라벨
+    chat_enabled: bool  # status == scheduled 일 때만 직접 채팅 가능
+    # 에이전트 대화가 아직 시차 송출 중인가 — True면 다음 턴이 곧 도착한다(라이브 관전).
+    # 클라이언트는 이 플래그로 타이핑 인디케이터·폴링 지속 여부를 정한다.
+    agent_live: bool = False
+    agent_turns: list[AgentTurnItem]
+    messages: list[ChatMessageItem]
+
+
+class MatchCancelResponse(BaseModel):
+    match_id: str
+    status: str  # 취소 후 simulated로 돌아간다
+    notice: str  # 채팅방에 남은 시스템 안내문구
+
+
 class MatchListItem(BaseModel):
     """연결(inbox) 화면의 대화 카드 한 장 — 시뮬레이션이 있었던 매치만."""
 
@@ -64,6 +106,14 @@ class MatchListItem(BaseModel):
     appointment_ready: bool
     you_accepted: bool
     partner_accepted: bool
-    last_message: str | None = None  # 최신 시뮬레이션의 마지막 발화 text
-    turn_count: int = 0
+    last_message: str | None = None  # 지금까지 공개된 마지막 발화 text
+    turn_count: int = 0  # 지금까지 공개된 턴 수(송출 중이면 전체보다 적다)
     updated_at: str
+    # 에이전트 대화가 시차 송출 중 — True면 카드는 "에이전트 대화 중"으로 표시하고,
+    # 약속·리포트·게이트 분류 결과는 송출이 끝날 때까지 숨긴다(스포일러 방지).
+    agent_live: bool = False
+    appointment_slot: str | None = None  # 합의된 일정 라벨 "6월 14일(토) 저녁"
+    report_score: int | None = None  # 케미 점수(리포트) — score는 벡터 매칭 점수
+    failed: bool = False  # 케미 점수가 게이트 미만 — '닿지 않은 인연' 화면으로 분리
+    failure_reason: str | None = None  # 리포트 warnings 첫 항목
+    failed_expires_at: str | None = None  # 이 시각이 지나면 목록에서 사라진다

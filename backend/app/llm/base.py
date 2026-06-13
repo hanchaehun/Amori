@@ -37,6 +37,8 @@ class LLMProvider(ABC):
         my_persona: dict,
         their_persona: dict,
         max_turns: int = 20,
+        my_slots: list[dict] | None = None,
+        their_slots: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """Call ``POST /llm/simulate``.
 
@@ -50,6 +52,11 @@ class LLMProvider(ABC):
             The matched user's persona.
         max_turns:
             Maximum number of conversation turns to generate.
+        my_slots / their_slots:
+            Each user's available meeting slots
+            ([{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}]).  When both are
+            non-empty the agents negotiate a concrete slot in conversation;
+            otherwise they only agree on the intent to meet.
 
         Yields
         ------

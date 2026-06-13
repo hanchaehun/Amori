@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +9,7 @@ from app.config import settings
 from app.db.session import engine
 from app.models.database import Base
 from app.middleware.error_handler import error_handler_middleware
+from app.services.auto_sim import auto_sim_scheduler
 
 
 @asynccontextmanager
@@ -17,8 +19,14 @@ async def lifespan(app: FastAPI):
         firebase_admin.initialize_app(options={"projectId": settings.firebase_project_id})
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # 에이전트 자동 소개팅 스케줄러 (하루 랜덤 N회) — AUTO_SIM_ENABLED=true 일 때만
+    scheduler_task = (
+        asyncio.create_task(auto_sim_scheduler()) if settings.auto_sim_enabled else None
+    )
     yield
     # Shutdown
+    if scheduler_task is not None:
+        scheduler_task.cancel()
     await engine.dispose()
 
 

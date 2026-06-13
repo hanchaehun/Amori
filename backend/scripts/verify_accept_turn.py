@@ -4,7 +4,8 @@ verify_nunchi.py 풀런(~10콜) 없이, 상대 제안으로 끝나는 대화 + R
 손으로 만든 history로 주고 응답 strategy가 '약속 수락'인지 확인한다.
 (에스컬레이션→약속 제안까지는 2026-06-11 실 Gemini에서 검증 완료 — 남은 마지막 단계)
 
-실행: .venv/Scripts/python.exe -X utf8 scripts/verify_accept_turn.py
+실행: .venv/Scripts/python.exe -X utf8 scripts/verify_accept_turn.py [user_id]
+(user_id 기본 e2e_user_a — 신중형이라 거절 분기를 탈 수 있음. 수락 확인엔 e2e_user_b 권장)
 """
 
 import asyncio
@@ -35,10 +36,11 @@ HISTORY = [
 
 
 async def main() -> int:
+    user_id = sys.argv[1] if len(sys.argv) > 1 else "e2e_user_a"
     async with async_session_factory() as db:
-        p = (await db.execute(select(Persona).where(Persona.user_id == "e2e_user_a"))).scalar_one_or_none()
+        p = (await db.execute(select(Persona).where(Persona.user_id == user_id))).scalar_one_or_none()
     if not p:
-        print("FAIL: e2e_user_a 페르소나가 DB에 없음 — 먼저 e2e_gemini.py로 생성하세요")
+        print(f"FAIL: {user_id} 페르소나가 DB에 없음 — 먼저 e2e_gemini.py로 생성하세요")
         return 1
     persona = {
         "traits": p.traits,

@@ -1,5 +1,6 @@
 import '../../data/models/conversation_message.dart';
 import '../api/api_client.dart';
+import '../api/api_exception.dart';
 
 /// 에이전트 시뮬레이션 — BFF `POST /simulation/run` SSE 스트림 소비.
 ///
@@ -20,6 +21,14 @@ class SimulationRepository {
       'max_turns': maxTurns,
     });
     await for (final event in events) {
+      if (event['_event'] == 'error') {
+        // 서버가 시뮬 실패를 SSE error 이벤트로 알린다 — 삼키면
+        // "0턴인데 완료"로 보이니 예외로 올려 폴백 플래그를 켜게 한다.
+        throw ApiException(
+          event['message'] as String? ?? '시뮬레이션이 실패했습니다.',
+          errorCode: 'SIMULATION_FAILED',
+        );
+      }
       if (event['_event'] != 'turn') continue; // done 등 메타 이벤트
       final speaker = event['speaker'] as String? ?? 'them';
       yield ConversationMessage(

@@ -11,15 +11,16 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/settings_row.dart';
+import 'availability_sheet.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   void _comingSoon(BuildContext context, String label) {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label — 다음 턴 작업 예정')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label — 다음 턴 작업 예정')));
   }
 
   void _onSettings(BuildContext context) {
@@ -36,6 +37,11 @@ class ProfileScreen extends StatelessWidget {
   void _onPersonaRelearn(BuildContext context) {
     HapticFeedback.lightImpact();
     context.push(AppRoutes.personaIntro);
+  }
+
+  void _onAvailability(BuildContext context) {
+    HapticFeedback.lightImpact();
+    showAvailabilitySheet(context);
   }
 
   Future<void> _onLogout(BuildContext context) async {
@@ -101,6 +107,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           SliverToBoxAdapter(
             child: _SettingsList(
+              onAvailability: () => _onAvailability(context),
               onComingSoon: (label) => _comingSoon(context, label),
               onLogout: () => _onLogout(context),
               onDeleteAccount: () => _onDeleteAccount(context),
@@ -132,8 +139,11 @@ class _TopBar extends StatelessWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.settings_outlined,
-                  size: 22, color: AppColors.ink900),
+              icon: const Icon(
+                Icons.settings_outlined,
+                size: 22,
+                color: AppColors.ink900,
+              ),
               onPressed: onSettings,
             ),
           ],
@@ -198,8 +208,11 @@ class _ProfileHero extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.camera_alt_rounded,
-                          size: 14, color: AppColors.primary),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -207,8 +220,7 @@ class _ProfileHero extends StatelessWidget {
             ),
           ),
           AppSpacing.vMd,
-          Text('이지은',
-              style: AppTypography.titleLarge.copyWith(fontSize: 22)),
+          Text('이지은', style: AppTypography.titleLarge.copyWith(fontSize: 22)),
           const SizedBox(height: 4),
           Text(
             '26세 · 서울',
@@ -216,8 +228,7 @@ class _ProfileHero extends StatelessWidget {
           ),
           AppSpacing.vSm,
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             decoration: ShapeDecoration(
               gradient: amori.primaryGradient,
               shape: const StadiumBorder(),
@@ -225,8 +236,7 @@ class _ProfileHero extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.star_rounded,
-                    size: 14, color: Colors.white),
+                const Icon(Icons.star_rounded, size: 14, color: Colors.white),
                 const SizedBox(width: 4),
                 Text(
                   '프리미엄 멤버',
@@ -256,8 +266,10 @@ class _AgentCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('내 AI 에이전트',
-            style: AppTypography.titleMedium.copyWith(fontSize: 14)),
+        Text(
+          '내 AI 에이전트',
+          style: AppTypography.titleMedium.copyWith(fontSize: 14),
+        ),
         AppSpacing.vSm,
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
@@ -288,9 +300,10 @@ class _AgentCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("지은's AI",
-                        style: AppTypography.titleMedium.copyWith(
-                            fontSize: 15)),
+                    Text(
+                      "지은's AI",
+                      style: AppTypography.titleMedium.copyWith(fontSize: 15),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '8개 시나리오 · 마지막 학습 3일 전',
@@ -300,15 +313,9 @@ class _AgentCard extends StatelessWidget {
                       ),
                     ),
                     AppSpacing.vSm,
-                    _AgentLink(
-                      label: '성향 분석 카드 보기',
-                      onTap: onInsight,
-                    ),
+                    _AgentLink(label: '성향 분석 카드 보기', onTap: onInsight),
                     const SizedBox(height: 4),
-                    _AgentLink(
-                      label: '페르소나 다시 학습하기',
-                      onTap: onRelearn,
-                    ),
+                    _AgentLink(label: '페르소나 다시 학습하기', onTap: onRelearn),
                   ],
                 ),
               ),
@@ -342,8 +349,11 @@ class _AgentLink extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 2),
-          const Icon(Icons.arrow_forward_rounded,
-              size: 12, color: AppColors.primary),
+          const Icon(
+            Icons.arrow_forward_rounded,
+            size: 12,
+            color: AppColors.primary,
+          ),
         ],
       ),
     );
@@ -352,11 +362,13 @@ class _AgentLink extends StatelessWidget {
 
 class _SettingsList extends StatelessWidget {
   const _SettingsList({
+    required this.onAvailability,
     required this.onComingSoon,
     required this.onLogout,
     required this.onDeleteAccount,
   });
 
+  final VoidCallback onAvailability;
   final ValueChanged<String> onComingSoon;
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
@@ -371,6 +383,11 @@ class _SettingsList extends StatelessWidget {
             title: '매칭',
             rows: [
               SettingsRow(
+                icon: Icons.event_available_rounded,
+                label: '소개팅 가능 일정',
+                onTap: onAvailability,
+              ),
+              SettingsRow(
                 icon: Icons.favorite_rounded,
                 label: '매칭 선호 설정',
                 onTap: () => onComingSoon('매칭 선호 설정'),
@@ -378,7 +395,8 @@ class _SettingsList extends StatelessWidget {
               SettingsRow(
                 icon: Icons.link_rounded,
                 label: '연동 앱',
-                onTap: () => onComingSoon('연동 앱 (Spotify · Strava · Instagram)'),
+                onTap: () =>
+                    onComingSoon('연동 앱 (Spotify · Strava · Instagram)'),
                 last: true,
               ),
             ],
@@ -492,10 +510,13 @@ class _ConfirmDialog extends StatelessWidget {
                       foregroundColor: AppColors.ink900,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const RoundedRectangleBorder(
-                          borderRadius: AppRadius.rMd),
+                        borderRadius: AppRadius.rMd,
+                      ),
                     ),
-                    child: Text('취소',
-                        style: AppTypography.label.copyWith(fontSize: 15)),
+                    child: Text(
+                      '취소',
+                      style: AppTypography.label.copyWith(fontSize: 15),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -503,12 +524,14 @@ class _ConfirmDialog extends StatelessWidget {
                   child: TextButton(
                     onPressed: () => Navigator.of(context).pop(true),
                     style: TextButton.styleFrom(
-                      backgroundColor:
-                          danger ? AppColors.danger : AppColors.ink900,
+                      backgroundColor: danger
+                          ? AppColors.danger
+                          : AppColors.ink900,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const RoundedRectangleBorder(
-                          borderRadius: AppRadius.rMd),
+                        borderRadius: AppRadius.rMd,
+                      ),
                     ),
                     child: Text(
                       confirmLabel,

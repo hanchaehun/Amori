@@ -55,6 +55,11 @@ class User(Base):
     interest_gender: Mapped[str | None] = mapped_column(String(20))
     photo_url: Mapped[str | None] = mapped_column(Text)
     fcm_token: Mapped[str | None] = mapped_column(Text)
+    # 소개팅 가능 일정 [{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}, ...]
+    # 에이전트는 시뮬레이션에서 이 시간 중에서만 약속을 제안·수락한다.
+    available_slots: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -107,6 +112,10 @@ class Match(Base):
     # 시뮬레이션 중 두 에이전트가 약속을 잡았는가(눈치 strategy="약속 수락").
     # True면 '진행 중'에서 맨 위로 + 테두리 강조, 사용자가 수락을 누를 수 있음.
     appointment_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 에이전트가 합의한 일정 {"date": "YYYY-MM-DD", "time": "점심"|"저녁"} —
+    # 양쪽 사용자의 available_slots 교집합에서만 나온다 (엔진이 검증).
+    # 일정 정보 없이 의향만 합의한 경우 None.
+    appointment_slot: Mapped[dict | None] = mapped_column(JSONB)
     # 만남을 수락한 사용자 uid 목록. 양쪽 다 차면 status를 'scheduled'로 올린다.
     accepted_by: Mapped[list[str]] = mapped_column(
         ARRAY(String(128)), default=list, server_default="{}"
@@ -143,6 +152,32 @@ class SimulationJob(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ChatMessage(Base):
+    """만남이 확정된(scheduled) 두 사용자의 직접 대화 + 시스템 안내.
+
+    에이전트 시뮬레이션 턴(SimulationJob.turns)과 별개로, 사용자가 직접 친
+    메시지를 담는다. kind="system"은 약속 취소 같은 상태 변화 안내 — 채팅방
+    가운데에 안내문구로 표시되고 sender_id가 없다.
+    """
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("matches.id", ondelete="CASCADE"), index=True
+    )
+    sender_id: Mapped[str | None] = mapped_column(String(128))  # system이면 None
+    kind: Mapped[str] = mapped_column(String(20), default="user")  # user | system
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_chat_messages_match_created", "match_id", "created_at"),
+    )
 
 
 class Report(Base):

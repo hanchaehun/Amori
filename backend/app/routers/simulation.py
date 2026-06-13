@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 import uuid
 
@@ -12,12 +13,14 @@ from app.config import settings
 from app.dependencies import get_db, get_llm_provider
 from app.llm.base import LLMProvider
 from app.middleware.rate_limit import check_simulation_quota
-from app.models.database import Match, Persona, SimulationJob
+from app.models.database import Match, Persona, SimulationJob, User
 from app.routers.matches import get_or_create_match
 from app.schemas.simulation import SimulationRunRequest, SimulationJobResponse
+from app.services.booking import get_booked_slot_keys, subtract_booked
 from app.services.llm_log import log_llm_call
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def simulation_event_generator(
@@ -28,12 +31,17 @@ async def simulation_event_generator(
     job: SimulationJob,
     db: AsyncSession,
     match: Match,
+    my_slots: list[dict],
+    their_slots: list[dict],
 ):
     """Yield SSE events for each simulation turn, then finalize the job."""
     turns: list[dict] = []
     started = time.monotonic()
     try:
-        async for turn in llm.run_simulation(my_persona_dict, their_persona_dict, max_turns):
+        async for turn in llm.run_simulation(
+            my_persona_dict, their_persona_dict, max_turns,
+            my_slots=my_slots, their_slots=their_slots,
+        ):
             # DB엔 눈치(partner_read·strategy) 포함 전체를 저장하고,
             # 사용자에게 가는 SSE는 대화에 필요한 필드만 보낸다 (분석은 비노출).
             turns.append(turn)
@@ -50,8 +58,15 @@ async def simulation_event_generator(
         job.completed_at = func.now()
         match.status = "simulated"
         # 눈치 strategy="약속 수락"이 한 번이라도 나오면 약속 조율 완료로 표시.
-        # '진행 중' 목록에서 맨 위로 올라오고 사용자가 수락을 누를 수 있게 된다.
-        match.appointment_ready = any(t.get("strategy") == "약속 수락" for t in turns)
+        # 양쪽 다 가능 일정이 있으면 엔진이 검증한 합의 슬롯까지 있어야 성립 —
+        # 사용자 실제 일정에 없는 약속은 잡힌 것으로 치지 않는다.
+        accepted = any(t.get("strategy") == "약속 수락" for t in turns)
+        agreed_slot = next(
+            (t["appointment_slot"] for t in turns if t.get("appointment_slot")), None
+        )
+        negotiating = bool(my_slots) and bool(their_slots)
+        match.appointment_ready = accepted and (agreed_slot is not None or not negotiating)
+        match.appointment_slot = agreed_slot
         await db.commit()
 
         await log_llm_call(
@@ -72,6 +87,8 @@ async def simulation_event_generator(
             ),
         }
     except Exception as exc:
+        # SSE로만 흘리면 서버 쪽엔 흔적이 없다 — 원인 추적용으로 반드시 남긴다.
+        logger.exception("simulation failed (job=%s): %s", job.id, exc)
         job.status = "failed"
         await db.commit()
         yield {
@@ -156,14 +173,62 @@ async def run_simulation(
         "sample_messages": their_persona.sample_messages,
     }
 
-    # 6. Return SSE stream
+    # 6. 양쪽 사용자의 가능 일정 — 에이전트가 대화에서 실일정으로 약속을 조율한다.
+    #    이미 수락한 약속이 점유한 시간은 빼고 준다 (더블부킹 방지).
+    users_result = await db.execute(
+        select(User).where(User.id.in_([user["uid"], body.target_user_id]))
+    )
+    slot_map = {}
+    name_map = {}
+    for u in users_result.scalars().all():
+        booked = await get_booked_slot_keys(db, u.id)
+        slot_map[u.id] = subtract_booked(u.available_slots or [], booked)
+        name_map[u.id] = u.display_name
+
+    # 에이전트가 서로를 이름으로 부르도록 페르소나 dict에 이름을 싣는다.
+    my_persona_dict["display_name"] = name_map.get(user["uid"])
+    their_persona_dict["display_name"] = name_map.get(body.target_user_id)
+
+    # 7. Return SSE stream
     return EventSourceResponse(
         simulation_event_generator(
             llm, my_persona_dict, their_persona_dict,
             body.max_turns, job, db, match_obj,
+            slot_map.get(user["uid"], []), slot_map.get(body.target_user_id, []),
         ),
         media_type="text/event-stream",
     )
+
+
+@router.post("/auto-run")
+async def trigger_auto_simulation(
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    llm: LLMProvider = Depends(get_llm_provider),
+):
+    """[DEBUG 전용] 자동 소개팅 1회를 지금 즉시 실행 — 데모/개발용.
+
+    실서비스 동작은 services/auto_sim.py 스케줄러(하루 랜덤 N회)가 담당하고,
+    이 엔드포인트는 랜덤 시각을 기다릴 수 없는 시연 상황을 위한 수동 방아쇠다.
+    """
+    request_id = str(uuid.uuid4())
+    if not settings.debug:
+        raise HTTPException(status_code=404, detail={
+            "error_code": "NOT_FOUND",
+            "message": "Not found.",
+            "request_id": request_id,
+        })
+
+    from app.services.auto_sim import run_auto_simulation
+
+    summary = await run_auto_simulation(db, llm, user["uid"])
+    if summary is None:
+        raise HTTPException(status_code=429, detail={
+            "error_code": "QUOTA_EXCEEDED",
+            "message": "오늘 에이전트 소개팅 횟수를 다 썼거나 후보가 없습니다.",
+            "request_id": request_id,
+        })
+    return summary
 
 
 @router.get("/{job_id}", response_model=SimulationJobResponse)

@@ -1,28 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/router/app_routes.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../data/api/api_exception.dart';
 import '../../data/dummy/conversations.dart';
-
-class _ChatMsg {
-  _ChatMsg({
-    required this.isMe,
-    required this.text,
-    required this.time,
-    this.read = false,
-  });
-
-  final bool isMe;
-  final String text;
-  final String time;
-  final bool read;
-}
+import '../../data/repositories/match_repository.dart';
 
 class _Starter {
   const _Starter({required this.label, required this.message});
@@ -30,88 +19,139 @@ class _Starter {
   final String message;
 }
 
+/// 대화방 — 에이전트들이 먼저 나눈 대화 뒤에 두 사용자의 직접 채팅이 이어진다.
+///
+/// 직접 채팅은 양쪽이 만남을 수락해 status='scheduled'일 때만 열린다.
+/// '진행 중'에서는 에이전트 대화를 읽기 전용으로 보여주고 입력이 잠긴다.
+/// 만남 예정 상태에선 약속 배너에서 취소할 수 있고, 취소하면 상대 방에
+/// 시스템 안내문구가 남으며 잡혀 있던 시간이 다시 가능한 일정으로 풀린다.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, this.conversationId});
+  const ChatScreen({super.key, this.conversationId, this.peer});
 
   final String? conversationId;
+
+  /// 목록 카드에서 넘어온 상대 정보 — 로딩 중 헤더 표시용. 없어도 동작한다.
+  final Conversation? peer;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen>
-    with SingleTickerProviderStateMixin {
+class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
-  late final AnimationController _typing;
+  final MatchRepository _matches = MatchRepository();
 
   static const _starters = [
-    _Starter(
-      label: '💬 여행 얘기',
-      message: '최근에 다녀온 여행지 중에 가장 좋았던 데가 어디예요?',
-    ),
-    _Starter(
-      label: '🎬 영화 추천',
-      message: '요즘 인상 깊게 본 영화 있으세요?',
-    ),
-    _Starter(
-      label: '☕ 일상 루틴',
-      message: '주말에는 보통 어떻게 보내세요?',
-    ),
+    _Starter(label: '💬 여행 얘기', message: '최근에 다녀온 여행지 중에 가장 좋았던 데가 어디예요?'),
+    _Starter(label: '🎬 영화 추천', message: '요즘 인상 깊게 본 영화 있으세요?'),
+    _Starter(label: '☕ 일상 루틴', message: '주말에는 보통 어떻게 보내세요?'),
   ];
 
-  late List<_ChatMsg> _messages;
+  bool _loading = true;
+
+  /// 백엔드 대화방을 받아왔는가. false면 더미 폴백 — 전송·취소도 로컬 처리.
+  bool _fromBackend = false;
+
+  String? _partnerName;
+  String _status = 'simulated';
+  bool _chatEnabled = false;
+  String? _appointmentSlot;
+  List<AgentTurn> _agentTurns = [];
+  List<DirectMessage> _messages = [];
+
   bool _hasText = false;
+  bool _sending = false;
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    _typing = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-    _messages = [
-      _ChatMsg(
-        isMe: false,
-        text: '안녕하세요 지은님! 비슷한 음악 취향이신 것 같아요 🎵',
-        time: '오후 3:20',
-      ),
-      _ChatMsg(
-        isMe: true,
-        text: '맞아요! 요즘 잔잔한 인디 자주 듣고 있어요',
-        time: '오후 3:22',
-        read: true,
-      ),
-      _ChatMsg(
-        isMe: false,
-        text: '혹시 이번 주말에 시간 괜찮으시면, 성수에 좋은 카페 알아요. 같이 가볼래요?',
-        time: '오후 3:24',
-      ),
-    ];
     _controller.addListener(() {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
     });
+    _load();
   }
 
   @override
   void dispose() {
-    _typing.dispose();
+    _poll?.cancel();
     _controller.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  Conversation get _peer {
-    if (widget.conversationId == null || widget.conversationId == 'new') {
-      return kActiveConversations.first;
+  Future<void> _load() async {
+    final id = widget.conversationId;
+    if (id != null && id != 'new') {
+      try {
+        final conv = await _matches.getConversation(id);
+        if (!mounted) return;
+        setState(() {
+          _fromBackend = true;
+          _loading = false;
+          _apply(conv);
+        });
+        _scrollToEnd();
+        // 상대 메시지·취소 안내를 주기적으로 받아온다 (SSE 없는 단순 폴링)
+        _poll = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+        return;
+      } catch (e) {
+        debugPrint('chat: GET /conversation 실패 — 더미 폴백으로 전환: $e');
+      }
     }
-    return kActiveConversations.firstWhere(
-      (c) => c.id == widget.conversationId,
-      orElse: () => kActiveConversations.first,
-    );
+    if (!mounted) return;
+    setState(() {
+      _fromBackend = false;
+      _loading = false;
+      _partnerName = widget.peer?.name;
+      _status = widget.peer?.status == ConversationStatus.scheduled
+          ? 'scheduled'
+          : 'simulated';
+      _chatEnabled = _status == 'scheduled';
+      _appointmentSlot = widget.peer?.appointmentLabel;
+      _agentTurns = kDummyAgentTurns;
+      _messages = _chatEnabled ? [...kDummyDirectMessages] : [];
+    });
+    _scrollToEnd();
+  }
+
+  void _apply(MatchConversation conv) {
+    _partnerName = conv.partnerName ?? widget.peer?.name;
+    _status = conv.status;
+    _chatEnabled = conv.chatEnabled;
+    _appointmentSlot = conv.appointmentSlot;
+    _agentTurns = conv.agentTurns;
+    _messages = conv.messages;
+  }
+
+  Future<void> _refresh() async {
+    final id = widget.conversationId;
+    if (!_fromBackend || id == null) return;
+    try {
+      final conv = await _matches.getConversation(id);
+      if (!mounted) return;
+      final grew = conv.messages.length > _messages.length;
+      setState(() => _apply(conv));
+      if (grew) _scrollToEnd();
+    } catch (_) {
+      // 일시 오류는 다음 폴링에서 회복
+    }
+  }
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _applyStarter(_Starter s) {
@@ -125,32 +165,132 @@ class _ChatScreenState extends State<ChatScreen>
     _focusNode.requestFocus();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _sending) return;
     HapticFeedback.lightImpact();
-    setState(() {
-      _messages.add(
-        _ChatMsg(isMe: true, text: text, time: '방금', read: false),
-      );
-      _controller.clear();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+
+    if (!_fromBackend) {
+      setState(() {
+        _messages = [
+          ..._messages,
+          DirectMessage(
+            id: 'local_${_messages.length}',
+            kind: 'user',
+            isMe: true,
+            text: text,
+            createdAt: DateTime.now(),
+          ),
+        ];
+        _controller.clear();
+      });
+      _scrollToEnd();
+      return;
+    }
+
+    setState(() => _sending = true);
+    try {
+      final sent = await _matches.sendMessage(widget.conversationId!, text);
+      if (!mounted) return;
+      setState(() {
+        _messages = [..._messages, sent];
+        _controller.clear();
+      });
+      _scrollToEnd();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+      if (e.errorCode == 'CHAT_LOCKED') _refresh(); // 상대가 취소했을 수 있다
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
-  void _onCamera() {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('사진 첨부 — 다음 턴 작업 예정')),
+  /// 약속 취소 — 확인 팝업 후 진행. 상대 방에는 시스템 안내문구가 남고,
+  /// 잡혀 있던 시간은 다시 가능한 일정으로 풀린다.
+  Future<void> _onCancelAppointment() async {
+    HapticFeedback.mediumImpact();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('정말 취소하시겠습니까?', style: AppTypography.titleMedium),
+        content: Text(
+          '${_appointmentSlot != null ? '$_appointmentSlot 약속이' : '약속이'} 취소되고 '
+          '상대에게 안내가 전달돼요. 잡혀 있던 시간은 다시 가능한 일정이 돼요.',
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.ink700,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ink500),
+            child: const Text('아니요'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('네, 취소할게요'),
+          ),
+        ],
+      ),
     );
+    if (confirmed != true || !mounted) return;
+
+    if (!_fromBackend) {
+      setState(() {
+        _status = 'simulated';
+        _chatEnabled = false;
+        _messages = [
+          ..._messages,
+          DirectMessage(
+            id: 'local_cancel',
+            kind: 'system',
+            isMe: false,
+            text:
+                '약속을 취소했어요.'
+                '${_appointmentSlot != null ? ' 그 시간은 다시 비어 있는 일정이 됐어요.' : ''}',
+            createdAt: DateTime.now(),
+          ),
+        ];
+        _appointmentSlot = null;
+      });
+      _scrollToEnd();
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await _matches.cancelAppointment(widget.conversationId!);
+      if (!mounted) return;
+      setState(() {
+        _status = result.status;
+        _chatEnabled = false;
+        _appointmentSlot = null;
+        _messages = [
+          ..._messages,
+          DirectMessage(
+            id: 'cancel_${_messages.length}',
+            kind: 'system',
+            isMe: false,
+            text: result.notice,
+            createdAt: DateTime.now(),
+          ),
+        ];
+      });
+      _scrollToEnd();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('약속을 취소했어요. 그 시간은 다시 가능한 일정이 됐어요')),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   void _onMore() {
@@ -160,57 +300,124 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  void _onScheduleMeet() {
-    HapticFeedback.lightImpact();
-    context.push(AppRoutes.scheduling);
-  }
+  String get _displayName =>
+      _partnerName ?? widget.peer?.name ?? '상대';
 
   @override
   Widget build(BuildContext context) {
-    final peer = _peer;
+    final hasDirectSection = _chatEnabled || _messages.isNotEmpty;
     return AppScaffold(
-      appBar: _ChatAppBar(peer: peer, onMore: _onMore),
-      body: Column(
-        children: [
-          _StarterRow(starters: _starters, onTap: _applyStarter),
-          Expanded(
-            child: ListView(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-              ),
+      appBar: _ChatAppBar(
+        name: _displayName,
+        score: widget.peer?.score ?? 0,
+        onMore: _onMore,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
               children: [
-                const _DateDivider(label: '오늘'),
-                AppSpacing.vSm,
-                for (final m in _messages) ...[
-                  _MessageBubble(msg: m),
-                  AppSpacing.vSm,
-                ],
-                _TypingIndicator(controller: _typing, peerName: peer.name),
+                if (_chatEnabled)
+                  _AppointmentBanner(
+                    label: _appointmentSlot,
+                    onCancel: _onCancelAppointment,
+                  ),
+                if (_chatEnabled)
+                  _StarterRow(starters: _starters, onTap: _applyStarter),
+                Expanded(
+                  child: ListView(
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      AppSpacing.md,
+                      AppSpacing.md,
+                      AppSpacing.md,
+                    ),
+                    children: [
+                      if (_agentTurns.isNotEmpty) ...[
+                        const _SectionDivider(
+                          label: 'AI 에이전트가 먼저 나눈 대화',
+                          accent: true,
+                        ),
+                        AppSpacing.vSm,
+                        for (final t in _agentTurns) ...[
+                          _Bubble(isMe: t.isMe, text: t.text, isAgent: true),
+                          AppSpacing.vSm,
+                        ],
+                      ],
+                      if (hasDirectSection) ...[
+                        AppSpacing.vSm,
+                        const _SectionDivider(label: '여기서부터 두 분의 대화'),
+                        AppSpacing.vSm,
+                        for (final m in _messages) ...[
+                          if (m.isSystem)
+                            _SystemNotice(text: m.text)
+                          else
+                            _Bubble(
+                              isMe: m.isMe,
+                              text: m.text,
+                              time: _formatTime(m.createdAt),
+                            ),
+                          AppSpacing.vSm,
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
+                if (_chatEnabled)
+                  _InputBar(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    hasText: _hasText && !_sending,
+                    onSend: _send,
+                  )
+                else
+                  const _LockedBar(),
               ],
             ),
-          ),
-          _InputBar(
-            controller: _controller,
-            focusNode: _focusNode,
-            hasText: _hasText,
-            onSend: _send,
-            onCamera: _onCamera,
-            onScheduleMeet: _onScheduleMeet,
-          ),
-        ],
-      ),
     );
+  }
+
+  static String _formatTime(DateTime? t) {
+    if (t == null) return '';
+    final local = t.toLocal();
+    final h12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '${local.hour < 12 ? '오전' : '오후'} $h12:$mm';
   }
 }
 
+/// 더미 폴백용 에이전트 대화 — 백엔드 없이 화면 구조를 보여주기 위한 것.
+const kDummyAgentTurns = [
+  AgentTurn(isMe: true, text: '안녕하세요! 좋은 인연이 되었으면 좋겠어요 ㅎㅎ'),
+  AgentTurn(isMe: false, text: '안녕하세요! 저도요. 주말엔 보통 뭐 하면서 보내세요?'),
+  AgentTurn(isMe: true, text: '조용한 카페에서 책 읽는 걸 좋아해요. 혹시 토요일 저녁 어떠세요?'),
+  AgentTurn(isMe: false, text: '좋아요! 토요일 저녁에 봬요 :)'),
+];
+
+const kDummyDirectMessages = [
+  DirectMessage(
+    id: 'd1',
+    kind: 'user',
+    isMe: false,
+    text: '안녕하세요! 에이전트들이 약속까지 잡아줬네요 ㅎㅎ',
+  ),
+  DirectMessage(
+    id: 'd2',
+    kind: 'user',
+    isMe: true,
+    text: '그러니까요! 직접 인사드리니 반가워요 :)',
+  ),
+];
+
 class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _ChatAppBar({required this.peer, required this.onMore});
-  final Conversation peer;
+  const _ChatAppBar({
+    required this.name,
+    required this.score,
+    required this.onMore,
+  });
+  final String name;
+  final int score;
   final VoidCallback onMore;
 
   @override
@@ -233,10 +440,15 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               children: [
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 40, minHeight: 40),
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                      size: 20, color: AppColors.ink900),
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 20,
+                    color: AppColors.ink900,
+                  ),
                   onPressed: () => context.pop(),
                 ),
                 Expanded(
@@ -252,7 +464,7 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          peer.initial,
+                          name.isEmpty ? '?' : name.substring(0, 1),
                           style: AppTypography.label.copyWith(
                             color: AppColors.ink700,
                             fontWeight: FontWeight.w900,
@@ -262,42 +474,108 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        peer.name,
-                        style: AppTypography.titleMedium
-                            .copyWith(fontSize: 16),
+                        name,
+                        style: AppTypography.titleMedium.copyWith(fontSize: 16),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          '${peer.score}',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
+                      if (score > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '$score',
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 40, minHeight: 40),
-                  icon: const Icon(Icons.more_horiz_rounded,
-                      size: 24, color: AppColors.ink900),
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  icon: const Icon(
+                    Icons.more_horiz_rounded,
+                    size: 24,
+                    color: AppColors.ink900,
+                  ),
                   onPressed: onMore,
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 만남 예정 배너 — 합의된 약속 시간과 [약속 취소] 진입점.
+class _AppointmentBanner extends StatelessWidget {
+  const _AppointmentBanner({required this.label, required this.onCancel});
+  final String? label;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.mint.withValues(alpha: 0.06),
+        border: const Border(
+          bottom: BorderSide(color: AppColors.ink100, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_available_rounded,
+            size: 16,
+            color: AppColors.mint,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label != null ? '$label 만남 예정' : '만남 예정',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.ink900,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onCancel,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text(
+                '약속 취소',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.danger,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -368,34 +646,110 @@ class _StarterChip extends StatelessWidget {
   }
 }
 
-class _DateDivider extends StatelessWidget {
-  const _DateDivider({required this.label});
+class _SectionDivider extends StatelessWidget {
+  const _SectionDivider({required this.label, this.accent = false});
   final String label;
+
+  /// true면 보라 틴트 알약 — 에이전트 대화 섹션의 정체성 표시.
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: accent
+            ? AppColors.primary.withValues(alpha: 0.07)
+            : AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(99),
+        border: accent
+            ? Border.all(color: AppColors.primary.withValues(alpha: 0.22))
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (accent) ...[
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 11,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            label,
+            style: AppTypography.caption.copyWith(
+              color: accent ? AppColors.primary : AppColors.ink500,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: AppColors.ink100, height: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: pill,
+        ),
+        const Expanded(child: Divider(color: AppColors.ink100, height: 1)),
+      ],
+    );
+  }
+}
+
+/// 시스템 안내문구 — 약속 취소 등. 가운데 회색 알약으로 표시한다.
+class _SystemNotice extends StatelessWidget {
+  const _SystemNotice({required this.text});
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        '─── $label ───',
-        style: AppTypography.caption.copyWith(
-          color: AppColors.ink300,
-          fontSize: 11,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.86,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: AppTypography.caption.copyWith(
+            color: AppColors.ink700,
+            fontSize: 12,
+            height: 1.4,
+          ),
         ),
       ),
     );
   }
 }
 
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.msg});
-  final _ChatMsg msg;
+/// 말풍선. 내 직접 메시지만 그라데이션 테두리 — 에이전트 발화는 [isAgent]로
+/// 평평한 테두리를 써서 '진짜 나'와 시각적으로 구분한다.
+class _Bubble extends StatelessWidget {
+  const _Bubble({
+    required this.isMe,
+    required this.text,
+    this.time = '',
+    this.isAgent = false,
+  });
+  final bool isMe;
+  final String text;
+  final String time;
+  final bool isAgent;
 
   @override
   Widget build(BuildContext context) {
     final amori = context.amori;
-    final isMe = msg.isMe;
-    // 꼬리 방향만 다른 말풍선 반경. 내 말풍선은 그라데이션 '테두리'를 위해
-    // 안쪽 반경을 테두리 두께만큼 줄인 버전(_innerRadius)을 함께 쓴다.
     const border = 1.6;
     final radius = isMe
         ? const BorderRadius.only(
@@ -417,123 +771,130 @@ class _MessageBubble extends StatelessWidget {
       bottomRight: Radius.circular(6 - border),
     );
     final textWidget = Text(
-      msg.text,
+      text,
       style: AppTypography.bodyMedium.copyWith(
         color: AppColors.ink900,
         fontSize: 15,
         height: 1.4,
       ),
     );
+    final Widget bubble;
+    if (isMe && !isAgent) {
+      // 그라데이션 테두리: 바깥은 그라데이션, 안쪽은 흰 칸 → 텍스트가 또렷하게.
+      bubble = Container(
+        decoration: BoxDecoration(
+          gradient: amori.primaryGradient,
+          borderRadius: radius,
+        ),
+        padding: const EdgeInsets.all(border),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: innerRadius,
+          ),
+          child: textWidget,
+        ),
+      );
+    } else if (isMe) {
+      // 내 에이전트 발화 — 보라 기운으로 '내 쪽'임을 보여주되,
+      // 그라데이션('진짜 나')보다는 한 단계 차분하게.
+      bubble = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          borderRadius: radius,
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.28),
+            width: 1.2,
+          ),
+        ),
+        child: textWidget,
+      );
+    } else {
+      bubble = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: radius,
+          border: Border.all(color: AppColors.ink100, width: 1),
+        ),
+        child: textWidget,
+      );
+    }
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
-        crossAxisAlignment:
-            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.sizeOf(context).width * 0.78,
             ),
-            child: isMe
-                // 그라데이션 테두리: 바깥은 그라데이션, 안쪽은 흰 칸 → 텍스트가 또렷하게.
-                ? Container(
-                    decoration: BoxDecoration(
-                      gradient: amori.primaryGradient,
-                      borderRadius: radius,
-                    ),
-                    padding: const EdgeInsets.all(border),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 13, vertical: 10),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: innerRadius,
-                      ),
-                      child: textWidget,
-                    ),
-                  )
-                : Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 11),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      borderRadius: radius,
-                    ),
-                    child: textWidget,
-                  ),
+            child: bubble,
           ),
-          const SizedBox(height: 4),
-          Text(
-            isMe && msg.read ? '${msg.time} · 읽음' : msg.time,
-            style: AppTypography.caption.copyWith(
-              color: AppColors.ink300,
-              fontSize: 11,
+          if (time.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              time,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.ink300,
+                fontSize: 11,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _TypingIndicator extends StatelessWidget {
-  const _TypingIndicator({required this.controller, required this.peerName});
-  final AnimationController controller;
-  final String peerName;
+/// '진행 중' 잠금 안내 — 에이전트 단계라 직접 채팅이 닫혀 있다.
+class _LockedBar extends StatelessWidget {
+  const _LockedBar();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.ink100, width: 1)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: AppColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: AnimatedBuilder(
-            animation: controller,
-            builder: (_, _) => Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var i = 0; i < 3; i++) ...[
-                  _Dot(phase: i / 3, t: controller.value),
-                  if (i < 2) const SizedBox(width: 4),
-                ],
-              ],
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.lock_outline_rounded,
+                size: 15,
+                color: AppColors.ink500,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '서로 만남을 수락하면 직접 대화할 수 있어요',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.ink500,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          '$peerName님이 입력 중...',
-          style: AppTypography.caption.copyWith(
-            color: AppColors.ink500,
-            fontSize: 11,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  const _Dot({required this.phase, required this.t});
-  final double phase;
-  final double t;
-
-  @override
-  Widget build(BuildContext context) {
-    final adjusted = (t + phase) % 1.0;
-    final wave = 0.5 - 0.5 * (1 - 2 * adjusted).abs();
-    final opacity = 0.3 + wave * 0.7;
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(
-        color: AppColors.ink500.withValues(alpha: opacity.clamp(0.0, 1.0)),
-        shape: BoxShape.circle,
       ),
     );
   }
@@ -545,16 +906,12 @@ class _InputBar extends StatelessWidget {
     required this.focusNode,
     required this.hasText,
     required this.onSend,
-    required this.onCamera,
-    required this.onScheduleMeet,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool hasText;
   final VoidCallback onSend;
-  final VoidCallback onCamera;
-  final VoidCallback onScheduleMeet;
 
   @override
   Widget build(BuildContext context) {
@@ -573,18 +930,16 @@ class _InputBar extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.camera_alt_rounded,
-                  size: 22, color: AppColors.ink500),
-              onPressed: onCamera,
-            ),
             Expanded(
               child: Container(
-                constraints: const BoxConstraints(minHeight: 40, maxHeight: 120),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                constraints: const BoxConstraints(
+                  minHeight: 40,
+                  maxHeight: 120,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceMuted,
                   borderRadius: BorderRadius.circular(20),
@@ -612,36 +967,6 @@ class _InputBar extends StatelessWidget {
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: onScheduleMeet,
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                height: 36,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.calendar_month_rounded,
-                        size: 14, color: Colors.white),
-                    const SizedBox(width: 4),
-                    Text(
-                      '약속',
-                      style: AppTypography.caption.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ),

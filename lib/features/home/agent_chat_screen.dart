@@ -1,15 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/state/agent_session_store.dart';
+import '../../core/router/app_routes.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
-import '../../data/models/conversation_message.dart';
+import '../../data/repositories/match_repository.dart';
 
 enum _Sender { me, them, system }
 
@@ -31,10 +33,10 @@ class _ChatMessage {
 
 const _meName = '지은-AI';
 const _meInitial = '지';
-const _themName = '민준-AI';
-const _themInitial = '민';
+const _fallbackThemName = '민준-AI';
+const _fallbackThemInitial = '민';
 
-// LLM 대화가 없을 때 표시할 폴백 더미 데이터
+// 백엔드에 닿지 못할 때(오프라인 / dev 미설정)만 보여줄 폴백 더미 대화.
 const List<_ChatMessage> _fallbackMessages = [
   _ChatMessage(
     sender: _Sender.me,
@@ -45,14 +47,10 @@ const List<_ChatMessage> _fallbackMessages = [
   ),
   _ChatMessage(
     sender: _Sender.them,
-    name: _themName,
-    avatarInitial: _themInitial,
+    name: _fallbackThemName,
+    avatarInitial: _fallbackThemInitial,
     text: '저는 주로 성수나 연남 카페에서 책 읽거나, 여행 준비해요. 최근엔 후쿠오카 다녀왔어요 ✈️',
     signal: '여행+카페 매치',
-  ),
-  _ChatMessage(
-    sender: _Sender.system,
-    text: '🔍 가치관 분석: 둘 다 "느린 일상 · 진심" 키워드 상위',
   ),
   _ChatMessage(
     sender: _Sender.me,
@@ -63,30 +61,50 @@ const List<_ChatMessage> _fallbackMessages = [
   ),
   _ChatMessage(
     sender: _Sender.them,
-    name: _themName,
-    avatarInitial: _themInitial,
+    name: _fallbackThemName,
+    avatarInitial: _fallbackThemInitial,
     text: '서로의 일상을 존중하면서도, 함께 있을 때 편안한 거요.',
     signal: '가치관 매치',
   ),
 ];
 
-List<_ChatMessage> _fromStore(List<ConversationMessage> msgs) {
-  return msgs.map((m) {
-    if (m.isSystem) {
-      return _ChatMessage(sender: _Sender.system, text: m.text);
-    }
-    return _ChatMessage(
-      sender: m.isMe ? _Sender.me : _Sender.them,
-      name: m.isMe ? _meName : _themName,
-      avatarInitial: m.isMe ? _meInitial : _themInitial,
-      text: m.text,
-      signal: m.signal,
-    );
-  }).toList();
+List<_ChatMessage> _fromTurns(
+  List<AgentTurn> turns, {
+  required String themName,
+  required String themInitial,
+}) {
+  return turns
+      .map(
+        (t) => _ChatMessage(
+          sender: t.isMe ? _Sender.me : _Sender.them,
+          name: t.isMe ? _meName : themName,
+          avatarInitial: t.isMe ? _meInitial : themInitial,
+          text: t.text,
+        ),
+      )
+      .toList();
 }
 
+/// 화면이 표시하는 현재 상태.
+/// - [loading]: 첫 로드 중
+/// - [live]: 시차 송출 중 — 다음 턴이 곧 도착(폴링 + 타이핑 인디케이터)
+/// - [completed]: 송출 끝 — 케미 점수·리포트 노출
+/// - [empty]: 백엔드는 닿았으나 아직 다녀온 소개팅이 없음
+/// - [fallback]: 백엔드 미연결 — 더미 데모
+enum _Mode { loading, live, completed, empty, fallback }
+
 class AgentChatScreen extends StatefulWidget {
-  const AgentChatScreen({super.key});
+  const AgentChatScreen({
+    super.key,
+    this.repository,
+    this.pollInterval = const Duration(seconds: 5),
+  });
+
+  /// 테스트에서 가짜 리포지토리를 주입한다. 기본은 실 BFF.
+  final MatchRepository? repository;
+
+  /// 라이브 송출 폴링 간격.
+  final Duration pollInterval;
 
   @override
   State<AgentChatScreen> createState() => _AgentChatScreenState();
@@ -94,80 +112,321 @@ class AgentChatScreen extends StatefulWidget {
 
 class _AgentChatScreenState extends State<AgentChatScreen>
     with SingleTickerProviderStateMixin {
+  late final MatchRepository _repo;
   late final AnimationController _typing;
+  final ScrollController _scroll = ScrollController();
 
-  List<_ChatMessage> get _messages {
-    final stored = AgentSessionStore.instance.conversation;
-    return stored.isNotEmpty ? _fromStore(stored) : _fallbackMessages;
-  }
+  Timer? _poll;
+  bool _polling = false; // 폴 중복 방지 (느린 응답이 겹치지 않도록)
+
+  _Mode _mode = _Mode.loading;
+  MatchSummary? _match; // 관전 중인 매치(카드 정보: 점수·이름)
+  MatchConversation? _conv; // 지금까지 공개된 대화
+  int _lastTurnCount = 0;
+
+  bool get _isLive => _mode == _Mode.live;
+  bool get _isFallback => _mode == _Mode.fallback;
 
   @override
   void initState() {
     super.initState();
+    _repo = widget.repository ?? MatchRepository();
     _typing = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
-    )..repeat();
+    );
+    _bootstrap();
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
     _typing.dispose();
+    _scroll.dispose();
     super.dispose();
   }
+
+  Future<void> _bootstrap() async {
+    try {
+      final matches = await _repo.listMatches();
+      if (!mounted) return;
+      final selected = _pickMatch(matches);
+      if (selected == null) {
+        setState(() => _mode = _Mode.empty);
+        _syncTyping();
+        return;
+      }
+      _match = selected;
+      await _refreshConversation();
+      if (!mounted) return;
+      if (_conv?.agentLive ?? false) _startPolling();
+    } catch (error) {
+      if (!mounted) return;
+      debugPrint('AgentChat 라이브 로드 실패 — 더미 폴백: $error');
+      setState(() => _mode = _Mode.fallback);
+      _syncTyping();
+    }
+  }
+
+  /// 라이브 송출 중인 매치를 우선, 없으면 가장 최근(목록 맨 앞) 매치.
+  MatchSummary? _pickMatch(List<MatchSummary> matches) {
+    if (matches.isEmpty) return null;
+    for (final m in matches) {
+      if (m.agentLive) return m;
+    }
+    return matches.first; // 백엔드가 updated_at desc로 정렬해 보낸다
+  }
+
+  Future<void> _refreshConversation() async {
+    final id = _match?.matchId;
+    if (id == null) return;
+    final conv = await _repo.getConversation(id);
+    if (!mounted) return;
+    setState(() {
+      _conv = conv;
+      _mode = conv.agentLive ? _Mode.live : _Mode.completed;
+    });
+    _syncTyping();
+    if (conv.agentTurns.length > _lastTurnCount) _scrollToBottom();
+    _lastTurnCount = conv.agentTurns.length;
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(widget.pollInterval, (_) => _tick());
+  }
+
+  Future<void> _tick() async {
+    if (_polling || !mounted) return;
+    _polling = true;
+    try {
+      final wasLive = _conv?.agentLive ?? false;
+      await _refreshConversation();
+      if (!mounted) return;
+      final live = _conv?.agentLive ?? false;
+      if (wasLive && !live) {
+        // 송출 종료 — 점수·약속이 이제 노출되니 카드 정보를 한 번 더 받고 폴링 중단.
+        await _refreshSummary();
+        _poll?.cancel();
+        _poll = null;
+      }
+    } catch (error) {
+      // 일시적 오류는 다음 틱에 재시도 — 폴링을 죽이지 않는다.
+      debugPrint('AgentChat 폴링 실패: $error');
+    } finally {
+      _polling = false;
+    }
+  }
+
+  Future<void> _refreshSummary() async {
+    try {
+      final matches = await _repo.listMatches();
+      if (!mounted) return;
+      final id = _match?.matchId;
+      for (final m in matches) {
+        if (m.matchId == id) {
+          setState(() => _match = m);
+          return;
+        }
+      }
+    } catch (error) {
+      debugPrint('AgentChat 요약 갱신 실패: $error');
+    }
+  }
+
+  void _syncTyping() {
+    if (_typingVisible) {
+      if (!_typing.isAnimating) _typing.repeat();
+    } else {
+      _typing.stop();
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  String get _themName {
+    if (_isFallback) return _fallbackThemName;
+    final p = _conv?.partnerName ?? _match?.partnerName;
+    return (p == null || p.isEmpty) ? _fallbackThemName : '$p-AI';
+  }
+
+  String get _themInitial => _themName.substring(0, 1);
+
+  List<_ChatMessage> get _messages {
+    if (_isFallback) return _fallbackMessages;
+    return _fromTurns(
+      _conv?.agentTurns ?? const [],
+      themName: _themName,
+      themInitial: _themInitial,
+    );
+  }
+
+  /// 타이핑 인디케이터: 라이브 송출 중이거나 더미 데모일 때.
+  bool get _typingVisible => _isLive || _isFallback;
+
+  int? get _score => _isFallback ? 88 : _match?.reportScore;
+
+  bool get _reportReady =>
+      _mode == _Mode.completed && _match?.reportScore != null;
 
   void _showMoreMenu() {
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('시뮬레이션 옵션 (일시정지 · 종료) — 다음 턴 작업 예정')),
+      const SnackBar(content: Text('에이전트가 하루 중 자동으로 소개팅을 다녀와요')),
     );
   }
 
   void _onNotifyMe() {
     HapticFeedback.lightImpact();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('시뮬레이션 완료 시 알림으로 알려드릴게요')),
+      const SnackBar(content: Text('소개팅이 끝나면 알림으로 알려드릴게요')),
     );
+  }
+
+  void _openReport() {
+    HapticFeedback.lightImpact();
+    context.push(AppRoutes.lockedReport);
   }
 
   @override
   Widget build(BuildContext context) {
+    final messages = _messages;
     return AppScaffold(
-      appBar: _ChatTopBar(onMore: _showMoreMenu),
-      bottomBar: _BottomNotice(onNotify: _onNotifyMe),
-      body: Column(
-        children: [
-          const _ChemistryBanner(score: 88),
-          Expanded(
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.lg,
-              ),
-              children: [
-                const _StartMarker(time: '14:32'),
-                AppSpacing.vSm,
-                for (var i = 0; i < _messages.length; i++) ...[
-                  _MessageRow(message: _messages[i]),
-                  AppSpacing.vSm,
-                ],
-                _TypingIndicator(controller: _typing),
-              ],
-            ),
+      appBar: _ChatTopBar(
+        onMore: _showMoreMenu,
+        meName: _meName,
+        themName: _themName,
+        messageCount: messages.length,
+        live: _isLive || _isFallback,
+        done: _mode == _Mode.completed,
+      ),
+      bottomBar: _BottomNotice(
+        reportReady: _reportReady,
+        onNotify: _reportReady ? _openReport : _onNotifyMe,
+      ),
+      body: _buildBody(messages),
+    );
+  }
+
+  Widget _buildBody(List<_ChatMessage> messages) {
+    if (_mode == _Mode.loading) {
+      return const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppColors.primary,
           ),
-        ],
+        ),
+      );
+    }
+    if (_mode == _Mode.empty) return const _EmptyState();
+
+    return Column(
+      children: [
+        _ChemistryBanner(score: _score),
+        Expanded(
+          child: ListView(
+            controller: _scroll,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.lg,
+            ),
+            children: [
+              const _StartMarker(),
+              AppSpacing.vSm,
+              for (var i = 0; i < messages.length; i++) ...[
+                _MessageRow(message: messages[i]),
+                AppSpacing.vSm,
+              ],
+              if (_typingVisible)
+                _TypingIndicator(
+                  controller: _typing,
+                  initial: _themInitial,
+                  label: '$_themName 응답 생성 중...',
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            AppSpacing.vMd,
+            Text(
+              '아직 다녀온 소개팅이 없어요',
+              style: AppTypography.titleMedium.copyWith(fontSize: 16),
+            ),
+            AppSpacing.vXs,
+            Text(
+              '에이전트가 하루 중 알아서 소개팅을 다녀와요.\n끝나면 여기에서 대화를 볼 수 있어요.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.ink500,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
-  const _ChatTopBar({required this.onMore});
+  const _ChatTopBar({
+    required this.onMore,
+    required this.meName,
+    required this.themName,
+    required this.messageCount,
+    required this.live,
+    required this.done,
+  });
 
   final VoidCallback onMore;
+  final String meName;
+  final String themName;
+  final int messageCount;
+  final bool live;
+  final bool done;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -196,7 +455,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      '$_meName ↔ $_themName',
+                      '$meName ↔ $themName',
                       style: AppTypography.label.copyWith(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -209,14 +468,18 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                         Container(
                           width: 6,
                           height: 6,
-                          decoration: const BoxDecoration(
-                            color: AppColors.danger,
+                          decoration: BoxDecoration(
+                            color: live
+                                ? AppColors.danger
+                                : (done ? AppColors.mint : AppColors.ink300),
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          '실시간 시뮬레이션 · 메시지 7/24',
+                          done
+                              ? '소개팅 완료 · 메시지 $messageCount'
+                              : '실시간 소개팅 · 메시지 $messageCount',
                           style: AppTypography.caption.copyWith(
                             color: AppColors.primary,
                             fontWeight: FontWeight.w700,
@@ -244,7 +507,8 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
 class _ChemistryBanner extends StatelessWidget {
   const _ChemistryBanner({required this.score});
 
-  final int score;
+  /// 리포트의 케미 점수. null 이면 아직 송출 중(계산 결과 비공개).
+  final int? score;
 
   @override
   Widget build(BuildContext context) {
@@ -266,7 +530,7 @@ class _ChemistryBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '예상 케미스트리',
+                  score == null ? '예상 케미스트리' : '케미스트리',
                   style: AppTypography.caption.copyWith(
                     color: AppColors.ink500,
                     fontSize: 11,
@@ -277,7 +541,7 @@ class _ChemistryBanner extends StatelessWidget {
                   text: TextSpan(
                     children: [
                       TextSpan(
-                        text: '$score',
+                        text: score == null ? '—' : '$score',
                         style: const TextStyle(
                           fontSize: 24,
                           height: 1.0,
@@ -287,7 +551,7 @@ class _ChemistryBanner extends StatelessWidget {
                         ),
                       ),
                       TextSpan(
-                        text: ' /100 (계산 중)',
+                        text: score == null ? ' /100 (계산 중)' : ' /100',
                         style: AppTypography.caption.copyWith(
                           color: AppColors.ink500,
                           fontWeight: FontWeight.w500,
@@ -321,15 +585,13 @@ class _ChemistryBanner extends StatelessWidget {
 }
 
 class _StartMarker extends StatelessWidget {
-  const _StartMarker({required this.time});
-
-  final String time;
+  const _StartMarker();
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        '── 시뮬레이션 시작 · $time ──',
+        '── AI 에이전트 소개팅 ──',
         style: AppTypography.caption.copyWith(
           color: AppColors.ink300,
           fontSize: 11,
@@ -543,15 +805,22 @@ class _SystemMessage extends StatelessWidget {
 }
 
 class _TypingIndicator extends StatelessWidget {
-  const _TypingIndicator({required this.controller});
+  const _TypingIndicator({
+    required this.controller,
+    required this.initial,
+    required this.label,
+  });
+
   final AnimationController controller;
+  final String initial;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        const _MiniAvatar(initial: _themInitial),
+        _MiniAvatar(initial: initial),
         const SizedBox(width: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -576,7 +845,7 @@ class _TypingIndicator extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(
-          '$_themName 응답 생성 중...',
+          label,
           style: AppTypography.caption.copyWith(
             color: AppColors.ink500,
             fontSize: 10,
@@ -611,8 +880,12 @@ class _Dot extends StatelessWidget {
 }
 
 class _BottomNotice extends StatelessWidget {
-  const _BottomNotice({required this.onNotify});
+  const _BottomNotice({required this.onNotify, this.reportReady = false});
+
   final VoidCallback onNotify;
+
+  /// 리포트가 준비되면 알림 버튼이 리포트 진입 버튼으로 바뀐다.
+  final bool reportReady;
 
   @override
   Widget build(BuildContext context) {
@@ -659,7 +932,7 @@ class _BottomNotice extends StatelessWidget {
                   borderRadius: AppRadius.rPill,
                 ),
                 child: Text(
-                  '시뮬레이션 완료 후 알림 받기',
+                  reportReady ? '궁합 리포트 확인하기' : '소개팅 완료 후 알림 받기',
                   style: AppTypography.label.copyWith(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w800,

@@ -35,6 +35,9 @@ class _InboxScreenState extends State<InboxScreen> {
   List<Conversation> _scheduled = [];
   List<Conversation> _completed = [];
 
+  /// 케미 점수가 75점에 닿지 못한 대화 — 우하단 버튼으로 진입하는 별도 화면에 표시.
+  List<FailedMatch> _failed = [];
+
   @override
   void initState() {
     super.initState();
@@ -45,15 +48,18 @@ class _InboxScreenState extends State<InboxScreen> {
   Future<void> _load() async {
     try {
       final items = await _matches.listMatches();
-      final convs = items.map(_toConversation).toList();
+      final convs = items.where((m) => !m.failed).map(_toConversation).toList();
+      final failed = items.where((m) => m.failed).map(_toFailedMatch).toList();
       if (!mounted) return;
       setState(() {
         _fromBackend = true;
         _loading = false;
         _active = convs
-            .where((c) =>
-                c.status == ConversationStatus.active ||
-                c.status == ConversationStatus.scheduling)
+            .where(
+              (c) =>
+                  c.status == ConversationStatus.active ||
+                  c.status == ConversationStatus.scheduling,
+            )
             .toList();
         _scheduled = convs
             .where((c) => c.status == ConversationStatus.scheduled)
@@ -61,6 +67,7 @@ class _InboxScreenState extends State<InboxScreen> {
         _completed = convs
             .where((c) => c.status == ConversationStatus.completed)
             .toList();
+        _failed = failed;
       });
     } catch (e) {
       debugPrint('inbox: GET /matches 실패 — 더미 폴백으로 전환: $e');
@@ -71,6 +78,7 @@ class _InboxScreenState extends State<InboxScreen> {
         _active = [...kActiveConversations];
         _scheduled = [...kScheduledConversations];
         _completed = [...kCompletedConversations];
+        _failed = [...kFailedMatches];
       });
     }
   }
@@ -80,9 +88,10 @@ class _InboxScreenState extends State<InboxScreen> {
     final status = switch (m.status) {
       'scheduled' => ConversationStatus.scheduled,
       'met' => ConversationStatus.completed,
-      _ => m.appointmentReady
-          ? ConversationStatus.scheduling
-          : ConversationStatus.active,
+      _ =>
+        m.appointmentReady
+            ? ConversationStatus.scheduling
+            : ConversationStatus.active,
     };
     return Conversation(
       id: m.matchId,
@@ -94,8 +103,21 @@ class _InboxScreenState extends State<InboxScreen> {
       status: status,
       unread: m.appointmentReady && !m.youAccepted,
       appointmentReady: m.appointmentReady,
+      appointmentLabel: m.appointmentSlot,
       partnerAccepted: m.partnerAccepted,
       youAccepted: m.youAccepted,
+    );
+  }
+
+  FailedMatch _toFailedMatch(MatchSummary m) {
+    final name = (m.partnerName?.isNotEmpty ?? false) ? m.partnerName! : '상대';
+    return FailedMatch(
+      id: m.matchId,
+      name: name,
+      initial: name.substring(0, 1),
+      score: m.reportScore ?? m.score?.round() ?? 0,
+      reason: m.failureReason ?? '케미 점수가 기준에 닿지 못했어요',
+      expiresAt: m.failedExpiresAt,
     );
   }
 
@@ -103,9 +125,11 @@ class _InboxScreenState extends State<InboxScreen> {
     if (t == null) return '';
     final local = t.toLocal();
     final now = DateTime.now();
-    final days = DateTime(now.year, now.month, now.day)
-        .difference(DateTime(local.year, local.month, local.day))
-        .inDays;
+    final days = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(local.year, local.month, local.day)).inDays;
     if (days <= 0) {
       final h12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
       final mm = local.minute.toString().padLeft(2, '0');
@@ -127,21 +151,28 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   List<Conversation> get _conversations => switch (_tab) {
-        _InboxTab.active => _sortedActive,
-        _InboxTab.scheduled => _scheduled,
-        _InboxTab.completed => _completed,
-      };
+    _InboxTab.active => _sortedActive,
+    _InboxTab.scheduled => _scheduled,
+    _InboxTab.completed => _completed,
+  };
 
   void _onSearch() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('대화 검색 — 다음 턴 작업 예정')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('대화 검색 — 다음 턴 작업 예정')));
   }
 
-  void _onConversationTap(Conversation c) {
+  Future<void> _onConversationTap(Conversation c) async {
     HapticFeedback.lightImpact();
-    context.push('${AppRoutes.chat}?id=${c.id}');
+    await context.push('${AppRoutes.chat}?id=${c.id}', extra: c);
+    // 채팅방에서 약속 취소 등 상태가 바뀌었을 수 있다 — 목록 갱신
+    if (mounted && _fromBackend) _load();
+  }
+
+  void _openFailed() {
+    HapticFeedback.lightImpact();
+    context.push(AppRoutes.failedMatches, extra: _failed);
   }
 
   /// [수락] — 양쪽이 모두 수락하면 '만남 예정'으로 이동한다.
@@ -197,52 +228,125 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       bottomBar: const AmoriTabBar(active: AmoriTab.connect),
-      body: Column(
+      body: Stack(
         children: [
-          _TopBar(onSearch: _onSearch),
-          _SubTabs(
-            active: _tab,
-            activeCount: _active.length,
-            scheduledCount: _scheduled.length,
-            completedCount: _completed.length,
-            onChange: (t) => setState(() => _tab = t),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: _conversations.isEmpty
-                        ? LayoutBuilder(
-                            builder: (context, constraints) =>
-                                SingleChildScrollView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              child: SizedBox(
-                                height: constraints.maxHeight,
-                                child: const _EmptyState(),
+          Column(
+            children: [
+              _TopBar(onSearch: _onSearch),
+              _SubTabs(
+                active: _tab,
+                activeCount: _active.length,
+                scheduledCount: _scheduled.length,
+                completedCount: _completed.length,
+                onChange: (t) => setState(() => _tab = t),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: _conversations.isEmpty
+                            ? LayoutBuilder(
+                                builder: (context, constraints) =>
+                                    SingleChildScrollView(
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(),
+                                      child: SizedBox(
+                                        height: constraints.maxHeight,
+                                        child: const _EmptyState(),
+                                      ),
+                                    ),
+                              )
+                            : ListView.separated(
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
+                                padding: const EdgeInsets.fromLTRB(
+                                  AppSpacing.lg,
+                                  AppSpacing.lg,
+                                  AppSpacing.lg,
+                                  AppSpacing.xl,
+                                ),
+                                itemCount: _conversations.length,
+                                separatorBuilder: (_, _) => AppSpacing.vSm,
+                                itemBuilder: (_, i) => _ConversationCard(
+                                  conversation: _conversations[i],
+                                  onTap: () =>
+                                      _onConversationTap(_conversations[i]),
+                                  onAccept: () => _onAccept(_conversations[i]),
+                                ),
                               ),
-                            ),
-                          )
-                        : ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics(),
-                            ),
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.lg,
-                              AppSpacing.lg,
-                              AppSpacing.lg,
-                              AppSpacing.xl,
-                            ),
-                            itemCount: _conversations.length,
-                            separatorBuilder: (_, _) => AppSpacing.vSm,
-                            itemBuilder: (_, i) => _ConversationCard(
-                              conversation: _conversations[i],
-                              onTap: () =>
-                                  _onConversationTap(_conversations[i]),
-                              onAccept: () => _onAccept(_conversations[i]),
-                            ),
-                          ),
-                  ),
+                      ),
+              ),
+            ],
+          ),
+          // 닿지 않은 인연(케미 75점 미만) 진입 버튼 — 데이터가 있을 때만 노출
+          if (!_loading && _failed.isNotEmpty)
+            Positioned(
+              right: AppSpacing.lg,
+              bottom: AppSpacing.lg,
+              child: _FailedFab(count: _failed.length, onTap: _openFailed),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FailedFab extends StatelessWidget {
+  const _FailedFab({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.ink100, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.heart_broken_rounded,
+              size: 26,
+              color: AppColors.ink700,
+            ),
+          ),
+          Positioned(
+            top: -2,
+            right: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.all(Radius.circular(99)),
+              ),
+              child: Text(
+                '$count',
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -270,8 +374,11 @@ class _TopBar extends StatelessWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.search_rounded,
-                  size: 22, color: AppColors.ink900),
+              icon: const Icon(
+                Icons.search_rounded,
+                size: 22,
+                color: AppColors.ink900,
+              ),
               onPressed: onSearch,
             ),
           ],
@@ -372,7 +479,8 @@ class _ConversationCardState extends State<_ConversationCard> {
   Widget build(BuildContext context) {
     final c = widget.conversation;
     // 약속 조율 완료 + 아직 만남 예정 단계 전 → 민트 강조 테두리
-    final highlight = c.appointmentReady && c.status != ConversationStatus.scheduled;
+    final highlight =
+        c.appointmentReady && c.status != ConversationStatus.scheduled;
     return AnimatedScale(
       scale: _pressed ? 0.99 : 1.0,
       duration: const Duration(milliseconds: 120),
@@ -385,7 +493,9 @@ class _ConversationCardState extends State<_ConversationCard> {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: highlight ? AppColors.mint.withValues(alpha: 0.04) : Colors.white,
+            color: highlight
+                ? AppColors.mint.withValues(alpha: 0.04)
+                : Colors.white,
             borderRadius: AppRadius.rMd,
             border: Border.all(
               color: highlight ? AppColors.mint : AppColors.ink100,
@@ -428,18 +538,22 @@ class _ConversationCardState extends State<_ConversationCard> {
                             Flexible(
                               child: Text(
                                 c.name,
-                                style: AppTypography.titleMedium
-                                    .copyWith(fontSize: 15),
+                                style: AppTypography.titleMedium.copyWith(
+                                  fontSize: 15,
+                                ),
                               ),
                             ),
                             if (c.score > 0) ...[
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.10),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.10,
+                                  ),
                                   borderRadius: BorderRadius.circular(99),
                                 ),
                                 child: Text(
@@ -477,7 +591,9 @@ class _ConversationCardState extends State<_ConversationCard> {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 3),
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.surfaceMuted,
                                 borderRadius: BorderRadius.circular(99),
@@ -491,6 +607,39 @@ class _ConversationCardState extends State<_ConversationCard> {
                                 ),
                               ),
                             ),
+                            // 에이전트들이 실일정에서 합의한 약속 시간
+                            if (c.appointmentLabel != null) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.mint.withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_today_rounded,
+                                      size: 11,
+                                      color: AppColors.mint,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      c.appointmentLabel!,
+                                      style: AppTypography.caption.copyWith(
+                                        color: AppColors.mint,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             const Spacer(),
                             if (c.unread)
                               Container(
@@ -530,8 +679,11 @@ class _AppointmentBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.event_available_rounded,
-            size: 16, color: AppColors.mint),
+        const Icon(
+          Icons.event_available_rounded,
+          size: 16,
+          color: AppColors.mint,
+        ),
         const SizedBox(width: 6),
         Text(
           '약속 조율 완료',
@@ -596,7 +748,11 @@ class _AcceptAction extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle_rounded, size: 18, color: Colors.white),
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 18,
+              color: Colors.white,
+            ),
             const SizedBox(width: 6),
             Text(
               '만남 수락하기',
@@ -624,13 +780,15 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.chat_bubble_outline_rounded,
-                size: 48, color: AppColors.ink300),
+            const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 48,
+              color: AppColors.ink300,
+            ),
             const SizedBox(height: 12),
             Text(
               '아직 이 상태의 인연이 없어요',
-              style: AppTypography.bodyMedium
-                  .copyWith(color: AppColors.ink500),
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.ink500),
             ),
           ],
         ),

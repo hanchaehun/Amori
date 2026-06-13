@@ -3,7 +3,8 @@
 별도 LLM HTTP 서비스 없이 google-genai SDK를 직접 사용한다.
 - 채팅: gemini-2.5-flash + responseSchema(structured output) → SCHEMA_VIOLATION 소멸
 - 임베딩: gemini-embedding 계열, output_dimensionality=1024 (shared 계약 차원 유지)
-- 시뮬레이션: services/simulation.py 의 2-에이전트 턴 루프에 콜백 주입
+- 시뮬레이션: 원샷 — 양쪽 페르소나·일정을 한 번에 주고 대화 전체를 1콜로 생성
+  (구 턴별 1콜 방식 대비 쿼터·지연 대폭 감소, 모델이 대화 아크를 통째로 설계)
 """
 
 import asyncio
@@ -17,6 +18,7 @@ from app.llm.prompts import (
     PERSONA_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
     STARTERS_SYSTEM_PROMPT,
+    build_oneshot_simulation_prompt,
     build_persona_user_message,
     build_report_user_message,
     build_starters_user_message,
@@ -24,7 +26,7 @@ from app.llm.prompts import (
 from app.llm.prompts.persona import persona_embedding_text
 from app.schemas.persona import PersonaTrait, SpeechStyle
 from app.schemas.report import Finding, Place, Warning
-from app.services.simulation import run_two_agent_simulation
+from app.services.simulation import slot_label
 
 
 def _quota_retry_delay(exc: Exception) -> float | None:
@@ -59,12 +61,31 @@ class _PersonaOutput(BaseModel):
     sample_messages: list[str] = Field(min_length=3, max_length=3)
 
 
+class _ConvTurn(BaseModel):
+    # 원샷 대화의 한 메시지. partner_read·strategy는 내부 분석용(리포트 신호·약속 판정),
+    # text만 사용자에게 노출된다.
+    speaker: Literal["me", "them"]
+    text: str
+    strategy: Literal["알아가기", "약속 제안", "약속 수락", "마무리"]
+    partner_read: Literal["긍정적", "중립", "미온적"] = "긍정적"
+    # '약속 수락' 시 겹치는 일정의 번호(예: "S1"), 그 외엔 빈 문자열.
+    # 호출 후 엔진이 교집합 실재성을 재검증한다 — 환각 슬롯은 버려진다.
+    appointment_slot: str = ""
+
+
+class _ConversationOutput(BaseModel):
+    # 두 사람의 소개팅 대화 전체를 한 번에 — 턴마다 API를 부르지 않는다.
+    turns: list[_ConvTurn] = Field(min_length=6, max_length=24)
+
+
 class _SpeechOutput(BaseModel):
-    # 눈치 — 상대를 읽고(partner_read) 행동을 정한 뒤(strategy) 발화(text)한다.
-    # text만 사용자에게 노출하고 나머지는 내부 분석용(DB 저장)이다.
+    # 레거시 — 턴별 1콜 방식(services/simulation.py 의 run_two_agent_simulation
+    # 엔진 + 구 검증 스크립트)이 쓰는 단일 발화 스키마. run_simulation은 이제
+    # 원샷(_ConversationOutput)이라 프로덕션 경로에선 안 쓰인다.
     partner_read: Literal["긍정적", "중립", "미온적"]
     strategy: Literal["알아가기", "약속 제안", "약속 수락", "마무리"]
     text: str
+    appointment_slot: str = ""
 
 
 class _ReportOutput(BaseModel):
@@ -189,20 +210,52 @@ class GeminiProvider(LLMProvider):
         my_persona: dict,
         their_persona: dict,
         max_turns: int = 20,
+        my_slots: list[dict] | None = None,
+        their_slots: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
-        async def speak(system_prompt: str, history: list[dict]) -> dict:
-            output = await self._generate(
-                system_prompt,
-                self._to_contents(history),
-                _SpeechOutput,
-                temperature=0.9,
-            )
-            return output.model_dump()
+        """원샷 — 양쪽 정보를 한 번에 주고 대화 전체를 1콜로 생성한다.
 
-        async for turn in run_two_agent_simulation(
-            speak, my_persona, their_persona, max_turns
-        ):
-            yield turn
+        턴마다 호출하던 구조(15콜+)를 1콜로 줄여 쿼터·지연을 크게 낮추고, 모델이
+        대화 아크를 통째로 설계하게 해 더 사람다운 멀티토픽 대화를 얻는다. 다운스트림
+        계약(턴 리스트 + strategy·appointment_slot)은 그대로다. 약속 슬롯은 양쪽
+        일정 교집합 안에서만 인정한다(LLM 환각 방어 — 구 턴루프와 동일한 안전장치).
+        """
+        my_slots = my_slots or []
+        their_slots = their_slots or []
+        their_keys = {(s["date"], s["time"]) for s in their_slots}
+        common = [s for s in my_slots if (s["date"], s["time"]) in their_keys]
+        common_labels = (
+            [f"S{i + 1}) {slot_label(s)}" for i, s in enumerate(common)] if common else None
+        )
+
+        system_prompt, user_message = build_oneshot_simulation_prompt(
+            my_persona, their_persona, common_labels, max_turns=max_turns,
+        )
+        output = await self._generate(
+            system_prompt, user_message, _ConversationOutput, temperature=0.95,
+        )
+
+        def resolve(slot_id: str) -> dict | None:
+            raw = (slot_id or "").strip().upper().lstrip("S")
+            if not raw.isdigit():
+                return None
+            idx = int(raw) - 1
+            return common[idx] if 0 <= idx < len(common) else None
+
+        for i, t in enumerate(output.turns):
+            if i >= max_turns:
+                break
+            # 합의 슬롯은 '약속 수락' 턴에서만, 그리고 교집합에 실재할 때만 인정한다.
+            agreed = resolve(t.appointment_slot) if (common and t.strategy == "약속 수락") else None
+            yield {
+                "turn_index": i,
+                "speaker": t.speaker,
+                "text": t.text,
+                "partner_read": t.partner_read,
+                "strategy": t.strategy,
+                "appointment_slot": agreed,
+                "ai_generated": True,
+            }
 
     async def generate_report(
         self,
