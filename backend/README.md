@@ -32,6 +32,28 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
+### Docker 없이 시작하기
+
+Docker가 하는 일은 `pgvector` 확장이 깔린 Postgres를 띄우는 것뿐입니다. 그 DB만 다른 곳에서
+공급하면 Docker는 전혀 쓰지 않아도 됩니다. 가장 간편한 길은 pgvector가 기본 내장된 관리형
+Postgres(예: [Neon](https://neon.tech), [Supabase](https://supabase.com))의 무료 인스턴스를
+하나 만들어, `.env`의 `DATABASE_URL`만 그 연결 문자열로 바꾸는 것입니다.
+
+```bash
+# .env
+DATABASE_URL=postgresql+asyncpg://<user>:<password>@<host>:5432/<db>
+
+# 이후는 동일 — Docker 없이 바로
+pip install -r requirements.txt
+alembic upgrade head        # 원격 DB에 스키마 + pgvector 확장 생성
+uvicorn app.main:app --reload --port 8000
+```
+
+> 주의: 드라이버가 `asyncpg`이므로 Supabase에선 connection pooler(6543, transaction 모드)가
+> prepared statement와 충돌합니다. **직접 연결 포트(5432)** 를 쓰세요. 격리를 위해 협업자별로
+> 각자 본인 DB(또는 Neon 브랜치)를 쓰는 것을 권장합니다 — 하나의 원격 DB를 공유하면 마이그레이션·
+> 시드 데이터가 서로 덮어쓰입니다.
+
 API 문서: http://localhost:8000/docs
 
 ## 엔드포인트
@@ -66,7 +88,7 @@ API 문서: http://localhost:8000/docs
 발화를 생성하며, 4턴마다 별도 분석 호출이 궁합 시그널(system 턴)을 추출합니다.
 원샷 생성 대비 말투 섞임(style bleed)이 없고, 각 턴이 생성 즉시 SSE로 전송됩니다.
 
-## 디렉토리 구조와 소유권
+## 디렉토리 구조
 
 ```
 backend/
@@ -77,8 +99,8 @@ backend/
 │   ├── auth/              # Firebase ID 토큰 검증
 │   ├── db/                # 세션, 초기화
 │   ├── llm/               # LLMProvider 추상화 (mock | gemini)
-│   │   └── prompts/       # 한국어 프롬프트 ─ 이현정 소유
-│   ├── matching/          # 벡터 매칭 패키지 ─ 명세현 소유
+│   │   └── prompts/       # 한국어 프롬프트
+│   ├── matching/          # 벡터 매칭 패키지
 │   ├── middleware/        # 에러 핸들러, 일일 쿼터
 │   ├── models/            # SQLAlchemy 모델 (8 테이블)
 │   ├── routers/           # API 라우터

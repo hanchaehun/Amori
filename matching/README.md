@@ -1,7 +1,7 @@
 # AMORI Matching Module — `backend/app/matching/` 으로 흡수됨 (2026-06-10)
 
 매칭 알고리즘은 별도 서비스가 아닌 **백엔드 내 패키지**
-[`backend/app/matching/`](../backend/app/matching/) 으로 이동했습니다. **명세현 담당.**
+[`backend/app/matching/`](../backend/app/matching/) 으로 이동했습니다.
 
 근거: `docs/AMORI_리팩토링_방향.docx` — 본 README가 허용하던 "라이브러리 import"
 통합 방식 채택. 4인 팀·짧은 일정에서 배포 단위는 적을수록 좋고, `/matches/find`
@@ -22,4 +22,4 @@
 
 - 브랜치 prefix: `match/*`
 - 작업 디렉토리: `backend/app/matching/` 만 수정합니다.
-- 매칭 점수 산식 변경 시 손지민(백엔드) 리뷰 필수.
+- 매칭 점수 산식 변경 시 백엔드 리뷰 필수.

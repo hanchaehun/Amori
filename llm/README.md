@@ -11,7 +11,7 @@ HTTP 홉은 지연·장애지점·배포단위만 늘리는 순수 비용.
 
 | 구 책임 | 새 위치 |
 |---|---|
-| 한국어 프롬프트 엔지니어링 | [`backend/app/llm/prompts/`](../backend/app/llm/prompts/) — **이현정 소유 유지** |
+| 한국어 프롬프트 엔지니어링 | [`backend/app/llm/prompts/`](../backend/app/llm/prompts/) |
 | `/llm/persona` 등 HTTP 엔드포인트 4개 | `backend/app/llm/base.py` 의 4개 도메인 메서드 (HTTP 홉 제거) |
 | Mi:dm 추론 서버 (`midm_local.py`, `hf.py`) | 삭제 — Gemini SDK 직접 호출 (`backend/app/llm/gemini.py`) |
 | 한국어 임베딩 (1024차원) | Gemini Embedding `output_dimensionality=1024` (같은 키) |
