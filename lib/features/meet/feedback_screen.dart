@@ -69,7 +69,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Future<void> _onSubmit() async {
     HapticFeedback.mediumImpact();
     setState(() => _submitting = true);
-    // 피드백은 매칭 학습 루프의 입력 — BFF(Postgres)로 전송.
+    // 피드백은 매칭 품질 개선 신호 — BFF(Postgres)로 전송.
     // 백엔드 Match가 없는 더미 데모 플로우에서는 저장 없이 진행한다.
     final matchId = AgentSessionStore.instance.activeMatchId;
     if (_backend.currentUser != null && matchId != null) {

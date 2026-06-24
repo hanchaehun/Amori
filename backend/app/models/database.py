@@ -8,7 +8,7 @@ meet_requests, feedback, llm_call_logs.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -80,8 +80,14 @@ class Persona(Base):
     humor_style: Mapped[str] = mapped_column(String(200))
     value_keywords: Mapped[list] = mapped_column(JSONB)  # 3~7개 문자열
     speech_style: Mapped[dict] = mapped_column(JSONB)  # 말투 — 에이전트 발화 충실도의 핵심
-    sample_messages: Mapped[list] = mapped_column(JSONB)  # few-shot 발화 앵커 3개
+    sample_messages: Mapped[list] = mapped_column(JSONB)  # few-shot 발화 앵커 1~3개
     embedding = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    # 점진형 페르소나 보정 상태. raw answer 전문은 저장하지 않고 문항 코드만 보관한다.
+    answer_count: Mapped[int | None] = mapped_column(Integer)
+    answered_codes: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    persona_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    persona_confidence: Mapped[str] = mapped_column(String(20), default="low", server_default="low")
+    last_answered_on: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -222,7 +228,7 @@ class MeetRequest(Base):
 
 
 class Feedback(Base):
-    """만남 후 피드백 — 매칭 알고리즘 학습 루프의 입력."""
+    """만남 후 피드백 — 매칭 품질 개선 신호."""
 
     __tablename__ = "feedback"
 

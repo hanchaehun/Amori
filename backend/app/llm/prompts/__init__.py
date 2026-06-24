@@ -7,7 +7,11 @@
 담당: 이현정 — LLM 품질 작업은 이 디렉토리 안에서만 이루어진다.
 """
 
-from app.llm.prompts.persona import PERSONA_SYSTEM_PROMPT, build_persona_user_message
+from app.llm.prompts.persona import (
+    PERSONA_SYSTEM_PROMPT,
+    build_persona_update_user_message,
+    build_persona_user_message,
+)
 from app.llm.prompts.report import REPORT_SYSTEM_PROMPT, build_report_user_message
 from app.llm.prompts.simulation import (
     build_agent_system_prompt,
@@ -17,6 +21,7 @@ from app.llm.prompts.starters import STARTERS_SYSTEM_PROMPT, build_starters_user
 
 __all__ = [
     "PERSONA_SYSTEM_PROMPT",
+    "build_persona_update_user_message",
     "build_persona_user_message",
     "REPORT_SYSTEM_PROMPT",
     "build_report_user_message",

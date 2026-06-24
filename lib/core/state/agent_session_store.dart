@@ -40,6 +40,8 @@ class AgentSessionStore extends ChangeNotifier {
   AgentFlowPhase _phase = AgentFlowPhase.idle;
   bool _usedFallback = false;
   String? _lastError;
+  String? _dailyScenarioCode;
+  DateTime? _dailyCompletedDate;
 
   PersonaProfile? get profile => _profile;
   List<ConversationMessage> get conversation =>
@@ -59,6 +61,8 @@ class AgentSessionStore extends ChangeNotifier {
   /// BFF 파이프라인 실패로 더미 데이터로 진행 중인지 — 실패를 삼키지 않고 노출.
   bool get usedFallback => _usedFallback;
   String? get lastError => _lastError;
+  String? get dailyScenarioCode => _dailyScenarioCode;
+  DateTime? get dailyCompletedDate => _dailyCompletedDate;
 
   set profile(PersonaProfile? value) {
     _profile = value;
@@ -109,6 +113,21 @@ class AgentSessionStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setDailyPersonaStatus({
+    required String? scenarioCode,
+    DateTime? completedDate,
+  }) {
+    _dailyScenarioCode = scenarioCode;
+    _dailyCompletedDate = completedDate;
+    notifyListeners();
+  }
+
+  void markDailyPersonaCompleted(DateTime date) {
+    _dailyScenarioCode = null;
+    _dailyCompletedDate = date;
+    notifyListeners();
+  }
+
   void reset() {
     _profile = null;
     _conversation = [];
@@ -119,6 +138,8 @@ class AgentSessionStore extends ChangeNotifier {
     _phase = AgentFlowPhase.idle;
     _usedFallback = false;
     _lastError = null;
+    _dailyScenarioCode = null;
+    _dailyCompletedDate = null;
     notifyListeners();
   }
 }

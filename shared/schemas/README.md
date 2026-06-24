@@ -7,7 +7,7 @@ LLM 입출력과 백엔드 응답의 계약입니다. **LLM·백엔드 양쪽이
 > 신: **① LLM structured output 스키마** (Gemini responseSchema로 API 레벨 강제)
 > **② 백엔드 ↔ Flutter 응답 계약** (FastAPI Pydantic 스키마 ↔ `lib/data/` 모델)
 
-- `persona.schema.json` — 24문항 답변 → 페르소나 카드 (8 카테고리 traits + 1024차원 임베딩)
+- `persona.schema.json` — 초기/누적 시나리오 답변 → 페르소나 카드 (8 카테고리 traits + 1024차원 임베딩)
 - `simulation_turn.schema.json` — 에이전트 시뮬레이션의 한 턴 (SSE 이벤트 단위)
 - `report.schema.json` — 시뮬레이션 결과 → 케미 리포트
 - `starter.schema.json` — 인간 채팅에서 추천하는 대화 시작 문구

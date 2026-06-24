@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/agent_session_store.dart';
 
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
@@ -14,9 +15,21 @@ import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/backend/scenario_answers_store.dart';
 import '../../data/dummy/scenarios.dart';
+import '../../data/repositories/persona_repository.dart';
+
+enum ScenarioPlayerMode { initial, daily }
 
 class ScenarioPlayerScreen extends StatefulWidget {
-  const ScenarioPlayerScreen({super.key});
+  const ScenarioPlayerScreen({
+    super.key,
+    this.mode = ScenarioPlayerMode.initial,
+    this.scenarioCodes,
+    this.personaRepository,
+  });
+
+  final ScenarioPlayerMode mode;
+  final List<String>? scenarioCodes;
+  final PersonaRepository? personaRepository;
 
   @override
   State<ScenarioPlayerScreen> createState() => _ScenarioPlayerScreenState();
@@ -27,15 +40,27 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   // 객관식: 선택지 letter / 주관식: 사용자가 쓴 메시지 원문
   final Map<int, String> _answers = {};
   final TextEditingController _freeTextController = TextEditingController();
+  late final PersonaRepository _personaRepository;
+  bool _submitting = false;
 
-  static const int _categoryCount = 9;
   // 주관식은 "평소 말투"가 드러날 최소 길이만 요구 (한 마디면 충분)
   static const int _minFreeTextLength = 5;
 
-  Scenario get _current => kScenarios[_index];
-  bool get _isLast => _index == kScenarios.length - 1;
-  double get _progress => (_index + 1) / kScenarios.length;
-  int get _categoryIndex => int.parse(_current.code.split('-').first);
+  List<Scenario> get _scenarios {
+    final codes =
+        widget.scenarioCodes ??
+        (widget.mode == ScenarioPlayerMode.initial
+            ? kInitialScenarioCodes
+            : kDailyScenarioCodes.take(1).toList());
+    final scenarios = scenariosByCodes(codes);
+    return scenarios.isEmpty
+        ? scenariosByCodes(kInitialScenarioCodes)
+        : scenarios;
+  }
+
+  Scenario get _current => _scenarios[_index];
+  bool get _isLast => _index == _scenarios.length - 1;
+  double get _progress => (_index + 1) / _scenarios.length;
   String? get _selectedLetter => _answers[_index];
 
   bool get _canProceed {
@@ -43,6 +68,12 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     if (answer == null) return false;
     if (_current.isFreeText) return answer.trim().length >= _minFreeTextLength;
     return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _personaRepository = widget.personaRepository ?? PersonaRepository();
   }
 
   @override
@@ -67,38 +98,63 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     }
   }
 
-  void _next() {
-    if (!_canProceed) return;
+  Future<void> _next() async {
+    if (!_canProceed || _submitting) return;
     HapticFeedback.lightImpact();
     if (_isLast) {
-      ScenarioAnswersStore.save(
-        _answers.entries.map((entry) {
-          final scenario = kScenarios[entry.key];
-          if (scenario.isFreeText) {
-            return ScenarioAnswer(
-              code: scenario.code,
-              category: scenario.category,
-              question: scenario.question,
-              answerLetter: '주관식',
-              answerText: entry.value.trim(),
-            );
-          }
-          final choice = scenario.choices.firstWhere(
-            (choice) => choice.letter == entry.value,
-          );
-          return ScenarioAnswer(
-            code: scenario.code,
-            category: scenario.category,
-            question: scenario.question,
-            answerLetter: choice.letter,
-            answerText: choice.text,
-          );
-        }).toList(),
-      );
-      context.go(AppRoutes.personaLoading);
+      final answers = _toScenarioAnswers();
+      if (widget.mode == ScenarioPlayerMode.daily) {
+        await _submitDailyAnswer(answers.first);
+      } else {
+        ScenarioAnswersStore.save(answers);
+        if (mounted) context.go(AppRoutes.personaLoading);
+      }
     } else {
       setState(() => _index += 1);
       _syncFreeTextController();
+    }
+  }
+
+  List<ScenarioAnswer> _toScenarioAnswers() {
+    final entries = _answers.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return entries.map((entry) {
+      final scenario = _scenarios[entry.key];
+      if (scenario.isFreeText) {
+        return ScenarioAnswer(
+          code: scenario.code,
+          category: scenario.category,
+          question: scenario.question,
+          answerLetter: '주관식',
+          answerText: entry.value.trim(),
+        );
+      }
+      final choice = scenario.choices.firstWhere(
+        (choice) => choice.letter == entry.value,
+      );
+      return ScenarioAnswer(
+        code: scenario.code,
+        category: scenario.category,
+        question: scenario.question,
+        answerLetter: choice.letter,
+        answerText: choice.text,
+      );
+    }).toList();
+  }
+
+  Future<void> _submitDailyAnswer(ScenarioAnswer answer) async {
+    setState(() => _submitting = true);
+    try {
+      final profile = await _personaRepository.updatePersona(answer);
+      AgentSessionStore.instance.profile = profile;
+      AgentSessionStore.instance.markDailyPersonaCompleted(DateTime.now());
+      if (mounted) context.go(AppRoutes.home);
+    } catch (error) {
+      if (mounted) {
+        _showError('오늘의 답변을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -118,7 +174,12 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
 
   Future<void> _exit() async {
     if (_answers.isEmpty) {
-      if (mounted) context.pop();
+      if (!mounted) return;
+      if (widget.mode == ScenarioPlayerMode.daily) {
+        context.go(AppRoutes.home);
+      } else {
+        context.pop();
+      }
       return;
     }
     final shouldExit = await showDialog<bool>(
@@ -127,8 +188,36 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
       builder: (_) => const _ExitConfirmDialog(),
     );
     if (shouldExit == true && mounted) {
-      context.pop();
+      if (widget.mode == ScenarioPlayerMode.daily) {
+        context.go(AppRoutes.home);
+      } else {
+        context.pop();
+      }
     }
+  }
+
+  void _skip() {
+    if (widget.mode == ScenarioPlayerMode.daily) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.personaLoading);
+    }
+  }
+
+  void _showError(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(AppSpacing.md),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+      ),
+    );
   }
 
   @override
@@ -146,10 +235,10 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   Widget _buildBody() {
     return AppScaffold(
       appBar: _ScenarioAppBar(
-        categoryIndex: _categoryIndex,
-        categoryTotal: _categoryCount,
+        stepIndex: _index + 1,
+        stepTotal: _scenarios.length,
         onClose: _exit,
-        onSkip: () => context.go(AppRoutes.personaLoading),
+        onSkip: _skip,
       ),
       body: Column(
         children: [
@@ -219,9 +308,15 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
               AppSpacing.lg,
             ),
             child: GradientButton(
-              label: _isLast ? '완료' : '다음',
+              label: _submitting
+                  ? '저장 중...'
+                  : (_isLast
+                        ? (widget.mode == ScenarioPlayerMode.daily
+                              ? '답변 저장'
+                              : '완료')
+                        : '다음'),
               trailing: _isLast ? null : const GradientArrowTrailing(),
-              onPressed: _canProceed ? _next : null,
+              onPressed: _canProceed && !_submitting ? () => _next() : null,
             ),
           ),
         ],
@@ -232,14 +327,14 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
 
 class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _ScenarioAppBar({
-    required this.categoryIndex,
-    required this.categoryTotal,
+    required this.stepIndex,
+    required this.stepTotal,
     required this.onClose,
     required this.onSkip,
   });
 
-  final int categoryIndex;
-  final int categoryTotal;
+  final int stepIndex;
+  final int stepTotal;
   final VoidCallback onClose;
   final VoidCallback onSkip;
 
@@ -270,7 +365,7 @@ class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              '$categoryIndex / $categoryTotal',
+              '$stepIndex / $stepTotal',
               style: AppTypography.label.copyWith(
                 color: AppColors.ink700,
                 fontWeight: FontWeight.w700,
@@ -311,7 +406,7 @@ class _ClonigBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            '페르소나 클로닝 중',
+            '에이전트 설정 중',
             style: AppTypography.caption.copyWith(
               color: AppColors.primary,
               fontWeight: FontWeight.w700,
@@ -481,8 +576,11 @@ class _FreeTextCard extends StatelessWidget {
         AppSpacing.vSm,
         Row(
           children: [
-            const Icon(Icons.auto_awesome_rounded,
-                size: 14, color: AppColors.primary),
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 14,
+              color: AppColors.primary,
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(

@@ -33,10 +33,30 @@ class PersonaResponse(BaseModel):
     humor_style: str
     value_keywords: list[str] = Field(min_length=3, max_length=7)
     speech_style: SpeechStyle
-    sample_messages: list[str] = Field(min_length=3, max_length=3)
+    sample_messages: list[str] = Field(min_length=1, max_length=3)
     embedding: list[float] | None = None
     ai_generated: Literal[True] = True
+    answer_count: int | None = None
+    answered_codes: list[str] = Field(default_factory=list)
+    persona_revision: int = 1
+    persona_confidence: Literal["low", "medium", "high"] = "low"
+    last_answered_on: str | None = None
 
 
 class PersonaBuildRequest(BaseModel):
-    answers: list[dict]  # 24 question answers from Flutter
+    # Initial persona setup answers from Flutter. The first-run UX sends 5 answers;
+    # legacy/dev flows may still send more.
+    answers: list[dict]
+
+
+class PersonaUpdateRequest(BaseModel):
+    # One daily answer used to update the existing persona snapshot.
+    answer: dict
+
+
+class PersonaDailyStatusResponse(BaseModel):
+    completed_today: bool
+    scenario_code: str | None = None
+    answer_count: int | None = None
+    answered_codes: list[str] = Field(default_factory=list)
+    persona_revision: int = 1

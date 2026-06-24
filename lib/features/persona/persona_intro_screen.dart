@@ -48,9 +48,7 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
   void _connectExternal() {
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('S05-Import · 외부 데이터 연동 — 다음 턴 작업 예정'),
-      ),
+      const SnackBar(content: Text('S05-Import · 외부 데이터 연동 — 다음 턴 작업 예정')),
     );
   }
 
@@ -77,9 +75,9 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
                   ),
                   AppSpacing.vSm,
                   Text(
-                    '3개의 질문으로 구성된 8개의 시나리오를 플레이하며\n'
-                    '당신의 대화 스타일과 가치관을 학습합니다.\n'
-                    '약 10분 소요',
+                    '대표 질문 5개로 AI 에이전트 초안을 만들고\n'
+                    '매일 1문항으로 더 정교하게 업데이트합니다.\n'
+                    '약 2분 소요',
                     textAlign: TextAlign.center,
                     style: AppTypography.bodyMedium.copyWith(
                       color: AppColors.ink500,
@@ -90,7 +88,7 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
                   const _LearningCategoryRow(
                     emoji: '💬',
                     title: '대화 스타일',
-                    sub: '당신만의 소통 방식을 학습',
+                    sub: '당신만의 소통 방식을 반영',
                   ),
                   AppSpacing.vSm,
                   const _LearningCategoryRow(
@@ -139,7 +137,7 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '학습 데이터는 암호화되어 안전하게 보관됩니다',
+                      '답변 데이터는 암호화되어 안전하게 보관됩니다',
                       style: AppTypography.caption.copyWith(
                         color: AppColors.ink500,
                       ),
@@ -244,10 +242,7 @@ class _MiniPhoneCard extends StatelessWidget {
             ),
             child: const Text(
               '...',
-              style: TextStyle(
-                color: AppColors.ink700,
-                fontSize: 11,
-              ),
+              style: TextStyle(color: AppColors.ink700, fontSize: 11),
             ),
           ),
         ],
@@ -329,10 +324,7 @@ class _LearningCategoryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  title,
-                  style: AppTypography.label.copyWith(fontSize: 15),
-                ),
+                Text(title, style: AppTypography.label.copyWith(fontSize: 15)),
                 AppSpacing.vXxs,
                 Text(
                   sub,

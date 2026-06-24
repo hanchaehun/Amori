@@ -368,6 +368,40 @@ class MockLLMProvider(LLMProvider):
             "embedding": _random_embedding(),
         }
 
+    async def update_persona(
+        self, user_id: str, current_persona: dict, answer: dict
+    ) -> dict:
+        category = answer.get("category") or answer.get("code") or "일일 답변"
+        text = answer.get("answer_text") or answer.get("answerText") or ""
+        letter = answer.get("answer_letter") or answer.get("answerLetter") or ""
+
+        updated = {
+            "user_id": user_id,
+            "ai_generated": True,
+            "traits": [dict(t) for t in current_persona.get("traits", _BASE_TRAITS)],
+            "communication_style": current_persona.get("communication_style", ""),
+            "humor_style": current_persona.get("humor_style", ""),
+            "value_keywords": list(current_persona.get("value_keywords", [])),
+            "speech_style": dict(current_persona.get("speech_style", {})),
+            "sample_messages": list(current_persona.get("sample_messages", [])),
+            "embedding": _random_embedding(),
+        }
+
+        if letter == "주관식" or category == "말투 샘플":
+            if text:
+                samples = [*updated["sample_messages"], text.strip()]
+                updated["sample_messages"] = samples[-3:]
+        else:
+            key = category.split("/")[0].strip() or "일일 답변"
+            if key not in updated["value_keywords"]:
+                updated["value_keywords"] = [*updated["value_keywords"], key][:7]
+            for trait in updated["traits"]:
+                if trait.get("category") in category or category.startswith(trait.get("category", "")):
+                    trait["summary"] = f"최근 답변에서 {text or key} 성향이 보였어요"
+                    trait["keywords"] = list(dict.fromkeys([*trait.get("keywords", []), key]))[:4]
+                    break
+        return updated
+
     async def run_simulation(
         self,
         my_persona: dict,

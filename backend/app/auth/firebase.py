@@ -28,7 +28,12 @@ async def get_current_user(request: Request) -> dict:
     if settings.debug and token.startswith(_DEV_TOKEN_PREFIX):
         dev_uid = token[len(_DEV_TOKEN_PREFIX):].strip()
         if dev_uid:
-            return {"uid": dev_uid, "email": f"{dev_uid}@dev.local", "name": dev_uid}
+            return {
+                "uid": dev_uid,
+                "email": f"{dev_uid}@dev.local",
+                "name": dev_uid,
+                "is_dev": True,
+            }
     try:
         decoded = auth.verify_id_token(token)
         return {

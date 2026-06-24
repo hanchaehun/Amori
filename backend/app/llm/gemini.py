@@ -19,6 +19,7 @@ from app.llm.prompts import (
     REPORT_SYSTEM_PROMPT,
     STARTERS_SYSTEM_PROMPT,
     build_oneshot_simulation_prompt,
+    build_persona_update_user_message,
     build_persona_user_message,
     build_report_user_message,
     build_starters_user_message,
@@ -58,7 +59,7 @@ class _PersonaOutput(BaseModel):
     humor_style: str
     value_keywords: list[str] = Field(min_length=3, max_length=7)
     speech_style: SpeechStyle
-    sample_messages: list[str] = Field(min_length=3, max_length=3)
+    sample_messages: list[str] = Field(min_length=1, max_length=3)
 
 
 class _ConvTurn(BaseModel):
@@ -198,6 +199,21 @@ class GeminiProvider(LLMProvider):
             build_persona_user_message(answers),
             _PersonaOutput,
             temperature=0.6,
+        )
+        persona = output.model_dump()
+        persona["user_id"] = user_id
+        persona["ai_generated"] = True
+        persona["embedding"] = await self._embed(persona_embedding_text(persona))
+        return persona
+
+    async def update_persona(
+        self, user_id: str, current_persona: dict, answer: dict
+    ) -> dict:
+        output = await self._generate(
+            PERSONA_SYSTEM_PROMPT,
+            build_persona_update_user_message(current_persona, answer),
+            _PersonaOutput,
+            temperature=0.45,
         )
         persona = output.model_dump()
         persona["user_id"] = user_id

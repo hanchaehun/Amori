@@ -34,6 +34,49 @@ class Scenario {
   final String? hint;
 }
 
+const List<String> kInitialScenarioCodes = ['1-3', '3-3', '6-3', '8-1', '9-2'];
+
+const List<String> kDailyScenarioCodes = [
+  '9-1',
+  '9-3',
+  '2-1',
+  '7-3',
+  '5-2',
+  '4-2',
+  '8-3',
+  '6-2',
+  '3-1',
+  '7-1',
+  '1-1',
+  '4-1',
+  '5-1',
+  '2-2',
+  '8-2',
+  '3-2',
+  '6-1',
+  '5-3',
+  '4-3',
+  '1-2',
+  '2-3',
+  '7-2',
+];
+
+Scenario? scenarioByCode(String code) {
+  for (final scenario in kScenarios) {
+    if (scenario.code == code) return scenario;
+  }
+  return null;
+}
+
+List<Scenario> scenariosByCodes(List<String> codes) {
+  final scenarios = <Scenario>[];
+  for (final code in codes) {
+    final scenario = scenarioByCode(code);
+    if (scenario != null) scenarios.add(scenario);
+  }
+  return scenarios;
+}
+
 const List<Scenario> kScenarios = [
   // 1. 연락 / 대화 템포
   Scenario(
@@ -382,8 +425,7 @@ const List<Scenario> kScenarios = [
     code: '8-3',
     title: '관계 불안',
     contextLabel: '썸 / 연애 초반',
-    situation:
-        '상대의 답장이 전보다 짧아졌고, 만날 때도 조금 피곤해 보입니다. 큰 변화는 아니지만 당신은 신경이 쓰입니다.',
+    situation: '상대의 답장이 전보다 짧아졌고, 만날 때도 조금 피곤해 보입니다. 큰 변화는 아니지만 당신은 신경이 쓰입니다.',
     question: '당신은 보통 어떻게 하나요?',
     choices: [
       ChoiceOption('A', '일단 상황을 지켜본다'),
@@ -402,8 +444,7 @@ const List<Scenario> kScenarios = [
     code: '9-1',
     title: '난처한 상황 메시지',
     contextLabel: '소개팅 당일',
-    situation:
-        '오늘 만나기로 한 카페가 하필 정기 휴무라는 걸 방금 알았습니다. 약속 시간은 한 시간 뒤입니다.',
+    situation: '오늘 만나기로 한 카페가 하필 정기 휴무라는 걸 방금 알았습니다. 약속 시간은 한 시간 뒤입니다.',
     question: '상대에게 보낼 메시지를 평소 말투 그대로 써보세요.',
     isFreeText: true,
     hint: '평소 카톡 보내듯 편하게 써주세요. 이모지·ㅋㅋ·말버릇 모두 그대로!',
@@ -413,8 +454,7 @@ const List<Scenario> kScenarios = [
     code: '9-2',
     title: '취향 질문에 답하기',
     contextLabel: '썸',
-    situation:
-        '상대가 이렇게 물어봤습니다: "스트레스 풀 때 보통 뭐 하세요? 밖에서 활동하는 파예요, 집에서 쉬는 파예요?"',
+    situation: '상대가 이렇게 물어봤습니다: "스트레스 풀 때 보통 뭐 하세요? 밖에서 활동하는 파예요, 집에서 쉬는 파예요?"',
     question: '평소 말투 그대로 답장을 써보세요.',
     isFreeText: true,
     hint: '단답이든 길게든, 실제로 보낼 답장 그대로면 됩니다.',
@@ -424,8 +464,7 @@ const List<Scenario> kScenarios = [
     code: '9-3',
     title: '칭찬에 답하기',
     contextLabel: '소개팅 후',
-    situation:
-        '소개팅이 끝나고 상대에게 메시지가 왔습니다: "오늘 대화 진짜 즐거웠어요. 되게 다정하신 것 같아요 ㅎㅎ"',
+    situation: '소개팅이 끝나고 상대에게 메시지가 왔습니다: "오늘 대화 진짜 즐거웠어요. 되게 다정하신 것 같아요 ㅎㅎ"',
     question: '평소 말투 그대로 답장을 써보세요.',
     isFreeText: true,
     hint: '칭찬받았을 때 평소 반응 그대로 — 쑥스러우면 쑥스러운 대로!',

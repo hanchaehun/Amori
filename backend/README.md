@@ -63,7 +63,9 @@ API 문서: http://localhost:8000/docs
 | `GET` | `/health` | 헬스체크 | - |
 | `PUT` | `/users/me` | 프로필 저장 (Firestore 대체) | O |
 | `GET` | `/users/me` | 내 프로필 조회 | O |
-| `POST` | `/persona/build` | 24문항 답변 → 페르소나 + 임베딩 생성 | O |
+| `POST` | `/persona/build` | 초기 대표 답변 → 페르소나 + 임베딩 생성 | O |
+| `GET` | `/persona/daily` | 오늘의 1문항 상태 조회 | O |
+| `POST` | `/persona/update` | 오늘의 1문항 → 기존 페르소나 보정 | O |
 | `GET` | `/persona/me` | 내 페르소나 조회 | O |
 | `GET` | `/matches/find?top_k=10` | 벡터 유사도 매칭 (Match 행 find-or-create, UUID 반환) | O |
 | `POST` | `/simulation/run` | 2-에이전트 시뮬레이션 (SSE 턴 스트림) | O |
@@ -72,7 +74,7 @@ API 문서: http://localhost:8000/docs
 | `POST` | `/meet/request` | 만남 신청 (24시간 만료) | O |
 | `GET` | `/meet/request/{id}` | 만남 신청 조회 | O |
 | `POST` | `/meet/request/{id}/respond` | 만남 수락/거절 | O |
-| `POST` | `/feedback` | 만남 후 피드백 (매칭 학습 루프 입력) | O |
+| `POST` | `/feedback` | 만남 후 피드백 (매칭 품질 개선 신호) | O |
 
 ## LLM Provider
 

@@ -41,4 +41,7 @@ class AppRoutes {
 
   // Login (placeholder)
   static const String login = '/login';
+
+  static String dailyScenario(String code) =>
+      '$scenarioPlayer?mode=daily&code=$code';
 }

@@ -11,7 +11,7 @@ Flutter 클라이언트에 있던 검증된 한국어 프롬프트를 시드로 
 
 | 파일 | 책임 | 소비처 |
 |---|---|---|
-| `persona.py` | 24문항 답변 → 8 카테고리 페르소나 + 임베딩 입력 텍스트 | `gemini.build_persona` |
+| `persona.py` | 초기/누적 시나리오 답변 → 8 카테고리 페르소나 + 임베딩 입력 텍스트 | `gemini.build_persona` |
 | `simulation.py` | 에이전트별 시스템 프롬프트(자기 페르소나만) + 시그널 분석 | 2-에이전트 턴 루프 |
 | `report.py` | 시뮬레이션 로그 → 케미 리포트 | `gemini.generate_report` |
 | `starters.py` | 대화 시작 문구 3개 | `gemini.generate_starters` |

@@ -306,7 +306,7 @@ class _AgentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '8개 시나리오 · 마지막 학습 3일 전',
+                      '대표 질문 기반 · 답변 보완 가능',
                       style: AppTypography.caption.copyWith(
                         color: AppColors.ink500,
                         fontSize: 12,
@@ -315,7 +315,7 @@ class _AgentCard extends StatelessWidget {
                     AppSpacing.vSm,
                     _AgentLink(label: '성향 분석 카드 보기', onTap: onInsight),
                     const SizedBox(height: 4),
-                    _AgentLink(label: '페르소나 다시 학습하기', onTap: onRelearn),
+                    _AgentLink(label: '페르소나 답변 보완하기', onTap: onRelearn),
                   ],
                 ),
               ),

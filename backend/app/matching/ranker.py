@@ -2,7 +2,7 @@
 
 베이스라인: pgvector 코사인 거리 top-K. 진화 방향(매칭 모듈 로드맵):
 - 카테고리(가치관/유머/대화 패턴)별 가중 점수
-- 만남 후 피드백(Feedback 테이블)을 반영하는 학습 루프
+- 만남 후 피드백(Feedback 테이블)을 반영하는 품질 개선 신호
 """
 
 from dataclasses import dataclass

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/router/app_routes.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
@@ -12,6 +13,7 @@ import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/gradient_text.dart';
 import '../../data/repositories/match_repository.dart';
+import '../../data/repositories/persona_repository.dart';
 
 enum _StageState { done, active, locked }
 
@@ -42,10 +44,11 @@ class _StageItem {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.repository});
+  const HomeScreen({super.key, this.repository, this.personaRepository});
 
   /// 테스트에서 가짜 리포지토리를 주입한다. 기본은 실 BFF.
   final MatchRepository? repository;
+  final PersonaRepository? personaRepository;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -53,16 +56,29 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final MatchRepository _repo;
+  late final PersonaRepository _personaRepo;
   _HeroData _hero = const _HeroData(_HeroMode.loading);
+  DailyPersonaStatus? _dailyStatus;
+  bool _advancingDay = false;
+
+  bool get _showDailyQuestion =>
+      _dailyStatus != null &&
+      !_dailyStatus!.completedToday &&
+      _dailyStatus!.scenarioCode != null;
 
   @override
   void initState() {
     super.initState();
     _repo = widget.repository ?? MatchRepository();
+    _personaRepo = widget.personaRepository ?? PersonaRepository();
     _load();
   }
 
   Future<void> _load() async {
+    final dailyStatusFuture = _personaRepo
+        .fetchDailyStatus()
+        .then<DailyPersonaStatus?>((status) => status)
+        .catchError((_) => null);
     try {
       final matches = await _repo.listMatches();
       if (!mounted) return;
@@ -71,6 +87,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       // 백엔드 미연결(오프라인/dev 미설정) — 데모용 정적 상태로.
       setState(() => _hero = const _HeroData(_HeroMode.offline));
+    }
+    final dailyStatus = await dailyStatusFuture;
+    if (mounted) {
+      setState(() => _dailyStatus = dailyStatus);
     }
   }
 
@@ -99,6 +119,34 @@ class _HomeScreenState extends State<HomeScreen> {
     context.go(AppRoutes.inbox);
   }
 
+  void _openDailyQuestion() {
+    final code = _dailyStatus?.scenarioCode;
+    if (code == null) return;
+    context.push(AppRoutes.dailyScenario(code));
+  }
+
+  Future<void> _advanceDayForDev() async {
+    if (_advancingDay) return;
+    setState(() => _advancingDay = true);
+    try {
+      final status = await _personaRepo.advanceDayForDev();
+      if (!mounted) return;
+      setState(() {
+        _dailyStatus = status;
+        _advancingDay = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('개발 날짜를 하루 넘겼어요.')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _advancingDay = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('개발 날짜 변경 실패: $error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -119,17 +167,45 @@ class _HomeScreenState extends State<HomeScreen> {
                 const _Greeting(name: '지은'),
                 AppSpacing.vLg,
                 _HeroAICard(data: _hero, onTap: _openConnect),
+                if (_showDailyQuestion) ...[
+                  AppSpacing.vMd,
+                  _DailyQuestionCard(
+                    answerCount: _dailyStatus!.answerCount,
+                    onTap: _openDailyQuestion,
+                  ),
+                ],
+                if (AppConfig.devUid != null) ...[
+                  AppSpacing.vSm,
+                  _DevAdvanceDayButton(
+                    isLoading: _advancingDay,
+                    onPressed: _advanceDayForDev,
+                  ),
+                ],
                 AppSpacing.vXl,
-                const _StatusTracker(stages: [
-                  _StageItem(
-                      Icons.check_rounded, '페르소나 생성', _StageState.done),
-                  _StageItem(
-                      Icons.sync_rounded, 'Pre-Dating', _StageState.active),
-                  _StageItem(Icons.description_outlined, '리포트 발행',
-                      _StageState.locked),
-                  _StageItem(Icons.favorite_outline_rounded, '만남 연결',
-                      _StageState.locked),
-                ]),
+                const _StatusTracker(
+                  stages: [
+                    _StageItem(
+                      Icons.check_rounded,
+                      '페르소나 생성',
+                      _StageState.done,
+                    ),
+                    _StageItem(
+                      Icons.sync_rounded,
+                      'Pre-Dating',
+                      _StageState.active,
+                    ),
+                    _StageItem(
+                      Icons.description_outlined,
+                      '리포트 발행',
+                      _StageState.locked,
+                    ),
+                    _StageItem(
+                      Icons.favorite_outline_rounded,
+                      '만남 연결',
+                      _StageState.locked,
+                    ),
+                  ],
+                ),
                 AppSpacing.vXl,
                 _ReportSection(
                   onHeaderTap: () => context.push(AppRoutes.matchList),
@@ -246,8 +322,9 @@ class _HeroAICardState extends State<_HeroAICard> {
               AppSpacing.vXs,
               Text(
                 c.subtitle,
-                style: AppTypography.bodyMedium
-                    .copyWith(color: AppColors.ink500),
+                style: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.ink500,
+                ),
               ),
               AppSpacing.vMd,
               _HeroProgress(value: c.progress),
@@ -286,8 +363,8 @@ class _HeroAICardState extends State<_HeroAICard> {
         final sub = d.liveCount > 1
             ? '지금 ${d.liveCount}건의 소개팅이 오가고 있어요'
             : (d.turnCount > 0
-                ? '지금 ${d.turnCount}번째 대화가 오가고 있어요'
-                : '에이전트가 막 대화를 시작했어요');
+                  ? '지금 ${d.turnCount}번째 대화가 오가고 있어요'
+                  : '에이전트가 막 대화를 시작했어요');
         return _HeroContent(
           title: '$name-AI와\n소개팅 중',
           subtitle: sub,
@@ -347,6 +424,116 @@ class _HeroContent {
   final double progress;
 }
 
+class _DevAdvanceDayButton extends StatelessWidget {
+  const _DevAdvanceDayButton({
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        onPressed: isLoading ? null : onPressed,
+        icon: isLoading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.fast_forward_rounded, size: 18),
+        label: Text(isLoading ? '넘기는 중' : '개발: 다음날로 넘기기'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFFB5780A),
+          side: BorderSide(color: AppColors.warning.withValues(alpha: 0.45)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: AppTypography.caption.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyQuestionCard extends StatelessWidget {
+  const _DailyQuestionCard({required this.answerCount, required this.onTap});
+
+  final int? answerCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final countLabel = answerCount == null ? '답변 보완' : '누적 $answerCount문항';
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 14,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: AppRadius.rMd,
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.24)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            AppSpacing.hMd,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '오늘의 1문항',
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.ink900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  AppSpacing.vXxs,
+                  Text(
+                    '$countLabel · 에이전트 업데이트',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.ink500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.ink500,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _LiveBadge extends StatelessWidget {
   const _LiveBadge({required this.label, required this.dotColor});
 
@@ -367,10 +554,7 @@ class _LiveBadge extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: dotColor,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
@@ -431,7 +615,8 @@ class _StatusTracker extends StatelessWidget {
             if (i < stages.length - 1)
               Expanded(
                 child: _Connector(
-                  filled: stages[i].state == _StageState.done &&
+                  filled:
+                      stages[i].state == _StageState.done &&
                       stages[i + 1].state != _StageState.locked,
                 ),
               ),
@@ -541,10 +726,7 @@ class _DashedLinePainter extends CustomPainter {
 }
 
 class _ReportSection extends StatelessWidget {
-  const _ReportSection({
-    required this.onHeaderTap,
-    required this.onCardTap,
-  });
+  const _ReportSection({required this.onHeaderTap, required this.onCardTap});
 
   final VoidCallback onHeaderTap;
   final VoidCallback onCardTap;
@@ -566,8 +748,11 @@ class _ReportSection extends StatelessWidget {
                   style: AppTypography.titleMedium.copyWith(fontSize: 16),
                 ),
                 const Spacer(),
-                const Icon(Icons.chevron_right_rounded,
-                    color: AppColors.ink500, size: 22),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.ink500,
+                  size: 22,
+                ),
               ],
             ),
           ),
@@ -651,8 +836,7 @@ class _LockedMatchCardState extends State<_LockedMatchCard> {
                   ],
                 ),
               ),
-              const Icon(Icons.lock_rounded,
-                  color: AppColors.ink300, size: 18),
+              const Icon(Icons.lock_rounded, color: AppColors.ink300, size: 18),
             ],
           ),
         ),

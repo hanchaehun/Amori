@@ -69,8 +69,19 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.scenarioPlayer,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const ScenarioPlayerScreen()),
+        pageBuilder: (context, state) {
+          final mode = state.uri.queryParameters['mode'] == 'daily'
+              ? ScenarioPlayerMode.daily
+              : ScenarioPlayerMode.initial;
+          final code = state.uri.queryParameters['code'];
+          return _slidePage(
+            state,
+            ScenarioPlayerScreen(
+              mode: mode,
+              scenarioCodes: code == null ? null : [code],
+            ),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.personaLoading,

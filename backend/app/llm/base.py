@@ -15,7 +15,7 @@ class LLMProvider(ABC):
     async def build_persona(
         self, user_id: str, answers: list[dict]
     ) -> dict:
-        """Call ``POST /llm/persona``.
+        """Create the first persona snapshot from onboarding answers.
 
         Parameters
         ----------
@@ -28,6 +28,17 @@ class LLMProvider(ABC):
         -------
         dict
             Full persona dict including 1024-dim embedding vector.
+        """
+        ...
+
+    @abstractmethod
+    async def update_persona(
+        self, user_id: str, current_persona: dict, answer: dict
+    ) -> dict:
+        """Update an existing persona snapshot with one daily answer.
+
+        The provider returns a full persona dict so persistence can keep using
+        the same schema as initial persona creation.
         """
         ...
 
