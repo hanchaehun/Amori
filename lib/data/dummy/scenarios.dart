@@ -34,10 +34,11 @@ class Scenario {
   final String? hint;
 }
 
-const List<String> kInitialScenarioCodes = ['1-3', '3-3', '6-3', '8-1', '9-2'];
+const List<String> kInitialScenarioCodes = ['R-1', 'R-2', 'R-3', 'R-4', 'R-5'];
 
 const List<String> kDailyScenarioCodes = [
   '9-1',
+  '9-2',
   '9-3',
   '2-1',
   '7-3',
@@ -45,18 +46,19 @@ const List<String> kDailyScenarioCodes = [
   '4-2',
   '8-3',
   '6-2',
-  '3-1',
+  '6-3',
   '7-1',
-  '1-1',
   '4-1',
   '5-1',
   '2-2',
   '8-2',
   '3-2',
+  '3-3',
   '6-1',
   '5-3',
   '4-3',
   '1-2',
+  '1-3',
   '2-3',
   '7-2',
 ];
@@ -78,6 +80,80 @@ List<Scenario> scenariosByCodes(List<String> codes) {
 }
 
 const List<Scenario> kScenarios = [
+  // R. 대표 질문
+  Scenario(
+    category: '관계 목적 / 진지함',
+    code: 'R-1',
+    title: '원하는 관계',
+    contextLabel: '새로운 만남',
+    situation: '새로운 사람을 만난다면, 지금 원하는 관계에 가장 가까운 것은 무엇인가요?',
+    question: '당신의 선택은?',
+    choices: [
+      ChoiceOption('A', '부담 없이 알아가고 싶다'),
+      ChoiceOption('B', '천천히 연애 가능성을 확인하고 싶다'),
+      ChoiceOption('C', '진지한 연애를 원한다'),
+      ChoiceOption('D', '결혼 가능성까지 고려하고 싶다'),
+      ChoiceOption('E', '아직 명확하게 정하지 않았다'),
+    ],
+  ),
+  Scenario(
+    category: '연락 / 관계 확인',
+    code: 'R-2',
+    title: '연락 스타일',
+    contextLabel: '소개팅 이후',
+    situation: '첫 만남의 분위기는 좋았지만, 상대는 하루에 한두 번 정도만 답장합니다. 답장이 성의 없지는 않습니다.',
+    question: '당신의 생각에 가장 가까운 것은 무엇인가요?',
+    choices: [
+      ChoiceOption('A', '하루에 한두 번이면 충분하다'),
+      ChoiceOption('B', '짧게라도 자주 연락하고 싶다'),
+      ChoiceOption('C', '횟수보다 꾸준히 연락하는 것이 중요하다'),
+      ChoiceOption('D', '연락보다 직접 만났을 때의 대화가 중요하다'),
+    ],
+  ),
+  Scenario(
+    category: '감정 표현 / 갈등 대처',
+    code: 'R-3',
+    title: '서운함을 다루는 방식',
+    contextLabel: '썸 또는 연애 중',
+    situation: '상대의 말 때문에 조금 서운했습니다. 큰 문제는 아니지만 그냥 넘기면 계속 마음에 남을 것 같습니다.',
+    question: '당신은 보통 어떻게 하나요?',
+    choices: [
+      ChoiceOption('A', '그 자리에서 바로 이야기한다'),
+      ChoiceOption('B', '감정을 정리한 뒤 이야기한다'),
+      ChoiceOption('C', '상대가 먼저 알아차리는지 기다린다'),
+      ChoiceOption('D', '혼자 정리하고 넘어간다'),
+    ],
+  ),
+  Scenario(
+    category: '위로 / 정서적 욕구',
+    code: 'R-4',
+    title: '원하는 위로 방식',
+    contextLabel: '연애 중',
+    situation: '힘든 하루를 보낸 뒤 상대에게 “오늘 많이 지쳤어”라고 말했습니다.',
+    question: '상대가 어떻게 해주면 가장 좋나요?',
+    choices: [
+      ChoiceOption('A', '내 이야기를 들어주고 공감해준다'),
+      ChoiceOption('B', '해결 방법을 함께 찾아준다'),
+      ChoiceOption('C', '맛있는 음식이나 데이트로 기분을 전환해준다'),
+      ChoiceOption('D', '혼자 쉴 수 있도록 기다려준다'),
+    ],
+  ),
+  Scenario(
+    category: '핵심 가치관 / 매칭 우선순위',
+    code: 'R-5',
+    title: '관계에서 가장 중요한 것',
+    contextLabel: '장기 관계',
+    situation: '상대와 잘 지내더라도, 다음 중 하나가 부족하면 장기적으로 가장 힘들 것 같은 것은 무엇인가요?',
+    question: '당신에게 가장 중요한 것은 무엇인가요?',
+    choices: [
+      ChoiceOption('A', '대화가 잘 통하는 것'),
+      ChoiceOption('B', '신뢰할 수 있고 행동이 일관적인 것'),
+      ChoiceOption('C', '애정과 관심을 표현하는 것'),
+      ChoiceOption('D', '생활 방식과 데이트 취향이 잘 맞는 것'),
+      ChoiceOption('E', '서로의 시간과 선택을 존중하는 것'),
+    ],
+  ),
+
   // 1. 연락 / 대화 템포
   Scenario(
     category: '연락 / 대화 템포',
