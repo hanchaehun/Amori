@@ -56,7 +56,10 @@ _PERSONA_JSON_HINT = """
 {"traits":[{"category":"연락 템포","summary":"한 문장","keywords":["..",".."]}, ...총 8개, 순서: 연락 템포·유머·갈등·데이트·돈·시간·관계 속도·경계선·위로],
  "communication_style":"명사구","humor_style":"명사구","value_keywords":["..3~7개"],
  "speech_style":{"formality":"반말|존댓말|혼용","emoji_usage":"거의 안 씀|가끔|자주","laugh_style":"ㅋㅋ 등","sentence_length":"짧고 간결|보통|길게 풀어 씀","tone_keywords":["..2~4개"],"verbal_habits":"","punctuation_habits":"","reaction_style":"공감형|논리형|중간"},
- "sample_messages":["..1~3개"]}"""
+ "sample_messages":["..1~3개"]}
+
+[말투 샘플]이 없으면 sample_messages를 빈 배열로 두지 말고, 추론한 speech_style에
+맞는 자연스러운 메신저 문장 1~3개를 직접 만들어 넣으세요(초기 온보딩은 객관식만 있음)."""
 
 _SIMULATION_JSON_HINT = """
 
