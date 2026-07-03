@@ -9,7 +9,7 @@
 
 | 주제 | 위치 |
 |---|---|
-| 리팩토링 근거·전체 방향 | `docs/AMORI_리팩토링_방향.docx`, `refatodo.md` |
+| 리팩토링 근거·전체 방향 | `refatodo.md` (당시 결정 문서는 git 이력 adf2921) |
 | 프롬프트 작업 가이드 (이현정) | [`app/llm/prompts/README.md`](app/llm/prompts/README.md) |
 | LLM provider 구조 (mock/gemini) | [`README.md`](README.md#llm-provider) |
 | 입출력 계약 | [`../shared/schemas/README.md`](../shared/schemas/README.md) |
