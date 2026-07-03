@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"flutter analyze lib/core/config/app_config.dart lib/data/models/persona.dart lib/core/state/persona_store.dart lib/core/services/llm_service.dart lib/core/services/persona_service.dart lib...",
-  "error": "Exit code 1\nUnhandled exception:\nFormatException: Unterminated string (at character 2163)\n...1/%E1%84%8E%E1%85%A1%E1%86%BC%E1%84%89%E1%85%A9%E1%84%8E%E1%85%A1%E1%86%BC/\n                                                                              ^\n\n#0      _ChunkedJsonParser.fail (dart:convert-patch/convert_patch.dart:1467)\n#1      _ChunkedJsonParser.close (dart:convert-patch/convert_patch.dart:490)\n#2      _parseJson (dart:convert-patch/convert_patch.dart:36)\n#3      JsonDecoder.convert (dart:...",
-  "timestamp": "2026-05-31T15:24:01.176Z",
-  "retry_count": 1
-}

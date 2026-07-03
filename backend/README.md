@@ -54,6 +54,20 @@ uvicorn app.main:app --reload --port 8000
 > 각자 본인 DB(또는 Neon 브랜치)를 쓰는 것을 권장합니다 — 하나의 원격 DB를 공유하면 마이그레이션·
 > 시드 데이터가 서로 덮어쓰입니다.
 
+### 개발용 매칭 풀 시드 (100명)
+
+실 가입자가 가입 직후 바로 매칭 상대를 만나도록, 이름에 `(개발용)`이 붙은
+가짜 계정 100명을 실제 Gemini 임베딩(1024차원)과 함께 깔 수 있습니다.
+`.env`의 `DATABASE_URL`·`GEMINI_API_KEY`만 있으면 1회 실행으로 끝납니다
+(재실행 멱등 — 기존 시드는 건너뜀, `--force`로 재생성):
+
+```bash
+python -X utf8 scripts/seed_fake_users.py --count 100
+```
+
+실행 끝에 시드 1명 기준 top-5 매칭 쿼리(pgvector 코사인 + 성별 상호 필터)까지
+자동 검증합니다.
+
 API 문서: http://localhost:8000/docs
 
 ## 엔드포인트
@@ -100,7 +114,7 @@ backend/
 │   ├── dependencies.py    # DI (DB, LLM)
 │   ├── auth/              # Firebase ID 토큰 검증
 │   ├── db/                # 세션, 초기화
-│   ├── llm/               # LLMProvider 추상화 (mock | gemini)
+│   ├── llm/               # LLMProvider 추상화 (mock | gemini | modoo)
 │   │   └── prompts/       # 한국어 프롬프트
 │   ├── matching/          # 벡터 매칭 패키지
 │   ├── middleware/        # 에러 핸들러, 일일 쿼터

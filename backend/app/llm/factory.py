@@ -29,7 +29,20 @@ def create_llm_provider(provider_name: str | None = None) -> LLMProvider:
                 embedding_dim=settings.embedding_dim,
             )
 
+        case "modoo":
+            from app.llm.modoo import ModooProvider
+
+            # 채팅은 DevDive, 임베딩은 Gemini — gemini_api_key(임베딩용)를 함께 넘긴다.
+            return ModooProvider(
+                api_key=settings.modoo_api_key,
+                base_url=settings.modoo_base_url,
+                chat_model=settings.modoo_chat_model,
+                gemini_api_key=settings.gemini_api_key,
+                embedding_model=settings.gemini_embedding_model,
+                embedding_dim=settings.embedding_dim,
+            )
+
         case _:
             raise ValueError(
-                f"Unknown LLM provider: {name!r}. Valid options: mock, gemini"
+                f"Unknown LLM provider: {name!r}. Valid options: mock, gemini, modoo"
             )

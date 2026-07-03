@@ -4,11 +4,17 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # LLM — 외부 API 직접 호출 (별도 LLM 서비스 없음)
-    llm_provider: str = "mock"  # mock | gemini
+    llm_provider: str = "mock"  # mock | gemini | modoo
     gemini_api_key: str = ""
     gemini_chat_model: str = "gemini-2.5-flash"
     gemini_embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 1024  # shared/schemas 계약 — 변경 시 pgvector 인덱스도 재생성
+
+    # DevDive(모두의창업) — 채팅(페르소나·시뮬·리포트·스타터) 담당. 임베딩은 Gemini 유지.
+    # 따라서 LLM_PROVIDER=modoo 여도 GEMINI_API_KEY(임베딩용)가 필요하다.
+    modoo_api_key: str = ""
+    modoo_base_url: str = "https://modoo.devdive.me"
+    modoo_chat_model: str = "modoo-text-pro"
 
     # Database
     database_url: str = "postgresql+asyncpg://amori:amori_dev@localhost:5432/amori"
