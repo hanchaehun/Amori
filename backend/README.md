@@ -78,6 +78,10 @@ API 문서: http://localhost:8000/docs
 | `POST` | `/persona/update` | 오늘의 1문항 → 기존 페르소나 보정 | O |
 | `GET` | `/persona/me` | 내 페르소나 조회 | O |
 | `GET` | `/matches/find?top_k=10` | 벡터 유사도 매칭 (Match 행 find-or-create, UUID 반환) | O |
+| `GET` | `/matches` | 대화 카드 목록 — 수락 가능 여부(리포트 게이트)·실패 분류 포함 | O |
+| `POST` | `/matches/{id}/accept` | 만남 수락 (조건: 리포트 75점+, 양쪽 수락 시 scheduled) | O |
+| `POST` | `/matches/{id}/appointment` | 직접 채팅에서 합의한 약속 확정 (scheduled 전용) | O |
+| `POST` | `/matches/{id}/cancel` | 약속·만남 취소 (시스템 안내 메시지 남김) | O |
 | `POST` | `/simulation/run` | 에이전트 시뮬레이션 (SSE 턴 스트림) | O |
 | `GET` | `/simulation/{job_id}` | 시뮬레이션 상태 조회 | O |
 | `GET` | `/report/{match_id}` | 케미 리포트 (서버 캐싱) | O |
