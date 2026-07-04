@@ -147,9 +147,10 @@ _ARCHETYPES: list[dict] = [
     },
 ]
 
-# topic → 7턴 대화 대본. 전 대본이 동일한 눈치 흐름(알아가기→약속 제안→약속 수락→마무리)을
-# 지켜 약속 성립/슬롯 로직은 그대로 동작하고, 텍스트만 주제별로 달라진다.
-# 약속 수락 턴의 {slot}은 합의 슬롯 라벨(없으면 '토요일 저녁')로 치환된다.
+# topic → 7턴 대화 대본. 전 대본이 동일한 눈치 흐름(알아가기→호감 상승→마무리)을
+# 공유하고, 텍스트만 주제별로 달라진다. 시뮬은 약속을 잡지 않으므로(07-04 결정)
+# 대본 튜플의 구 약속 strategy는 run_simulation이 '알아가기'로 정규화하고,
+# {slot}은 확정 없는 표현('주말쯤')으로 치환된다.
 _DIALOGUES: dict[str, list[tuple]] = {
     "travel": [
         ("me", "안녕하세요! ㅎㅎ 프로필 보니까 여행 진짜 좋아하시는 것 같던데, 최근에 어디 다녀오셨어요?", "중립", "알아가기"),
@@ -407,35 +408,23 @@ class MockLLMProvider(LLMProvider):
         my_persona: dict,
         their_persona: dict,
         max_turns: int = 20,
-        my_slots: list[dict] | None = None,
-        their_slots: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
-        # 눈치 흐름 데모: 알아가기 → 긍정 신호 → 약속 제안 → 약속 수락 → 마무리.
-        # partner_read·strategy는 내부 분석용(사용자 비노출). 약속 수락이 나오면
-        # appointment_ready가 켜진다. 대화 주제는 상대 아키타입에 맞춰 고른다 —
-        # 더는 모든 매치가 같은 대본을 공유하지 않는다.
-        # 일정 조율 데모: 양쪽 일정이 있으면 교집합 첫 슬롯으로 약속을 잡는다.
-        from app.services.simulation import slot_label
-
-        agreed: dict | None = None
-        if my_slots and their_slots:
-            their_keys = {(s["date"], s["time"]) for s in their_slots}
-            agreed = next(
-                (s for s in my_slots if (s["date"], s["time"]) in their_keys), None
-            )
-        slot_phrase = slot_label(agreed) if agreed else "토요일 저녁"
-
+        # 눈치 흐름 데모: 알아가기 → 긍정 신호 → 호감 표현 → 마무리.
+        # partner_read·strategy는 내부 분석용(사용자 비노출). 시뮬은 약속을 잡지
+        # 않는다(2026-07-04 결정 — 만남은 수락 후 직접 채팅에서). 대본의 {slot}은
+        # 확정 없는 표현으로 치환하고, 구 약속 strategy는 알아가기로 정규화한다.
         script = _DIALOGUES[_topic_for(their_persona)]
         for i, (speaker, text, partner_read, strategy) in enumerate(script):
             if i >= max_turns:
                 break
+            if strategy not in ("알아가기", "마무리"):
+                strategy = "알아가기"
             yield {
                 "turn_index": i,
                 "speaker": speaker,
-                "text": text.replace("{slot}", slot_phrase),
+                "text": text.replace("{slot}", "주말쯤"),
                 "partner_read": partner_read,
                 "strategy": strategy,
-                "appointment_slot": agreed if strategy == "약속 수락" else None,
                 "ai_generated": True,
             }
             await asyncio.sleep(0.3)
@@ -502,26 +491,3 @@ class MockLLMProvider(LLMProvider):
             "ai_generated": True,
         }
 
-    async def generate_starters(
-        self,
-        my_persona: dict,
-        their_persona: dict,
-        recent_history: list[dict] | None = None,
-    ) -> dict:
-        if recent_history:
-            return {
-                "starters": [
-                    {"label": "💬 이전 대화", "message": "저번에 얘기한 카페 가봤어요? 후기가 궁금해요!"},
-                    {"label": "🌤️ 만남 제안", "message": "오늘 날씨가 산책하기 딱 좋은데, 혹시 시간 되세요?"},
-                    {"label": "😊 호기심", "message": "요즘 재밌는 거 발견했는데 같이 해볼래요? ㅎㅎ"},
-                ],
-                "ai_generated": True,
-            }
-        return {
-            "starters": [
-                {"label": "✈️ 여행 토크", "message": "최근에 제일 기억에 남는 여행지가 어디예요?"},
-                {"label": "☕ 카페 탐방", "message": "혹시 주말에 카페 가시는 거 좋아하세요? 요즘 분위기 좋은 곳 발견해서요"},
-                {"label": "📸 프로필 칭찬", "message": "프로필 사진이 되게 좋은 곳에서 찍으셨더라고요~ 어디예요?"},
-            ],
-            "ai_generated": True,
-        }

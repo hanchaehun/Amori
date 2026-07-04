@@ -71,7 +71,8 @@ class MatchSummary {
   /// 약속·점수 정보는 송출이 끝날 때까지 백엔드가 가린다(라이브 관전).
   final bool agentLive;
 
-  /// 에이전트들이 양쪽 실일정에서 합의한 약속 라벨 ("6월 14일(토) 저녁").
+  /// 사용자들이 직접 채팅에서 확정한 약속 라벨 ("6월 14일(토) 저녁").
+  /// 시뮬은 약속을 잡지 않는다(07-04 결정) — 약속의 주체는 사용자.
   final String? appointmentSlot;
 
   /// 케미 점수(리포트). [score]는 벡터 매칭 점수.
@@ -176,7 +177,7 @@ class MatchConversation {
   final List<AgentTurn> agentTurns;
   final List<DirectMessage> messages;
 
-  /// 합의된 약속 라벨 ("6월 13일(토) 저녁"). 취소되면 null.
+  /// 사용자들이 직접 확정한 약속 라벨 ("6월 13일(토) 저녁"). 아직 안 잡았거나 취소되면 null.
   final String? appointmentSlot;
 
   factory MatchConversation.fromJson(Map<String, dynamic> json) =>
@@ -266,6 +267,22 @@ class MatchRepository {
         await _api.postJson('/matches/$matchId/messages', {'text': text})
             as Map<String, dynamic>;
     return DirectMessage.fromJson(json);
+  }
+
+  /// 직접 채팅에서 합의한 약속을 확정 기록 — scheduled 매치에서만.
+  /// 반환값은 약속 라벨("6월 14일(토) 저녁"). 채팅방에 시스템 안내가 남는다.
+  Future<String> setAppointment(
+    String matchId, {
+    required String date, // YYYY-MM-DD
+    required String time, // 점심 | 저녁
+  }) async {
+    final json =
+        await _api.postJson('/matches/$matchId/appointment', {
+              'date': date,
+              'time': time,
+            })
+            as Map<String, dynamic>;
+    return json['appointment_slot'] as String? ?? '';
   }
 
   /// 약속 취소 — 매치가 '진행 중'으로 돌아가고 예약된 시간이 풀린다.

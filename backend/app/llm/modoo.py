@@ -21,22 +21,19 @@ from pydantic import BaseModel, ValidationError
 
 from app.llm.base import LLMProvider
 from app.llm.embedding import GeminiEmbedder
-from app.llm.oneshot import common_slots, iter_finalized_turns
+from app.llm.oneshot import iter_finalized_turns
 from app.llm.output_schemas import (
     ConversationOutput,
     PersonaOutput,
     ReportOutput,
-    StartersOutput,
 )
 from app.llm.prompts import (
     PERSONA_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
-    STARTERS_SYSTEM_PROMPT,
     build_oneshot_simulation_prompt,
     build_persona_update_user_message,
     build_persona_user_message,
     build_report_user_message,
-    build_starters_user_message,
 )
 from app.llm.prompts.persona import persona_embedding_text
 
@@ -64,7 +61,7 @@ _PERSONA_JSON_HINT = """
 _SIMULATION_JSON_HINT = """
 
 출력 JSON 형식:
-{"turns":[{"speaker":"me|them","text":"발화","strategy":"알아가기|약속 제안|약속 수락|마무리","partner_read":"긍정적|중립|미온적","appointment_slot":"겹치는 일정 번호(예: S1) 또는 빈 문자열"}]}"""
+{"turns":[{"speaker":"me|them","text":"발화","strategy":"알아가기|마무리","partner_read":"긍정적|중립|미온적"}]}"""
 
 
 class ModooError(Exception):
@@ -238,13 +235,10 @@ class ModooProvider(LLMProvider):
         my_persona: dict,
         their_persona: dict,
         max_turns: int = 20,
-        my_slots: list[dict] | None = None,
-        their_slots: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """원샷 — 양쪽 정보를 한 번에 주고 대화 전체를 1콜로 생성한다."""
-        common, common_labels = common_slots(my_slots, their_slots)
         system_prompt, user_message = build_oneshot_simulation_prompt(
-            my_persona, their_persona, common_labels, max_turns=max_turns,
+            my_persona, their_persona, max_turns=max_turns,
         )
         output = await self._chat_json(
             system_prompt + _SIMULATION_JSON_HINT,
@@ -253,7 +247,7 @@ class ModooProvider(LLMProvider):
             temperature=0.95,
             max_tokens=4000,
         )
-        for turn in iter_finalized_turns(output.turns, common, max_turns):
+        for turn in iter_finalized_turns(output.turns, max_turns):
             yield turn
 
     async def generate_report(
@@ -272,20 +266,3 @@ class ModooProvider(LLMProvider):
         report = output.model_dump()
         report["ai_generated"] = True
         return report
-
-    async def generate_starters(
-        self,
-        my_persona: dict,
-        their_persona: dict,
-        recent_history: list[dict] | None = None,
-    ) -> dict:
-        output = await self._chat_json(
-            STARTERS_SYSTEM_PROMPT,
-            build_starters_user_message(my_persona, their_persona, recent_history),
-            StartersOutput,
-            temperature=0.8,
-            max_tokens=800,
-        )
-        result = output.model_dump()
-        result["ai_generated"] = True
-        return result

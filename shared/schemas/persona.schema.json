@@ -51,6 +51,52 @@
       "minItems": 1,
       "maxItems": 3
     },
+    "voice_stats": {
+      "type": ["object", "null"],
+      "description": "코드가 계산한 말투 측정값 (backend voice_features — LLM 추측 금지). 실측 발화가 없으면 null. speech_style(LLM 추론 요약)과 달리 시뮬 프롬프트의 수치 지시 원천.",
+      "properties": {
+        "sample_count": { "type": "integer", "description": "실측 발화 수 = 신뢰도의 근거" },
+        "formality_ratio": { "type": "object", "description": "{\"존댓말\": 0.9, \"반말\": 0.1} — 어미 표지가 있는 메시지만 분모. 합이 0이면 근거 없음." },
+        "len_chars": { "type": "object", "description": "{\"p25\", \"p50\", \"p75\"} 글자 수 백분위" },
+        "laugh": { "type": "object", "description": "{\"token\": \"ㅋ\", \"avg_run\": 3.2, \"per_msg\": 0.6}" },
+        "emoji": { "type": "object", "description": "{\"per_msg\": 0.0, \"inventory\": []} — 실제 쓰는 이모지만" },
+        "punct_per_msg": { "type": "object", "description": "부호 습관 메시지당 빈도 (~/!!/…/ㅠㅠ/^^/;;). 0인 키는 없음 = 안 쓰는 습관." },
+        "question_ratio": { "type": "number" },
+        "interjections": { "type": "array", "items": { "type": "string" }, "description": "감탄사 빈도순 (헉/헐 등)" }
+      }
+    },
+    "sample_bank": {
+      "type": "array",
+      "description": "실측 발화 뱅크 — sample_messages(1~3)의 원천이자 확장. 출처 등급: user_written > kakao > llm_seed(실측이 들어오면 교체).",
+      "items": {
+        "type": "object",
+        "required": ["text", "source"],
+        "properties": {
+          "text": { "type": "string" },
+          "register": { "type": "string", "description": "말투 단면 태그. v1은 문항 코드(9-1 등), 레지스터 라벨은 P1." },
+          "source": { "type": "string", "enum": ["user_written", "kakao", "llm_seed"] },
+          "collected_at": { "type": "string", "description": "ISO 날짜" }
+        }
+      }
+    },
+    "voice_confidence": {
+      "type": ["number", "null"],
+      "description": "말투 신뢰도 0~0.9 — sample_count 기반(1-exp(-n/7)). 상한 0.9는 카톡 import·레지스터 커버리지 몫."
+    },
+    "response_preferences": {
+      "type": "array",
+      "description": "정답지 — '이 상황에서 어떤 답장을 받고 싶은가'. 평가 전용: 리포트 채점(반응성 매칭)에만 사용. 시뮬 프롬프트 주입 금지(정직한 시뮬 훼손), 매칭 하드필터 금지(명시적 선호는 실제 끌림을 예측하지 못함 — Eastwick&Finkel 2008, Joel 2017).",
+      "items": {
+        "type": "object",
+        "required": ["desired_reply"],
+        "properties": {
+          "code": { "type": "string", "description": "유발 문항 코드" },
+          "situation": { "type": "string" },
+          "desired_reply": { "type": "string", "description": "사용자가 직접 쓴 '받고 싶은 답장'" },
+          "collected_at": { "type": "string" }
+        }
+      }
+    },
     "embedding": {
       "type": ["array", "null"],
       "items": { "type": "number" },

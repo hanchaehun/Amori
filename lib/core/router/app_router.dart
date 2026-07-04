@@ -26,7 +26,6 @@ import '../../features/meet/quota_exceeded_screen.dart';
 import '../../features/meet/request_declined_screen.dart';
 import '../../features/meet/request_status_screen.dart';
 import '../../features/meet/request_timeout_screen.dart';
-import '../../features/meet/scheduling_screen.dart';
 import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
 import '../../features/persona/scenario_player_screen.dart';
@@ -175,11 +174,6 @@ class AppRouter {
                 : null,
           ),
         ),
-      ),
-      GoRoute(
-        path: AppRoutes.scheduling,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const SchedulingScreen()),
       ),
       GoRoute(
         path: AppRoutes.feedback,

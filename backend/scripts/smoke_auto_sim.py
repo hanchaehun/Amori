@@ -3,7 +3,8 @@
 전용 스모크 유저 3명을 만들어 run_auto_simulation 한 사이클을 검증한다:
   ⓪ 관심 성별 상호 필터 — A(남·관심 여)에게 B(여·관심 남)는 후보, C(여·관심 여)는 제외
   ① 매칭 후보 선택(시뮬 없던 상대 우선) ② 시뮬레이션 완료 + 턴 저장
-  ③ 약속 성립(교집합 슬롯) ④ 리포트 생성 + 게이트 규칙 ⑤ 일일 한도 스킵
+  ③ 리포트 생성 + 게이트 규칙 ④ 일일 한도 스킵
+  (시뮬은 약속을 잡지 않는다 — 2026-07-04 결정. 약속 관련 단언은 제거됨)
 
 끝나면 스모크 유저·매치를 지워 DB를 원복한다 (다른 시드/실데이터 불변).
 
@@ -129,26 +130,23 @@ async def main():
                 select(Match).where(Match.id == jobs[0].match_id)
             )).scalar_one()
             assert match.status == "simulated"
-            # mock은 교집합 첫 슬롯(일 점심)으로 약속을 잡는다
-            assert match.appointment_slot == SUN_LUNCH, f"슬롯 불일치: {match.appointment_slot}"
 
             report = (await db.execute(
                 select(Report).where(Report.match_id == match.id)
             )).scalar_one_or_none()
             assert report is not None, "리포트 미생성"
             assert summary["report_score"] == report.score
-            # 게이트 규칙: 75 미만이면 약속 무효였어야 한다
+            # 게이트 규칙: 75 미만이면 수락 진행분이 리셋됐어야 한다
             if report.score < 75:
-                assert match.appointment_ready is False
-            print(f"① ~④ OK — {summary['total_turns']}턴, 약속={match.appointment_ready}, "
-                  f"점수={report.score}, 슬롯={match.appointment_slot}")
+                assert match.accepted_by == []
+            print(f"①~③ OK — {summary['total_turns']}턴, 점수={report.score}")
 
-            # ⑤ 일일 한도(2로 설정): 2회째 실행 후 3회째는 스킵돼야 한다
+            # ④ 일일 한도(2로 설정): 2회째 실행 후 3회째는 스킵돼야 한다
             second = await run_auto_simulation(db, llm, UID_A, target_user_id=UID_B)
             assert second is not None, "2회째가 한도에 막힘 (한도=2)"
             third = await run_auto_simulation(db, llm, UID_A, target_user_id=UID_B)
             assert third is None, "3회째가 한도를 뚫었다"
-            print("⑤ OK — 일일 한도 스킵 동작")
+            print("④ OK — 일일 한도 스킵 동작")
 
             print("\nSMOKE PASS")
         finally:

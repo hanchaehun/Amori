@@ -45,10 +45,10 @@ class PushPreviewScreen extends StatelessWidget {
     ),
     _PushNoti(
       icon: Icons.calendar_month_rounded,
-      title: '내일 오후 3시 약속이 있어요',
-      body: '강남역 블루보틀 · 김현우님과 첫 만남',
+      title: '내일 저녁 약속이 있어요',
+      body: '김현우님과 첫 만남 — 채팅에서 확정한 약속이에요',
       time: '1시간 전',
-      target: AppRoutes.scheduling,
+      target: AppRoutes.chat, // 약속은 직접 채팅에서 잡는다 (스케줄링 목업 제거)
     ),
     _PushNoti(
       icon: Icons.auto_awesome_rounded,

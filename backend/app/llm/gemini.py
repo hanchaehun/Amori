@@ -9,28 +9,24 @@
 
 import asyncio
 import math
-from typing import AsyncIterator, Literal
+from typing import AsyncIterator
 
 from pydantic import BaseModel
 
 from app.llm.base import LLMProvider
-from app.llm.oneshot import common_slots, iter_finalized_turns
+from app.llm.oneshot import iter_finalized_turns
 from app.llm.output_schemas import (
     ConversationOutput,
-    ConvTurn,
     PersonaOutput,
     ReportOutput,
-    StartersOutput,
 )
 from app.llm.prompts import (
     PERSONA_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
-    STARTERS_SYSTEM_PROMPT,
     build_oneshot_simulation_prompt,
     build_persona_update_user_message,
     build_persona_user_message,
     build_report_user_message,
-    build_starters_user_message,
 )
 from app.llm.prompts.persona import persona_embedding_text
 
@@ -56,25 +52,7 @@ def _quota_retry_delay(exc: Exception) -> float | None:
     return None
 
 
-# ---- LLM structured output 스키마 (Gemini responseSchema로 강제) ----------
-# 정의는 output_schemas 로 이관(채팅 provider 공용). 아래 별칭은 verify/smoke
-# 스크립트가 이 모듈에서 직접 import하는 하위호환용이다.
-
-_PersonaOutput = PersonaOutput
-_ConvTurn = ConvTurn
-_ConversationOutput = ConversationOutput
-_ReportOutput = ReportOutput
-_StartersOutput = StartersOutput
-
-
-class _SpeechOutput(BaseModel):
-    # 레거시 — 턴별 1콜 방식(services/simulation.py 의 run_two_agent_simulation
-    # 엔진 + 구 검증 스크립트)이 쓰는 단일 발화 스키마. run_simulation은 이제
-    # 원샷(_ConversationOutput)이라 프로덕션 경로에선 안 쓰인다.
-    partner_read: Literal["긍정적", "중립", "미온적"]
-    strategy: Literal["알아가기", "약속 제안", "약속 수락", "마무리"]
-    text: str
-    appointment_slot: str = ""
+# LLM structured output 스키마는 output_schemas 모듈(채팅 provider 공용)을 그대로 쓴다.
 
 
 class GeminiProvider(LLMProvider):
@@ -167,7 +145,7 @@ class GeminiProvider(LLMProvider):
         output = await self._generate(
             PERSONA_SYSTEM_PROMPT,
             build_persona_user_message(answers),
-            _PersonaOutput,
+            PersonaOutput,
             temperature=0.6,
         )
         persona = output.model_dump()
@@ -182,7 +160,7 @@ class GeminiProvider(LLMProvider):
         output = await self._generate(
             PERSONA_SYSTEM_PROMPT,
             build_persona_update_user_message(current_persona, answer),
-            _PersonaOutput,
+            PersonaOutput,
             temperature=0.45,
         )
         persona = output.model_dump()
@@ -196,24 +174,20 @@ class GeminiProvider(LLMProvider):
         my_persona: dict,
         their_persona: dict,
         max_turns: int = 20,
-        my_slots: list[dict] | None = None,
-        their_slots: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
         """원샷 — 양쪽 정보를 한 번에 주고 대화 전체를 1콜로 생성한다.
 
         턴마다 호출하던 구조(15콜+)를 1콜로 줄여 쿼터·지연을 크게 낮추고, 모델이
-        대화 아크를 통째로 설계하게 해 더 사람다운 멀티토픽 대화를 얻는다. 다운스트림
-        계약(턴 리스트 + strategy·appointment_slot)은 그대로다. 약속 슬롯 교집합
-        검증(LLM 환각 방어)은 oneshot 모듈 공용 로직을 쓴다.
+        대화 아크를 통째로 설계하게 해 더 사람다운 멀티토픽 대화를 얻는다.
+        약속 조율은 하지 않는다(만남은 수락 후 직접 채팅에서).
         """
-        common, common_labels = common_slots(my_slots, their_slots)
         system_prompt, user_message = build_oneshot_simulation_prompt(
-            my_persona, their_persona, common_labels, max_turns=max_turns,
+            my_persona, their_persona, max_turns=max_turns,
         )
         output = await self._generate(
-            system_prompt, user_message, _ConversationOutput, temperature=0.95,
+            system_prompt, user_message, ConversationOutput, temperature=0.95,
         )
-        for turn in iter_finalized_turns(output.turns, common, max_turns):
+        for turn in iter_finalized_turns(output.turns, max_turns):
             yield turn
 
     async def generate_report(
@@ -225,25 +199,9 @@ class GeminiProvider(LLMProvider):
         output = await self._generate(
             REPORT_SYSTEM_PROMPT,
             build_report_user_message(my_persona, their_persona, simulation_log),
-            _ReportOutput,
+            ReportOutput,
             temperature=0.5,
         )
         report = output.model_dump()
         report["ai_generated"] = True
         return report
-
-    async def generate_starters(
-        self,
-        my_persona: dict,
-        their_persona: dict,
-        recent_history: list[dict] | None = None,
-    ) -> dict:
-        output = await self._generate(
-            STARTERS_SYSTEM_PROMPT,
-            build_starters_user_message(my_persona, their_persona, recent_history),
-            _StartersOutput,
-            temperature=0.8,
-        )
-        result = output.model_dump()
-        result["ai_generated"] = True
-        return result

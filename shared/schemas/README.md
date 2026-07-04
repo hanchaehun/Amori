@@ -9,8 +9,7 @@ LLM 입출력과 백엔드 응답의 계약입니다. **LLM·백엔드 양쪽이
 
 - `persona.schema.json` — 초기/누적 시나리오 답변 → 페르소나 카드 (8 카테고리 traits + 1024차원 임베딩)
 - `simulation_turn.schema.json` — 에이전트 시뮬레이션의 한 턴 (SSE 이벤트 단위)
-- `report.schema.json` — 시뮬레이션 결과 → 케미 리포트
-- `starter.schema.json` — 인간 채팅에서 추천하는 대화 시작 문구
+- `report.schema.json` — 시뮬레이션 결과 → 케미 리포트 (대화 스타터 포함)
 
 ## 스키마가 강제되는 위치
 
@@ -34,8 +33,8 @@ LLM 입출력과 백엔드 응답의 계약입니다. **LLM·백엔드 양쪽이
 
 ### 2. 시뮬레이션 스트리밍: SSE
 
-백엔드 → Flutter 구간 SSE 유지. 백엔드의 2-에이전트 턴 루프가 턴을 생성하는 즉시
-`/simulation/run` 으로 흘려보내며, 각 이벤트는 `simulation_turn.schema.json` 을 따릅니다.
+백엔드 → Flutter 구간 SSE 유지. 원샷으로 생성된 대화를 백엔드가 시차 송출로
+`/simulation/run` 에 흘려보내며, 각 이벤트는 `simulation_turn.schema.json` 을 따릅니다.
 
 ### 3. `ai_generated: true` 라벨
 

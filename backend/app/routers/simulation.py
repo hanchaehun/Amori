@@ -16,8 +16,8 @@ from app.middleware.rate_limit import check_simulation_quota
 from app.models.database import Match, Persona, SimulationJob, User
 from app.routers.matches import get_or_create_match
 from app.schemas.simulation import SimulationRunRequest, SimulationJobResponse
-from app.services.booking import get_booked_slot_keys, subtract_booked
 from app.services.llm_log import log_llm_call
+from app.services.style_gate import gate_turn
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -31,8 +31,6 @@ async def simulation_event_generator(
     job: SimulationJob,
     db: AsyncSession,
     match: Match,
-    my_slots: list[dict],
-    their_slots: list[dict],
 ):
     """Yield SSE events for each simulation turn, then finalize the job."""
     turns: list[dict] = []
@@ -40,8 +38,15 @@ async def simulation_event_generator(
     try:
         async for turn in llm.run_simulation(
             my_persona_dict, their_persona_dict, max_turns,
-            my_slots=my_slots, their_slots=their_slots,
         ):
+            # 스타일 게이트 — 실측 말투(voice_stats)에 없는 습관(이모지·부호·웃음)이
+            # 발화에 새면 결정적으로 제거한다 (원샷 style bleed 후처리 방어).
+            stats = (
+                my_persona_dict.get("voice_stats")
+                if turn.get("speaker") == "me"
+                else their_persona_dict.get("voice_stats")
+            )
+            turn = gate_turn(turn, stats)
             # DB엔 눈치(partner_read·strategy) 포함 전체를 저장하고,
             # 사용자에게 가는 SSE는 대화에 필요한 필드만 보낸다 (분석은 비노출).
             turns.append(turn)
@@ -52,21 +57,12 @@ async def simulation_event_generator(
             }
             yield {"event": "turn", "data": json.dumps(public_turn, ensure_ascii=False)}
 
-        # Save completed job
+        # Save completed job — 시뮬은 약속을 잡지 않는다(만남은 수락 후 직접 채팅에서).
+        # 수락 가능 여부는 리포트 점수 게이트가 정한다 (routers/matches.py accept).
         job.status = "completed"
         job.turns = turns
         job.completed_at = func.now()
         match.status = "simulated"
-        # 눈치 strategy="약속 수락"이 한 번이라도 나오면 약속 조율 완료로 표시.
-        # 양쪽 다 가능 일정이 있으면 엔진이 검증한 합의 슬롯까지 있어야 성립 —
-        # 사용자 실제 일정에 없는 약속은 잡힌 것으로 치지 않는다.
-        accepted = any(t.get("strategy") == "약속 수락" for t in turns)
-        agreed_slot = next(
-            (t["appointment_slot"] for t in turns if t.get("appointment_slot")), None
-        )
-        negotiating = bool(my_slots) and bool(their_slots)
-        match.appointment_ready = accepted and (agreed_slot is not None or not negotiating)
-        match.appointment_slot = agreed_slot
         await db.commit()
 
         await log_llm_call(
@@ -156,6 +152,7 @@ async def run_simulation(
 
     # 5. Build persona dicts for the LLM
     #    speech_style·sample_messages를 포함해야 에이전트가 '그 사람 말투'로 발화한다.
+    #    voice_stats(실측 말투 통계)가 있으면 _speech_block이 수치 지시로 승격한다.
     my_persona_dict = {
         "traits": my_persona.traits,
         "communication_style": my_persona.communication_style,
@@ -163,6 +160,7 @@ async def run_simulation(
         "value_keywords": my_persona.value_keywords,
         "speech_style": my_persona.speech_style,
         "sample_messages": my_persona.sample_messages,
+        "voice_stats": my_persona.voice_stats,
     }
     their_persona_dict = {
         "traits": their_persona.traits,
@@ -171,21 +169,15 @@ async def run_simulation(
         "value_keywords": their_persona.value_keywords,
         "speech_style": their_persona.speech_style,
         "sample_messages": their_persona.sample_messages,
+        "voice_stats": their_persona.voice_stats,
     }
 
-    # 6. 양쪽 사용자의 가능 일정 — 에이전트가 대화에서 실일정으로 약속을 조율한다.
-    #    이미 수락한 약속이 점유한 시간은 빼고 준다 (더블부킹 방지).
+    # 6. 에이전트가 서로를 이름으로 부르도록 페르소나 dict에 이름을 싣는다.
+    #    (일정은 더 이상 시뮬에 주지 않는다 — 약속은 수락 후 직접 채팅에서.)
     users_result = await db.execute(
         select(User).where(User.id.in_([user["uid"], body.target_user_id]))
     )
-    slot_map = {}
-    name_map = {}
-    for u in users_result.scalars().all():
-        booked = await get_booked_slot_keys(db, u.id)
-        slot_map[u.id] = subtract_booked(u.available_slots or [], booked)
-        name_map[u.id] = u.display_name
-
-    # 에이전트가 서로를 이름으로 부르도록 페르소나 dict에 이름을 싣는다.
+    name_map = {u.id: u.display_name for u in users_result.scalars().all()}
     my_persona_dict["display_name"] = name_map.get(user["uid"])
     their_persona_dict["display_name"] = name_map.get(body.target_user_id)
 
@@ -194,7 +186,6 @@ async def run_simulation(
         simulation_event_generator(
             llm, my_persona_dict, their_persona_dict,
             body.max_turns, job, db, match_obj,
-            slot_map.get(user["uid"], []), slot_map.get(body.target_user_id, []),
         ),
         media_type="text/event-stream",
     )

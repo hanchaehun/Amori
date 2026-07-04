@@ -117,17 +117,20 @@ async def get_report(
         )
 
     # 5. Build persona dicts for the LLM
+    #    정답지(response_preferences)는 리포트 평가 전용 — 시뮬 프롬프트엔 절대 넣지 않는다.
     my_persona_dict = {
         "traits": my_persona.traits,
         "communication_style": my_persona.communication_style,
         "humor_style": my_persona.humor_style,
         "value_keywords": my_persona.value_keywords,
+        "response_preferences": my_persona.response_preferences or [],
     }
     their_persona_dict = {
         "traits": their_persona.traits,
         "communication_style": their_persona.communication_style,
         "humor_style": their_persona.humor_style,
         "value_keywords": their_persona.value_keywords,
+        "response_preferences": their_persona.response_preferences or [],
     }
 
     # 6. Call LLM to generate report

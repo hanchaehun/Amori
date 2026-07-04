@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -45,9 +47,23 @@ class MatchResponse(BaseModel):
     score: float
 
 
+class AppointmentSetRequest(BaseModel):
+    """직접 채팅에서 합의한 약속 기록 — 약속의 주체는 사용자다 (시뮬은 약속을 잡지 않음)."""
+
+    date: str  # YYYY-MM-DD
+    time: Literal["점심", "저녁"]
+
+
+class AppointmentSetResponse(BaseModel):
+    match_id: str
+    status: str
+    appointment_slot: str  # 라벨 "6월 14일(토) 저녁"
+
+
 class MatchAcceptResponse(BaseModel):
     match_id: str
     status: str  # simulated | scheduled
+    # 07-04부터 의미 재정의: '수락 가능(리포트 게이트 통과)'. 시뮬은 약속을 잡지 않는다.
     appointment_ready: bool
     accepted_by: list[str]
     both_accepted: bool
@@ -80,7 +96,7 @@ class MatchConversationResponse(BaseModel):
     match_id: str
     partner_name: str | None = None
     status: str  # simulated | scheduled | met
-    appointment_slot: str | None = None  # 합의 일정 라벨
+    appointment_slot: str | None = None  # 사용자들이 직접 확정한 약속 라벨 (시뮬은 약속을 잡지 않음)
     chat_enabled: bool  # status == scheduled 일 때만 직접 채팅 가능
     # 에이전트 대화가 아직 시차 송출 중인가 — True면 다음 턴이 곧 도착한다(라이브 관전).
     # 클라이언트는 이 플래그로 타이핑 인디케이터·폴링 지속 여부를 정한다.
@@ -103,6 +119,7 @@ class MatchListItem(BaseModel):
     partner_name: str | None = None
     status: str  # simulated | scheduled | met
     score: float | None = None
+    # 07-04부터 의미 재정의: '수락 가능(리포트 게이트 통과)'. 필드명은 Flutter 하위호환.
     appointment_ready: bool
     you_accepted: bool
     partner_accepted: bool
@@ -112,7 +129,7 @@ class MatchListItem(BaseModel):
     # 에이전트 대화가 시차 송출 중 — True면 카드는 "에이전트 대화 중"으로 표시하고,
     # 약속·리포트·게이트 분류 결과는 송출이 끝날 때까지 숨긴다(스포일러 방지).
     agent_live: bool = False
-    appointment_slot: str | None = None  # 합의된 일정 라벨 "6월 14일(토) 저녁"
+    appointment_slot: str | None = None  # 사용자들이 직접 확정한 약속 라벨 "6월 14일(토) 저녁"
     report_score: int | None = None  # 케미 점수(리포트) — score는 벡터 매칭 점수
     failed: bool = False  # 케미 점수가 게이트 미만 — '닿지 않은 인연' 화면으로 분리
     failure_reason: str | None = None  # 리포트 warnings 첫 항목

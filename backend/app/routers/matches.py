@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_cls, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -12,6 +12,8 @@ from app.matching import find_candidates
 from app.models.database import ChatMessage, Match, Persona, Report, SimulationJob, User
 from app.schemas.common import (
     AgentTurnItem,
+    AppointmentSetRequest,
+    AppointmentSetResponse,
     ChatMessageItem,
     ChatSendRequest,
     MatchAcceptResponse,
@@ -20,9 +22,8 @@ from app.schemas.common import (
     MatchListItem,
     MatchResponse,
 )
-from app.services.booking import get_booked_slot_keys
+from app.services.booking import get_booked_matches, slot_label
 from app.services.reveal import reveal_complete, revealed_turns
-from app.services.simulation import slot_label
 
 router = APIRouter()
 
@@ -122,10 +123,18 @@ async def list_my_matches(
             failed_expires_at = report.created_at + ttl
             if failed_expires_at <= now:
                 continue  # TTL 지난 실패 건은 자연 소멸 (행은 보존)
-        # 약속 필드는 송출 중(live)이거나 게이트 미만(failed)이면 가린다.
+        # 수락 관련 필드는 송출 중(live)이거나 게이트 미만(failed)이면 가린다.
         # 단 report_score는 '닿지 않은 인연' 화면이 실패 점수를 보여줘야 하므로
         # failed일 땐 노출하고, 송출 중(결과 미확정)일 때만 가린다.
         hide_appointment = live or failed
+        # '수락 가능'(appointment_ready) = 리포트가 게이트를 통과한 매치.
+        # 시뮬은 약속을 잡지 않으므로(2026-07-04 결정 — 약속은 수락 후 직접 채팅에서)
+        # 필드명은 Flutter 하위호환용으로 유지하고 의미만 재정의한다.
+        ready = (
+            not hide_appointment
+            and report is not None
+            and report.score >= settings.report_pass_score
+        )
         items.append(
             MatchListItem(
                 match_id=str(match_obj.id),
@@ -133,7 +142,7 @@ async def list_my_matches(
                 partner_name=partner_names.get(partner_id),
                 status=match_obj.status,
                 score=match_obj.score,
-                appointment_ready=match_obj.appointment_ready and not hide_appointment,
+                appointment_ready=ready,
                 you_accepted=not hide_appointment and uid in match_obj.accepted_by,
                 partner_accepted=not hide_appointment
                 and any(
@@ -142,6 +151,7 @@ async def list_my_matches(
                 last_message=last_text,
                 turn_count=len(shown),
                 updated_at=match_obj.updated_at.isoformat(),
+                # 사용자들이 직접 채팅에서 확정한 약속 라벨 (시뮬은 약속을 잡지 않음)
                 appointment_slot=(
                     slot_label(match_obj.appointment_slot)
                     if match_obj.appointment_slot and not hide_appointment
@@ -408,10 +418,11 @@ async def accept_match(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """사용자가 약속을 수락한다. 양쪽 참가자가 모두 수락하면 status='scheduled'.
+    """사용자가 만남을 수락한다. 양쪽 참가자가 모두 수락하면 status='scheduled'.
 
-    약속 조율이 끝난(appointment_ready) 매치에서만 수락할 수 있다 —
-    '진행 중'에서 강조된 카드의 [수락] 버튼이 이 엔드포인트를 호출한다.
+    수락 조건 = 케미 리포트가 생성됐고 점수 게이트를 통과한 매치.
+    양쪽 수락으로 scheduled가 되면 직접 채팅이 열리고, 약속(날짜·시간)은
+    두 사용자가 그 채팅에서 직접 잡는다 (시뮬은 약속을 잡지 않는다 — 07-04 결정).
     """
     request_id = str(uuid.uuid4())
     try:
@@ -458,23 +469,22 @@ async def accept_match(
             },
         )
 
-    if not match_obj.appointment_ready:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error_code": "NOT_READY",
-                "message": "아직 약속 조율이 완료되지 않은 대화입니다.",
-                "request_id": request_id,
-            },
-        )
-
-    # 게이트 미만(닿지 않은 인연)은 약속째로 무효 — 클라이언트가 버튼을 안 보여주지만
-    # 서버에서도 최종 차단한다 (리포트가 약속 무효화 전에 만들어진 구버전 행 방어)
+    # 수락 가능 조건 = 리포트 생성 + 점수 게이트 통과. 클라이언트가 버튼을
+    # 안 보여주지만 서버에서도 최종 차단한다.
     report_result = await db.execute(
         select(Report.score).where(Report.match_id == match_uuid)
     )
     report_score = report_result.scalar_one_or_none()
-    if report_score is not None and report_score < settings.report_pass_score:
+    if report_score is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "NOT_READY",
+                "message": "케미 리포트가 준비된 뒤 수락할 수 있습니다.",
+                "request_id": request_id,
+            },
+        )
+    if report_score < settings.report_pass_score:
         raise HTTPException(
             status_code=400,
             detail={
@@ -483,28 +493,6 @@ async def accept_match(
                 "request_id": request_id,
             },
         )
-
-    # 더블부킹 방지 — 합의 일정이 이미 내가 수락한 다른 약속과 겹치면 거부.
-    # (시뮬레이션들이 수락 전에 같은 시간을 잡아둘 수 있다. 멱등 재수락은 통과)
-    if (
-        match_obj.appointment_slot
-        and user["uid"] not in match_obj.accepted_by
-    ):
-        slot_key = (
-            match_obj.appointment_slot["date"],
-            match_obj.appointment_slot["time"],
-        )
-        if slot_key in await get_booked_slot_keys(db, user["uid"]):
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error_code": "SLOT_TAKEN",
-                    "message": (
-                        f"{slot_label(match_obj.appointment_slot)}에 이미 다른 약속이 있어요."
-                    ),
-                    "request_id": request_id,
-                },
-            )
 
     # 멱등적으로 수락자 추가 (ARRAY 컬럼은 새 리스트 할당으로 변경 감지)
     if user["uid"] not in match_obj.accepted_by:
@@ -518,7 +506,81 @@ async def accept_match(
     return MatchAcceptResponse(
         match_id=str(match_obj.id),
         status=match_obj.status,
-        appointment_ready=match_obj.appointment_ready,
+        appointment_ready=True,  # 게이트 통과 = 수락 가능 (하위호환 필드)
         accepted_by=list(match_obj.accepted_by),
         both_accepted=both_accepted,
+    )
+
+
+@router.post("/{match_id}/appointment", response_model=AppointmentSetResponse)
+async def set_appointment(
+    match_id: str,
+    body: AppointmentSetRequest,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """직접 채팅에서 합의한 약속을 기록한다 — 약속의 주체는 사용자다.
+
+    시뮬은 약속을 잡지 않으므로(2026-07-04 결정) 만남이 확정된(scheduled) 매치에서
+    두 사용자가 채팅으로 시간을 정한 뒤 이 엔드포인트로 확정한다. 여기 기록된
+    슬롯이 카드의 만남 예정 라벨·일정 시트 잠금(booked_slots)의 근거가 된다.
+    """
+    request_id = str(uuid.uuid4())
+    match_obj = await _load_my_match(db, match_id, user["uid"], request_id)
+
+    if match_obj.status != "scheduled":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "NOT_SCHEDULED",
+                "message": "만남을 서로 수락한 뒤에 약속을 잡을 수 있습니다.",
+                "request_id": request_id,
+            },
+        )
+    try:
+        date_cls.fromisoformat(body.date)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "INVALID_INPUT",
+                "message": "날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).",
+                "request_id": request_id,
+            },
+        )
+
+    # 중복 약속 차단 — 두 사람 중 누구든 같은 시간에 이미 다른 약속이 있으면 거부
+    slot = {"date": body.date, "time": body.time}
+    for participant in match_obj.participant_ids:
+        booked = {
+            (m.appointment_slot["date"], m.appointment_slot["time"])
+            for m in await get_booked_matches(db, participant)
+            if m.id != match_obj.id
+        }
+        if (slot["date"], slot["time"]) in booked:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": "SLOT_TAKEN",
+                    "message": f"{slot_label(slot)}에 이미 다른 약속이 있어요.",
+                    "request_id": request_id,
+                },
+            )
+
+    match_obj.appointment_slot = slot
+    label = slot_label(slot)
+    db.add(
+        ChatMessage(
+            match_id=match_obj.id,
+            sender_id=None,
+            kind="system",
+            text=f"📅 {label}에 만나기로 약속했어요",
+        )
+    )
+    await db.commit()
+
+    return AppointmentSetResponse(
+        match_id=str(match_obj.id),
+        status=match_obj.status,
+        appointment_slot=label,
     )

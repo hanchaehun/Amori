@@ -11,17 +11,16 @@ Flutter 클라이언트에 있던 검증된 한국어 프롬프트를 시드로 
 
 | 파일 | 책임 | 소비처 |
 |---|---|---|
-| `persona.py` | 초기/누적 시나리오 답변 → 8 카테고리 페르소나 + 임베딩 입력 텍스트 | `gemini.build_persona` |
-| `simulation.py` | 에이전트별 시스템 프롬프트(자기 페르소나만) + 시그널 분석 | 2-에이전트 턴 루프 |
-| `report.py` | 시뮬레이션 로그 → 케미 리포트 | `gemini.generate_report` |
-| `starters.py` | 대화 시작 문구 3개 | `gemini.generate_starters` |
+| `persona.py` | 초기/누적 시나리오 답변 → 8 카테고리 페르소나 + 임베딩 입력 텍스트 | `build_persona` (gemini·modoo) |
+| `simulation.py` | 원샷 시뮬 프롬프트 — 양쪽 페르소나 + 말투 블록(실측 voice_stats 카드). 약속은 잡지 않음 | `run_simulation` (gemini·modoo) |
+| `report.py` | 시뮬레이션 로그 → 케미 리포트 — 반응성(이해·인정·관심) 렌즈 + 정답지 대조 | `generate_report` (gemini·modoo) |
 
 ## 작업 가이드
 
 - **structured output**: 출력 JSON 구조는 프롬프트가 아니라 `gemini.py` 의 Pydantic
   responseSchema가 강제합니다. 프롬프트는 내용·톤·규칙에 집중하면 됩니다.
-- **style bleed 방지**: 시뮬레이션 에이전트 프롬프트에는 절대 상대 페르소나 전체를
-  넣지 않습니다 (자기 페르소나만 — 두 컨텍스트 분리가 턴 루프 설계의 핵심).
+- **style bleed 방지**: 원샷 프롬프트는 "각자의 말투를 끝까지 다르게 유지(섞이면 실패)"를
+  시스템 지시로 강제하고, 페르소나별 말투 블록(voice_stats 실측 카드 + 금지 규칙)이 이를 뒷받침합니다.
 - **RAI**: 외모·재산·학력 평가, 차별 표현 금지 규칙을 모든 프롬프트에 유지합니다.
 - **평가**: 한국어 데이팅 도메인 30케이스 평가셋 운영이 P2 과제로 남아 있습니다
   (`refatodo.md`). 측정 지표: RAI 통과율, 응답 일관성.

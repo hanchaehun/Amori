@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     modoo_base_url: str = "https://modoo.devdive.me"
     modoo_chat_model: str = "modoo-text-pro"
 
-    # Database
+    # Database — 팀 공용 관리형 Postgres URL을 .env로 주입한다 (팀 시크릿, README 참고).
+    # 기본값은 로컬 Postgres를 직접 띄운 경우의 폴백일 뿐이다.
     database_url: str = "postgresql+asyncpg://amori:amori_dev@localhost:5432/amori"
 
     # Firebase

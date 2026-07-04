@@ -81,6 +81,15 @@ class Persona(Base):
     value_keywords: Mapped[list] = mapped_column(JSONB)  # 3~7개 문자열
     speech_style: Mapped[dict] = mapped_column(JSONB)  # 말투 — 에이전트 발화 충실도의 핵심
     sample_messages: Mapped[list] = mapped_column(JSONB)  # few-shot 발화 앵커 1~3개
+    # voice v2 — 코드가 측정한 말투 (LLM 추측 금지). voice_features.extract_voice_stats 산출물.
+    voice_stats: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 실측 발화 뱅크 {text, register, source(user_written|kakao|llm_seed), collected_at}
+    sample_bank: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    voice_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 정답지 — "이 상황에서 나는 어떤 답장을 받고 싶은가" {code, situation, desired_reply, collected_at}.
+    # 평가 전용 축: 리포트 채점에만 쓰고, 시뮬 프롬프트·매칭 하드필터엔 절대 넣지 않는다
+    # (명시적 선호는 실제 끌림을 잘 예측하지 못한다 — Eastwick&Finkel 2008, Joel 2017).
+    response_preferences: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     embedding = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     # 점진형 페르소나 보정 상태. raw answer 전문은 저장하지 않고 문항 코드만 보관한다.
     answer_count: Mapped[int | None] = mapped_column(Integer)
@@ -115,12 +124,13 @@ class Match(Base):
         String(20), default="candidate"
     )  # candidate | simulated | scheduled | met
     score: Mapped[float | None] = mapped_column(Float)
-    # 시뮬레이션 중 두 에이전트가 약속을 잡았는가(눈치 strategy="약속 수락").
-    # True면 '진행 중'에서 맨 위로 + 테두리 강조, 사용자가 수락을 누를 수 있음.
+    # [휴면 컬럼] 시뮬 약속 폐지(2026-07-04)로 아무도 쓰지 않는다 — API의
+    # appointment_ready는 '리포트 게이트 통과'를 매번 계산해 내려보낸다(routers/matches.py).
+    # 컬럼 제거는 후속 마이그레이션에서.
     appointment_ready: Mapped[bool] = mapped_column(Boolean, default=False)
-    # 에이전트가 합의한 일정 {"date": "YYYY-MM-DD", "time": "점심"|"저녁"} —
-    # 양쪽 사용자의 available_slots 교집합에서만 나온다 (엔진이 검증).
-    # 일정 정보 없이 의향만 합의한 경우 None.
+    # 사용자들이 직접 채팅에서 확정한 약속 {"date": "YYYY-MM-DD", "time": "점심"|"저녁"}
+    # (POST /matches/{id}/appointment). 시뮬은 약속을 잡지 않는다 — 주체는 사용자.
+    # 일정 시트 잠금(booked_slots)·중복 약속 차단의 근거.
     appointment_slot: Mapped[dict | None] = mapped_column(JSONB)
     # 만남을 수락한 사용자 uid 목록. 양쪽 다 차면 status를 'scheduled'로 올린다.
     accepted_by: Mapped[list[str]] = mapped_column(

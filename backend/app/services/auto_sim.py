@@ -27,8 +27,8 @@ from app.llm.base import LLMProvider
 from app.middleware.rate_limit import check_simulation_quota
 from app.models.database import Match, Persona, Report, SimulationJob
 from app.matching import find_candidates
-from app.services.booking import get_booked_slot_keys, subtract_booked
 from app.services.llm_log import log_llm_call
+from app.services.style_gate import gate_turn
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ def _persona_dict(p: Persona, *, voice: bool) -> dict:
     if voice:
         d["speech_style"] = p.speech_style
         d["sample_messages"] = p.sample_messages
+        d["voice_stats"] = p.voice_stats  # 실측 말투 — _speech_block v2 수치 지시
     return d
 
 
@@ -123,48 +124,31 @@ async def run_auto_simulation(
     await db.refresh(job)
 
     users_result = await db.execute(select(User).where(User.id.in_([uid, target])))
-    slot_map = {}
-    name_map = {}
-    for u in users_result.scalars().all():
-        booked = await get_booked_slot_keys(db, u.id)
-        slot_map[u.id] = subtract_booked(u.available_slots or [], booked)
-        name_map[u.id] = u.display_name
-    my_slots = slot_map.get(uid, [])
-    their_slots = slot_map.get(target, [])
+    name_map = {u.id: u.display_name for u in users_result.scalars().all()}
 
     # 에이전트가 서로를 이름으로 부르도록 페르소나 dict에 이름을 실어 보낸다.
+    # (일정은 시뮬에 주지 않는다 — 약속은 수락 후 직접 채팅에서.)
     my_pd = {**_persona_dict(my_persona, voice=True), "display_name": name_map.get(uid)}
     their_pd = {**_persona_dict(their_persona, voice=True), "display_name": name_map.get(target)}
 
     started = time.monotonic()
     turns: list[dict] = []
     try:
-        async for turn in llm.run_simulation(
-            my_pd, their_pd, 20, my_slots=my_slots, their_slots=their_slots,
-        ):
-            turns.append(turn)
+        async for turn in llm.run_simulation(my_pd, their_pd, 20):
+            # 스타일 게이트 — 실측 말투에 없는 습관이 새면 결정적으로 제거
+            stats = my_pd.get("voice_stats") if turn.get("speaker") == "me" else their_pd.get("voice_stats")
+            turns.append(gate_turn(turn, stats))
 
         # 시차 송출: 각 턴에 visible_at을 박아 라이브 관전처럼 천천히 공개한다.
-        # (strategy·appointment_slot 등은 보존되므로 아래 약속 판정은 그대로.)
         if settings.reveal_enabled:
             from app.services.reveal import plan_reveal_schedule
 
             turns = plan_reveal_schedule(turns, datetime.now(timezone.utc), settings)
 
-        # 약속 성립 판정 — routers/simulation.py 의 SSE 경로와 동일 규칙
         job.status = "completed"
         job.turns = turns
         job.completed_at = func.now()
         match_obj.status = "simulated"
-        accepted = any(t.get("strategy") == "약속 수락" for t in turns)
-        agreed_slot = next(
-            (t["appointment_slot"] for t in turns if t.get("appointment_slot")), None
-        )
-        negotiating = bool(my_slots) and bool(their_slots)
-        match_obj.appointment_ready = accepted and (
-            agreed_slot is not None or not negotiating
-        )
-        match_obj.appointment_slot = agreed_slot
         await db.commit()
 
         await log_llm_call(
@@ -186,14 +170,13 @@ async def run_auto_simulation(
     report_score = await _ensure_report(db, llm, match_obj, my_persona, their_persona, turns, uid)
 
     logger.info(
-        "auto-sim done: %s ↔ %s, %d턴, 약속=%s, 점수=%s",
-        uid, target, len(turns), match_obj.appointment_ready, report_score,
+        "auto-sim done: %s ↔ %s, %d턴, 점수=%s",
+        uid, target, len(turns), report_score,
     )
     return {
         "match_id": str(match_obj.id),
         "target_user_id": target,
         "total_turns": len(turns),
-        "appointment_ready": match_obj.appointment_ready,
         "report_score": report_score,
     }
 
@@ -217,9 +200,12 @@ async def _ensure_report(
 
     started = time.monotonic()
     try:
+        # 정답지(response_preferences)는 리포트 평가 전용 — 시뮬 프롬프트엔 절대 넣지 않는다.
         report_data = await llm.generate_report(
-            _persona_dict(my_persona, voice=False),
-            _persona_dict(their_persona, voice=False),
+            {**_persona_dict(my_persona, voice=False),
+             "response_preferences": my_persona.response_preferences or []},
+            {**_persona_dict(their_persona, voice=False),
+             "response_preferences": their_persona.response_preferences or []},
             turns,
         )
     except Exception as exc:
@@ -240,12 +226,11 @@ async def _ensure_report(
             ai_generated=True,
         )
     )
-    # 게이트가 왕 — 75점 미만이면 에이전트가 잡은 약속도 무효 (scheduled는 불가침)
+    # 게이트가 왕 — 75점 미만이면 수락 진행분도 무효 (scheduled는 불가침)
     if (
         report_data["score"] < settings.report_pass_score
         and match_obj.status == "simulated"
     ):
-        match_obj.appointment_ready = False
         match_obj.accepted_by = []
     await db.commit()
 

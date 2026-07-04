@@ -57,6 +57,10 @@ def build_persona_user_message(answers: list[dict]) -> str:
         question = answer.get("question", "")
         letter = answer.get("answer_letter") or answer.get("answerLetter") or ""
         text = answer.get("answer_text") or answer.get("answerText") or ""
+        if letter == "정답지" or category == "정답지":
+            # 정답지("받고 싶은 답장")는 평가 전용 축 — 내 성향·말투가 아니므로
+            # 페르소나 생성 프롬프트에서 제외한다 (services/voice.py가 별도 저장).
+            continue
         if letter == "주관식" or category == "말투 샘플":
             sample_lines.append(f"상황: {question}")
             sample_lines.append(f'사용자가 직접 쓴 메시지: "{text}"')

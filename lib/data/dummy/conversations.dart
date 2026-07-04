@@ -3,7 +3,7 @@ enum ConversationStatus { active, scheduling, scheduled, completed }
 extension ConversationStatusX on ConversationStatus {
   String get label => switch (this) {
     ConversationStatus.active => '🟢 대화 중',
-    ConversationStatus.scheduling => '📅 약속 조율 완료',
+    ConversationStatus.scheduling => '💌 만남 수락 대기',
     ConversationStatus.scheduled => '📍 만남 예정',
     ConversationStatus.completed => '✓ 만남 완료',
   };
@@ -34,12 +34,13 @@ class Conversation {
   final ConversationStatus status;
   final bool unread;
 
-  /// 시뮬레이션 중 두 에이전트가 약속을 잡았는가(백엔드 눈치 strategy="약속 수락").
+  /// 수락 가능 — 케미 리포트가 게이트(75점)를 통과했는가.
+  /// (시뮬은 약속을 잡지 않는다 — 07-04 결정. 필드명은 백엔드 하위호환.)
   /// true면 '진행 중'에서 맨 위로 올라오고 테두리가 강조된다.
   final bool appointmentReady;
 
-  /// 에이전트들이 양쪽 실일정에서 합의한 약속 시간 ("6월 14일(토) 저녁").
-  /// 일정 정보 없이 의향만 합의했으면 null.
+  /// 사용자들이 직접 채팅에서 확정한 약속 시간 ("6월 14일(토) 저녁").
+  /// 아직 안 잡았으면 null.
   final String? appointmentLabel;
 
   /// 상대가 이미 만남을 수락했는가. 내가 수락하면 곧바로 '만남 예정'으로 넘어간다.

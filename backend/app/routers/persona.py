@@ -19,6 +19,7 @@ from app.schemas.persona import (
     PersonaUpdateRequest,
 )
 from app.services.llm_log import log_llm_call
+from app.services.voice import apply_voice_profile
 
 router = APIRouter()
 
@@ -72,6 +73,8 @@ def _confidence(answer_count: int | None, answered_codes: list[str]) -> str:
 
 
 def _persona_dict(persona: Persona) -> dict:
+    # LLM 프롬프트(update)용 — voice_stats/sample_bank은 코드 산출물이라 LLM에 주지 않는다
+    # (프롬프트 토큰 낭비 + LLM이 측정값을 '수정'하는 사고 방지).
     return {
         "user_id": persona.user_id,
         "traits": persona.traits,
@@ -88,6 +91,10 @@ def _persona_dict(persona: Persona) -> dict:
 def _persona_response(persona: Persona) -> PersonaResponse:
     return PersonaResponse(
         **_persona_dict(persona),
+        voice_stats=persona.voice_stats,
+        sample_bank=persona.sample_bank or [],
+        voice_confidence=persona.voice_confidence,
+        response_preferences=persona.response_preferences or [],
         answer_count=persona.answer_count,
         answered_codes=persona.answered_codes or [],
         persona_revision=persona.persona_revision or 1,
@@ -184,6 +191,8 @@ async def build_persona(
         )
         _apply_result(persona, result)
         db.add(persona)
+    # LLM 결과 반영 뒤에 — 주관식 실측이 있으면 sample_messages를 실문장으로 교체한다.
+    apply_voice_profile(persona, body.answers)
     persona.answered_codes = _merge_codes(persona.answered_codes, new_codes)
     persona.answer_count = len(persona.answered_codes)
     persona.persona_confidence = _confidence(persona.answer_count, persona.answered_codes)
@@ -256,6 +265,7 @@ async def update_persona(
     elapsed_ms = int((time.monotonic() - started) * 1000)
 
     _apply_result(persona, result)
+    apply_voice_profile(persona, [body.answer])
     new_codes = _answer_codes([body.answer])
     persona.answered_codes = _merge_codes(persona.answered_codes, new_codes)
     persona.answer_count = len(persona.answered_codes)

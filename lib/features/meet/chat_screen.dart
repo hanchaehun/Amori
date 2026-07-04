@@ -293,6 +293,192 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// 직접 약속 확정 — 채팅으로 합의한 시간을 기록한다.
+  /// 시뮬은 약속을 잡지 않으므로(07-04 결정) 약속의 주체는 사용자다.
+  Future<void> _onSetAppointment() async {
+    HapticFeedback.selectionClick();
+    final now = DateTime.now();
+    final days = [for (var i = 1; i <= 14; i++) now.add(Duration(days: i))];
+    DateTime? day;
+    String time = '저녁';
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.sm,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('약속 잡기', style: AppTypography.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  '채팅으로 합의한 시간을 확정해요. 확정하면 상대에게도 표시돼요.',
+                  style: AppTypography.caption.copyWith(color: AppColors.ink500),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: days.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final d = days[i];
+                      final selected = day == d;
+                      final weekday = '월화수목금토일'[d.weekday - 1];
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setSheet(() => day = d);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? AppColors.mint.withValues(alpha: 0.12)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: selected ? AppColors.mint : AppColors.ink100,
+                            ),
+                          ),
+                          child: Text(
+                            '${d.month}/${d.day} ($weekday)',
+                            style: AppTypography.caption.copyWith(
+                              color: selected ? AppColors.ink900 : AppColors.ink700,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    for (final t in const ['점심', '저녁']) ...[
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setSheet(() => time = t);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: time == t
+                                  ? AppColors.mint.withValues(alpha: 0.12)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color:
+                                    time == t ? AppColors.mint : AppColors.ink100,
+                              ),
+                            ),
+                            child: Text(
+                              t == '점심' ? '🍽 점심' : '🌆 저녁',
+                              style: AppTypography.bodyMedium.copyWith(
+                                fontWeight: time == t
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (t == '점심') const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.ink500,
+                      ),
+                      child: const Text('다음에'),
+                    ),
+                    TextButton(
+                      onPressed: day == null
+                          ? null
+                          : () => Navigator.of(ctx).pop(true),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.mint,
+                      ),
+                      child: const Text(
+                        '이 시간으로 확정',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final picked = day;
+    if (confirmed != true || picked == null || !mounted) return;
+
+    final dateIso =
+        '${picked.year.toString().padLeft(4, '0')}-'
+        '${picked.month.toString().padLeft(2, '0')}-'
+        '${picked.day.toString().padLeft(2, '0')}';
+    final weekday = '월화수목금토일'[picked.weekday - 1];
+    final localLabel = '${picked.month}월 ${picked.day}일($weekday) $time';
+
+    if (!_fromBackend) {
+      setState(() {
+        _appointmentSlot = localLabel;
+        _messages = [
+          ..._messages,
+          DirectMessage(
+            id: 'local_appointment',
+            kind: 'system',
+            isMe: false,
+            text: '📅 $localLabel에 만나기로 약속했어요',
+            createdAt: DateTime.now(),
+          ),
+        ];
+      });
+      _scrollToEnd();
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final label = await _matches.setAppointment(
+        widget.conversationId!,
+        date: dateIso,
+        time: time,
+      );
+      if (!mounted) return;
+      setState(() => _appointmentSlot = label.isEmpty ? localLabel : label);
+      await _refresh(); // 시스템 안내 메시지를 받아온다
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   void _onMore() {
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -320,6 +506,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   _AppointmentBanner(
                     label: _appointmentSlot,
                     onCancel: _onCancelAppointment,
+                    onSet: _onSetAppointment,
                   ),
                 if (_chatEnabled)
                   _StarterRow(starters: _starters, onTap: _applyStarter),
@@ -525,12 +712,21 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 /// 만남 예정 배너 — 합의된 약속 시간과 [약속 취소] 진입점.
 class _AppointmentBanner extends StatelessWidget {
-  const _AppointmentBanner({required this.label, required this.onCancel});
+  /// 약속 배너 — 아직 안 잡았으면 [약속 잡기], 잡혔으면 라벨 + [약속 취소].
+  /// 약속의 주체는 사용자다 (시뮬은 약속을 잡지 않는다 — 07-04 결정).
+  const _AppointmentBanner({
+    required this.label,
+    required this.onCancel,
+    required this.onSet,
+  });
+
   final String? label;
   final VoidCallback onCancel;
+  final VoidCallback onSet;
 
   @override
   Widget build(BuildContext context) {
+    final hasAppointment = label != null;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -544,15 +740,17 @@ class _AppointmentBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.event_available_rounded,
+          Icon(
+            hasAppointment
+                ? Icons.event_available_rounded
+                : Icons.event_rounded,
             size: 16,
             color: AppColors.mint,
           ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              label != null ? '$label 만남 예정' : '만남 예정',
+              hasAppointment ? '$label 만남 예정' : '채팅으로 정한 시간을 확정해보세요',
               style: AppTypography.caption.copyWith(
                 color: AppColors.ink900,
                 fontWeight: FontWeight.w700,
@@ -561,14 +759,14 @@ class _AppointmentBanner extends StatelessWidget {
             ),
           ),
           GestureDetector(
-            onTap: onCancel,
+            onTap: hasAppointment ? onCancel : onSet,
             behavior: HitTestBehavior.opaque,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               child: Text(
-                '약속 취소',
+                hasAppointment ? '약속 취소' : '약속 잡기',
                 style: AppTypography.caption.copyWith(
-                  color: AppColors.danger,
+                  color: hasAppointment ? AppColors.danger : AppColors.mint,
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
                 ),

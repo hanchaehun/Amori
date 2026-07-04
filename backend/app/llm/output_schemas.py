@@ -27,13 +27,13 @@ class PersonaOutput(BaseModel):
 
 
 class ConvTurn(BaseModel):
-    # 원샷 대화의 한 메시지. partner_read·strategy는 내부 분석용(리포트 신호·약속 판정),
-    # text만 사용자에게 노출된다. appointment_slot은 '약속 수락' 시 겹치는 일정 번호("S1").
+    # 원샷 대화의 한 메시지. partner_read·strategy는 내부 분석용(리포트 신호),
+    # text만 사용자에게 노출된다. 약속 조율은 시뮬에서 하지 않는다(2026-07-04 제품 결정)
+    # — 만남은 리포트를 본 두 사용자가 수락한 뒤 직접 채팅에서 잡는다.
     speaker: Literal["me", "them"]
     text: str
-    strategy: Literal["알아가기", "약속 제안", "약속 수락", "마무리"]
+    strategy: Literal["알아가기", "마무리"]
     partner_read: Literal["긍정적", "중립", "미온적"] = "긍정적"
-    appointment_slot: str = ""
 
 
 class ConversationOutput(BaseModel):
@@ -47,12 +47,3 @@ class ReportOutput(BaseModel):
     places: list[Place] = Field(min_length=2, max_length=4)
     starters: list[str] = Field(min_length=2, max_length=5)
     tip: str = ""
-
-
-class Starter(BaseModel):
-    label: str
-    message: str
-
-
-class StartersOutput(BaseModel):
-    starters: list[Starter] = Field(min_length=3, max_length=3)

@@ -48,12 +48,11 @@ class LLMProvider(ABC):
         my_persona: dict,
         their_persona: dict,
         max_turns: int = 20,
-        my_slots: list[dict] | None = None,
-        their_slots: list[dict] | None = None,
     ) -> AsyncIterator[dict]:
-        """Call ``POST /llm/simulate``.
+        """Generate the agent-to-agent conversation, one turn dict at a time.
 
-        Yields simulation turn dicts streamed via SSE from the LLM module.
+        시뮬은 '알아가기 대화'만 한다 — 약속 조율은 하지 않는다(2026-07-04 결정).
+        만남은 리포트를 본 두 사용자가 수락한 뒤 직접 채팅에서 잡는다.
 
         Parameters
         ----------
@@ -63,16 +62,11 @@ class LLMProvider(ABC):
             The matched user's persona.
         max_turns:
             Maximum number of conversation turns to generate.
-        my_slots / their_slots:
-            Each user's available meeting slots
-            ([{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}]).  When both are
-            non-empty the agents negotiate a concrete slot in conversation;
-            otherwise they only agree on the intent to meet.
 
         Yields
         ------
         dict
-            Individual simulation turn (speaker, content, signals, …).
+            Individual simulation turn (speaker, text, partner_read, strategy).
         """
         ...
 
@@ -98,30 +92,5 @@ class LLMProvider(ABC):
         -------
         dict
             Chemistry report with score, findings, warnings, etc.
-        """
-        ...
-
-    @abstractmethod
-    async def generate_starters(
-        self,
-        my_persona: dict,
-        their_persona: dict,
-        recent_history: list[dict] | None = None,
-    ) -> dict:
-        """Call ``POST /llm/starters``.
-
-        Parameters
-        ----------
-        my_persona:
-            The requesting user's persona.
-        their_persona:
-            The matched user's persona.
-        recent_history:
-            Optional recent chat messages for context continuity.
-
-        Returns
-        -------
-        dict
-            Chat starters dict with suggested opening messages.
         """
         ...
