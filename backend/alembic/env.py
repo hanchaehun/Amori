@@ -9,6 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.config import settings
 from app.models.database import Base
 
 # ---- Alembic Config object ------------------------------------------------
@@ -19,11 +20,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Override sqlalchemy.url from the DATABASE_URL env var so credentials
-# never need to live in alembic.ini.
-database_url = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://amori:amori_dev@localhost:5432/amori",
-)
+# never need to live in alembic.ini. settings가 .env를 읽으므로 앱과 같은
+# DB를 보게 된다 (셸에 DATABASE_URL을 export할 필요 없음).
+database_url = os.getenv("DATABASE_URL", settings.database_url)
 config.set_main_option("sqlalchemy.url", database_url)
 
 # Model MetaData for 'autogenerate' support
