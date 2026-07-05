@@ -70,15 +70,15 @@ class _InboxScreenState extends State<InboxScreen> {
         _failed = failed;
       });
     } catch (e) {
-      debugPrint('inbox: GET /matches 실패 — 더미 폴백으로 전환: $e');
+      debugPrint('inbox: GET /matches 실패 — 빈 상태로 표시: $e');
       if (!mounted) return;
       setState(() {
         _fromBackend = false;
         _loading = false;
-        _active = [...kActiveConversations];
-        _scheduled = [...kScheduledConversations];
-        _completed = [...kCompletedConversations];
-        _failed = [...kFailedMatches];
+        _active = [];
+        _scheduled = [];
+        _completed = [];
+        _failed = [];
       });
     }
   }

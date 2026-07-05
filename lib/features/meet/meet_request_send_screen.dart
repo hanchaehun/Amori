@@ -52,8 +52,9 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
     ),
   ];
 
-  MatchProfile get _match =>
-      widget.matchId == null ? kMatches.first : findMatchById(widget.matchId!);
+  MatchProfile get _match => widget.matchId == null
+      ? kPlaceholderMatch
+      : findMatchById(widget.matchId!);
 
   @override
   void dispose() {
@@ -82,7 +83,7 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
     setState(() => _sending = true);
     try {
       // BFF 매칭 결과에서 이 match의 상대(receiver)를 찾는다.
-      // 더미 매치(kMatches) ID처럼 백엔드에 없는 매치는 데모 플로우로 진행.
+      // 플레이스홀더 매치 ID처럼 백엔드에 없는 매치는 데모 플로우로 진행.
       final candidates = await MatchRepository().findMatches();
       MatchCandidate? target;
       for (final candidate in candidates) {
@@ -110,9 +111,6 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
     }
   }
 
-  String _shortName(String fullName) =>
-      fullName.length <= 1 ? fullName : fullName.substring(1);
-
   @override
   Widget build(BuildContext context) {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -133,7 +131,7 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
               children: [
                 _MatchSummaryCard(match: _match),
                 AppSpacing.vXl,
-                _MessageLabel(name: '${_shortName(_match.name)}님'),
+                _MessageLabel(name: '${_match.name}님'),
                 AppSpacing.vSm,
                 _MessageInput(controller: _controller, focusNode: _focusNode),
                 AppSpacing.vSm,
@@ -147,7 +145,7 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
                   ),
                 ),
                 AppSpacing.vXl,
-                _InfoCard(name: '${_shortName(_match.name)}님'),
+                _InfoCard(name: '${_match.name}님'),
               ],
             ),
           ),
@@ -200,7 +198,7 @@ class _MatchSummaryCard extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _Avatar(initial: '지'),
+              const _Avatar(initial: '나'),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Icon(

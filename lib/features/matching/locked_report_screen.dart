@@ -28,17 +28,17 @@ class LockedReportScreen extends StatelessWidget {
 
   void _onUnlock(BuildContext context) {
     HapticFeedback.lightImpact();
-    context.push('${AppRoutes.paywall}?id=${matchId ?? kMatches.first.id}');
+    context.push('${AppRoutes.paywall}?id=${matchId ?? kPlaceholderMatch.id}');
   }
 
   void _onSubscribe(BuildContext context) {
     HapticFeedback.selectionClick();
-    context.push('${AppRoutes.paywall}?id=${matchId ?? kMatches.first.id}');
+    context.push('${AppRoutes.paywall}?id=${matchId ?? kPlaceholderMatch.id}');
   }
 
   @override
   Widget build(BuildContext context) {
-    final match = matchId == null ? kMatches.first : findMatchById(matchId!);
+    final match = matchId == null ? kPlaceholderMatch : findMatchById(matchId!);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -65,7 +65,7 @@ class LockedReportScreen extends StatelessWidget {
                     ),
                     children: [
                       _Hero(
-                        myInitial: '지',
+                        myInitial: '나',
                         themInitial: match.initial,
                         score: match.score,
                       ),

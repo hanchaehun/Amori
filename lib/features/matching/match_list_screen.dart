@@ -39,8 +39,7 @@ class _MatchListScreenState extends State<MatchListScreen> {
   void initState() {
     super.initState();
     if (AmoriBackend().currentUser != null) {
-      // BFF 벡터 매칭. 실유저 페르소나가 쌓이기 전(빈 결과·오류)에는
-      // 화면단에서 더미 kMatches 로 폴백한다 (P2에서 졸업 예정).
+      // BFF 벡터 매칭. 결과가 비었거나 오류면 빈 상태를 보여준다(예시 인물 없음).
       _matchFuture = MatchRepository()
           .findMatches()
           .then(
@@ -113,14 +112,15 @@ class _MatchListSliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 미로그인 상태: 아직 매칭이 없다는 빈 상태.
     if (future == null) {
-      return _cards(kMatches);
+      return const _EmptySliver();
     }
 
     return FutureBuilder<List<MatchProfile>>(
       future: future,
       builder: (context, snapshot) {
-        if (snapshot.hasError) return _cards(kMatches);
+        if (snapshot.hasError) return const _EmptySliver();
         final profiles = snapshot.data;
         if (profiles == null) {
           return const SliverPadding(
@@ -135,7 +135,7 @@ class _MatchListSliver extends StatelessWidget {
             ),
           );
         }
-        if (profiles.isEmpty) return _cards(kMatches);
+        if (profiles.isEmpty) return const _EmptySliver();
         return _cards(_filtered(profiles));
       },
     );
@@ -169,6 +169,46 @@ class _MatchListSliver extends StatelessWidget {
         separatorBuilder: (_, _) => AppSpacing.vMd,
         itemBuilder: (_, i) =>
             _MatchCard(match: matches[i], onTap: () => onTap(matches[i])),
+      ),
+    );
+  }
+}
+
+class _EmptySliver extends StatelessWidget {
+  const _EmptySliver();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SliverPadding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.xxl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+      ),
+      sliver: SliverToBoxAdapter(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.favorite_border_rounded,
+                size: 48,
+                color: AppColors.ink300,
+              ),
+              SizedBox(height: 12),
+              Text(
+                '아직 검증된 인연이 없어요',
+                style: TextStyle(color: AppColors.ink500),
+              ),
+              SizedBox(height: 4),
+              Text(
+                '에이전트가 소개팅을 다녀오면 여기에 나타나요',
+                style: TextStyle(color: AppColors.ink300, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

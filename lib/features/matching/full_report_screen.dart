@@ -29,8 +29,9 @@ class _FullReportScreenState extends State<FullReportScreen> {
 
   static const _tabs = ['요약', '대화 로그', '첫 만남 가이드'];
 
-  MatchProfile get _match =>
-      widget.matchId == null ? kMatches.first : findMatchById(widget.matchId!);
+  MatchProfile get _match => widget.matchId == null
+      ? kPlaceholderMatch
+      : findMatchById(widget.matchId!);
 
   CompatibilityReport? get _report => AgentSessionStore.instance.report;
   int get _score => _report?.score ?? _match.score;
@@ -122,7 +123,7 @@ class _HeroSection extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _Avatar(initial: '지'),
+          _Avatar(initial: '나'),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
             child: Icon(
@@ -164,7 +165,7 @@ class _HeroSection extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '지은 × ${match.name.substring(1)}',
+                  '나 × ${match.name}',
                   style: AppTypography.caption.copyWith(
                     color: AppColors.ink500,
                     fontSize: 12,
@@ -349,7 +350,7 @@ class _SummaryTab extends StatelessWidget {
         else
           const _WarningCard(
             title: '대화 페이스 차이',
-            body: '민준님이 다소 빠른 편 — 충분히 듣고 답하는 시간을 가져보세요',
+            body: '상대가 다소 빠른 편 — 충분히 듣고 답하는 시간을 가져보세요',
           ),
       ],
     );
@@ -632,7 +633,7 @@ class _GuideTab extends StatelessWidget {
 
     final tip = report?.tip.isNotEmpty == true
         ? report!.tip
-        : '민준님은 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — 본인 페이스로 답해도 충분히 매력적으로 받아들여집니다.';
+        : '상대는 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — 본인 페이스로 답해도 충분히 매력적으로 받아들여집니다.';
 
     return ListView(
       physics: const BouncingScrollPhysics(),
