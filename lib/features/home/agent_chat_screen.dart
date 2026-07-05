@@ -31,10 +31,10 @@ class _ChatMessage {
   final String? signal;
 }
 
-const _meName = '지은-AI';
-const _meInitial = '지';
-const _fallbackThemName = '민준-AI';
-const _fallbackThemInitial = '민';
+const _meName = '내 AI';
+const _meInitial = '나';
+const _fallbackThemName = '상대 AI';
+const _fallbackThemInitial = '상';
 
 // 백엔드에 닿지 못할 때(오프라인 / dev 미설정)만 보여줄 폴백 더미 대화.
 const List<_ChatMessage> _fallbackMessages = [

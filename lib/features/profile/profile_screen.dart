@@ -220,7 +220,7 @@ class _ProfileHero extends StatelessWidget {
             ),
           ),
           AppSpacing.vMd,
-          Text('이지은', style: AppTypography.titleLarge.copyWith(fontSize: 22)),
+          Text('회원', style: AppTypography.titleLarge.copyWith(fontSize: 22)),
           const SizedBox(height: 4),
           Text(
             '26세 · 서울',
@@ -301,7 +301,7 @@ class _AgentCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "지은's AI",
+                      "내 AI",
                       style: AppTypography.titleMedium.copyWith(fontSize: 15),
                     ),
                     const SizedBox(height: 2),

@@ -31,14 +31,14 @@ class PushPreviewScreen extends StatelessWidget {
   static const List<_PushNoti> _notifications = [
     _PushNoti(
       icon: Icons.mark_email_unread_rounded,
-      title: '서민준님이 만남을 신청했어요',
+      title: '상대님이 만남을 신청했어요',
       body: '88점 케미 · "안녕하세요! 프로필에서 영화 취향이..."',
       time: '지금',
       target: AppRoutes.meetRequestReceive,
     ),
     _PushNoti(
       icon: Icons.check_circle_rounded,
-      title: '민준님이 신청을 수락했어요!',
+      title: '상대님이 신청을 수락했어요!',
       body: '대화를 시작해보세요. AI 코치가 도와드릴게요.',
       time: '5분 전',
       target: AppRoutes.chat,
@@ -46,7 +46,7 @@ class PushPreviewScreen extends StatelessWidget {
     _PushNoti(
       icon: Icons.calendar_month_rounded,
       title: '내일 저녁 약속이 있어요',
-      body: '김현우님과 첫 만남 — 채팅에서 확정한 약속이에요',
+      body: '상대님과 첫 만남 — 채팅에서 확정한 약속이에요',
       time: '1시간 전',
       target: AppRoutes.chat, // 약속은 직접 채팅에서 잡는다 (스케줄링 목업 제거)
     ),

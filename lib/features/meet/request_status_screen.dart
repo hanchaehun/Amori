@@ -13,7 +13,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 
 class RequestStatusScreen extends StatefulWidget {
-  const RequestStatusScreen({super.key, this.targetName = '민준'});
+  const RequestStatusScreen({super.key, this.targetName = '상대'});
 
   final String targetName;
 

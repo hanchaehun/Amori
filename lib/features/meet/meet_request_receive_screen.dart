@@ -14,10 +14,10 @@ import '../../core/widgets/gradient_button.dart';
 class MeetRequestReceiveScreen extends StatelessWidget {
   const MeetRequestReceiveScreen({super.key});
 
-  static const _name = '이지은';
+  static const _name = '상대';
   static const _age = 26;
   static const _location = '서울 · 1.2km 거리';
-  static const _initial = '지';
+  static const _initial = '상';
   static const _score = 88;
   static const _values = 92;
   static const _humor = 85;

@@ -14,8 +14,8 @@ import '../../core/widgets/gradient_button.dart';
 class RequestTimeoutScreen extends StatelessWidget {
   const RequestTimeoutScreen({
     super.key,
-    this.targetName = '서민준',
-    this.targetInitial = '민',
+    this.targetName = '상대',
+    this.targetInitial = '상',
     this.targetAge = 28,
     this.requestDate = '5/3',
     this.expiryDate = '5/4',

@@ -113,7 +113,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 AppSpacing.lg,
               ),
               children: [
-                const _Hero(name: '민준', initial: '민', date: '11월 12일 · 성수 카페'),
+                const _Hero(name: '상대', initial: '상', date: '11월 12일 · 성수 카페'),
                 AppSpacing.vXl,
                 _QuestionLabel(n: 1, text: '실제 인상은 어땠나요?'),
                 AppSpacing.vSm,
@@ -139,7 +139,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 AppSpacing.vSm,
                 _SliderLabels(value: _accuracy),
                 AppSpacing.vXl,
-                _QuestionLabel(n: 3, text: '민준님과 계속 연락하실 건가요?'),
+                _QuestionLabel(n: 3, text: '상대님과 계속 연락하실 건가요?'),
                 AppSpacing.vSm,
                 _NextStepList(
                   value: _nextStep,

@@ -164,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                const _Greeting(name: '지은'),
+                const _Greeting(name: '회원'),
                 AppSpacing.vLg,
                 _HeroAICard(data: _hero, onTap: _openConnect),
                 if (_showDailyQuestion) ...[
@@ -810,7 +810,7 @@ class _LockedMatchCardState extends State<_LockedMatchCard> {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  '민',
+                  '상',
                   style: AppTypography.titleMedium.copyWith(
                     color: AppColors.ink700,
                     fontWeight: FontWeight.w900,
@@ -823,7 +823,7 @@ class _LockedMatchCardState extends State<_LockedMatchCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '서민준',
+                      '상대',
                       style: AppTypography.titleMedium.copyWith(fontSize: 15),
                     ),
                     AppSpacing.vXxs,
