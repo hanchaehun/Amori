@@ -12,7 +12,9 @@ class Scenario {
     required this.contextLabel,
     required this.situation,
     required this.question,
-    required this.choices,
+    this.choices = const [],
+    this.isFreeText = false,
+    this.hint,
   });
 
   final String category;
@@ -22,9 +24,136 @@ class Scenario {
   final String situation;
   final String question;
   final List<ChoiceOption> choices;
+
+  /// 주관식(말투 샘플) 문항 — 사용자가 평소 말투 그대로 메시지를 직접 쓴다.
+  /// 객관식은 성향(매칭)을 잡지만 말투는 못 잡는다는 게 실 Gemini E2E에서
+  /// 실증되어, 이 답변이 에이전트 voice의 원천이 된다 (voice 2차).
+  final bool isFreeText;
+
+  /// 주관식 입력칸 placeholder.
+  final String? hint;
+}
+
+const List<String> kInitialScenarioCodes = ['R-1', 'R-2', 'R-3', 'R-4', 'R-5'];
+
+const List<String> kDailyScenarioCodes = [
+  '9-1',
+  '9-2',
+  '9-3',
+  '2-1',
+  '7-3',
+  '5-2',
+  '4-2',
+  '8-3',
+  '6-2',
+  '6-3',
+  '7-1',
+  '4-1',
+  '5-1',
+  '2-2',
+  '8-2',
+  '3-2',
+  '3-3',
+  '6-1',
+  '5-3',
+  '4-3',
+  '1-2',
+  '1-3',
+  '2-3',
+  '7-2',
+];
+
+Scenario? scenarioByCode(String code) {
+  for (final scenario in kScenarios) {
+    if (scenario.code == code) return scenario;
+  }
+  return null;
+}
+
+List<Scenario> scenariosByCodes(List<String> codes) {
+  final scenarios = <Scenario>[];
+  for (final code in codes) {
+    final scenario = scenarioByCode(code);
+    if (scenario != null) scenarios.add(scenario);
+  }
+  return scenarios;
 }
 
 const List<Scenario> kScenarios = [
+  // R. 대표 질문
+  Scenario(
+    category: '관계 목적 / 진지함',
+    code: 'R-1',
+    title: '원하는 관계',
+    contextLabel: '새로운 만남',
+    situation: '새로운 사람을 만난다면, 지금 원하는 관계에 가장 가까운 것은 무엇인가요?',
+    question: '당신의 선택은?',
+    choices: [
+      ChoiceOption('A', '부담 없이 알아가고 싶다'),
+      ChoiceOption('B', '천천히 연애 가능성을 확인하고 싶다'),
+      ChoiceOption('C', '진지한 연애를 원한다'),
+      ChoiceOption('D', '결혼 가능성까지 고려하고 싶다'),
+      ChoiceOption('E', '아직 명확하게 정하지 않았다'),
+    ],
+  ),
+  Scenario(
+    category: '연락 / 관계 확인',
+    code: 'R-2',
+    title: '연락 스타일',
+    contextLabel: '소개팅 이후',
+    situation: '첫 만남의 분위기는 좋았지만, 상대는 하루에 한두 번 정도만 답장합니다. 답장이 성의 없지는 않습니다.',
+    question: '당신의 생각에 가장 가까운 것은 무엇인가요?',
+    choices: [
+      ChoiceOption('A', '하루에 한두 번이면 충분하다'),
+      ChoiceOption('B', '짧게라도 자주 연락하고 싶다'),
+      ChoiceOption('C', '횟수보다 꾸준히 연락하는 것이 중요하다'),
+      ChoiceOption('D', '연락보다 직접 만났을 때의 대화가 중요하다'),
+    ],
+  ),
+  Scenario(
+    category: '감정 표현 / 갈등 대처',
+    code: 'R-3',
+    title: '서운함을 다루는 방식',
+    contextLabel: '썸 또는 연애 중',
+    situation: '상대의 말 때문에 조금 서운했습니다. 큰 문제는 아니지만 그냥 넘기면 계속 마음에 남을 것 같습니다.',
+    question: '당신은 보통 어떻게 하나요?',
+    choices: [
+      ChoiceOption('A', '그 자리에서 바로 이야기한다'),
+      ChoiceOption('B', '감정을 정리한 뒤 이야기한다'),
+      ChoiceOption('C', '상대가 먼저 알아차리는지 기다린다'),
+      ChoiceOption('D', '혼자 정리하고 넘어간다'),
+    ],
+  ),
+  Scenario(
+    category: '위로 / 정서적 욕구',
+    code: 'R-4',
+    title: '원하는 위로 방식',
+    contextLabel: '연애 중',
+    situation: '힘든 하루를 보낸 뒤 상대에게 “오늘 많이 지쳤어”라고 말했습니다.',
+    question: '상대가 어떻게 해주면 가장 좋나요?',
+    choices: [
+      ChoiceOption('A', '내 이야기를 들어주고 공감해준다'),
+      ChoiceOption('B', '해결 방법을 함께 찾아준다'),
+      ChoiceOption('C', '맛있는 음식이나 데이트로 기분을 전환해준다'),
+      ChoiceOption('D', '혼자 쉴 수 있도록 기다려준다'),
+    ],
+  ),
+  Scenario(
+    category: '핵심 가치관 / 매칭 우선순위',
+    code: 'R-5',
+    title: '관계에서 가장 중요한 것',
+    contextLabel: '장기 관계',
+    situation: '상대와 잘 지내더라도, 다음 중 하나가 부족하면 장기적으로 가장 힘들 것 같은 것은 무엇인가요?',
+    question: '당신에게 가장 중요한 것은 무엇인가요?',
+    choices: [
+      ChoiceOption('A', '대화가 잘 통하는 것'),
+      ChoiceOption('B', '신뢰할 수 있고 행동이 일관적인 것'),
+      ChoiceOption('C', '애정과 관심을 표현하는 것'),
+      ChoiceOption('D', '생활 방식과 데이트 취향이 잘 맞는 것'),
+      ChoiceOption('E', '서로의 시간과 선택을 존중하는 것'),
+    ],
+  ),
+
   // 1. 연락 / 대화 템포
   Scenario(
     category: '연락 / 대화 템포',
@@ -372,8 +501,7 @@ const List<Scenario> kScenarios = [
     code: '8-3',
     title: '관계 불안',
     contextLabel: '썸 / 연애 초반',
-    situation:
-        '상대의 답장이 전보다 짧아졌고, 만날 때도 조금 피곤해 보입니다. 큰 변화는 아니지만 당신은 신경이 쓰입니다.',
+    situation: '상대의 답장이 전보다 짧아졌고, 만날 때도 조금 피곤해 보입니다. 큰 변화는 아니지만 당신은 신경이 쓰입니다.',
     question: '당신은 보통 어떻게 하나요?',
     choices: [
       ChoiceOption('A', '일단 상황을 지켜본다'),
@@ -381,5 +509,40 @@ const List<Scenario> kScenarios = [
       ChoiceOption('C', '나에 대한 마음이 달라졌는지 확인하고 싶다'),
       ChoiceOption('D', '혼자 생각이 많아지는 편이다'),
     ],
+  ),
+
+  // 9. 말투 샘플 (주관식) — 사용자가 직접 쓴 문장이 에이전트 voice의 원천.
+  // 세 상황은 각각 다른 말투 단면을 트리거한다:
+  // 9-1 난처함 대처(부정 상황 톤앤매너), 9-2 취향 티키타카(말수·되묻기),
+  // 9-3 칭찬 반응(리액션 크기·수줍음·유머).
+  Scenario(
+    category: '말투 샘플',
+    code: '9-1',
+    title: '난처한 상황 메시지',
+    contextLabel: '소개팅 당일',
+    situation: '오늘 만나기로 한 카페가 하필 정기 휴무라는 걸 방금 알았습니다. 약속 시간은 한 시간 뒤입니다.',
+    question: '상대에게 보낼 메시지를 평소 말투 그대로 써보세요.',
+    isFreeText: true,
+    hint: '평소 카톡 보내듯 편하게 써주세요. 이모지·ㅋㅋ·말버릇 모두 그대로!',
+  ),
+  Scenario(
+    category: '말투 샘플',
+    code: '9-2',
+    title: '취향 질문에 답하기',
+    contextLabel: '썸',
+    situation: '상대가 이렇게 물어봤습니다: "스트레스 풀 때 보통 뭐 하세요? 밖에서 활동하는 파예요, 집에서 쉬는 파예요?"',
+    question: '평소 말투 그대로 답장을 써보세요.',
+    isFreeText: true,
+    hint: '단답이든 길게든, 실제로 보낼 답장 그대로면 됩니다.',
+  ),
+  Scenario(
+    category: '말투 샘플',
+    code: '9-3',
+    title: '칭찬에 답하기',
+    contextLabel: '소개팅 후',
+    situation: '소개팅이 끝나고 상대에게 메시지가 왔습니다: "오늘 대화 진짜 즐거웠어요. 되게 다정하신 것 같아요 ㅎㅎ"',
+    question: '평소 말투 그대로 답장을 써보세요.',
+    isFreeText: true,
+    hint: '칭찬받았을 때 평소 반응 그대로 — 쑥스러우면 쑥스러운 대로!',
   ),
 ];

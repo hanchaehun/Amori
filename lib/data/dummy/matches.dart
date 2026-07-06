@@ -22,52 +22,18 @@ class MatchProfile {
   final List<String> recommendedTopics;
 }
 
-const List<MatchProfile> kMatches = [
-  MatchProfile(
-    id: 'minjun',
-    initial: '민',
-    name: '서민준',
-    age: 28,
-    score: 88,
-    values: 92,
-    humor: 85,
-    communication: 88,
-    recommendedTopics: ['여행', '영화', '일상 루틴'],
-  ),
-  MatchProfile(
-    id: 'jihyun',
-    initial: '지',
-    name: '김지현',
-    age: 27,
-    score: 82,
-    values: 86,
-    humor: 78,
-    communication: 82,
-    recommendedTopics: ['카페', '독서', '여행'],
-  ),
-  MatchProfile(
-    id: 'hyunwoo',
-    initial: '현',
-    name: '박현우',
-    age: 29,
-    score: 79,
-    values: 81,
-    humor: 76,
-    communication: 80,
-    recommendedTopics: ['음악', '운동', '맛집'],
-  ),
-  MatchProfile(
-    id: 'sumin',
-    initial: '수',
-    name: '이수민',
-    age: 26,
-    score: 91,
-    values: 94,
-    humor: 88,
-    communication: 91,
-    recommendedTopics: ['전시', '여행', '와인'],
-  ),
-];
+/// 실제 매칭 데이터가 아직 배선되지 않은 화면(잠금 리포트·만남 신청 등)이
+/// 참조하는 중립 플레이스홀더. 예시 인물(가짜 이름)을 제거하고 역할 라벨만 노출한다.
+const MatchProfile kPlaceholderMatch = MatchProfile(
+  id: 'placeholder',
+  initial: '상',
+  name: '상대',
+  age: 0,
+  score: 0,
+  values: 0,
+  humor: 0,
+  communication: 0,
+  recommendedTopics: [],
+);
 
-MatchProfile findMatchById(String id) =>
-    kMatches.firstWhere((m) => m.id == id, orElse: () => kMatches.first);
+MatchProfile findMatchById(String id) => kPlaceholderMatch;
