@@ -1,0 +1,42 @@
+# Render Blueprint — AMORI 백엔드(FastAPI/BFF) 상시 배포.
+# 앱 → 이 서버(공개 URL) → Neon Postgres 경로를 완성한다.
+#
+# 사용법(대시보드에서 1회):
+#   1) render.com 가입 → New → Blueprint → 이 리포(hanchaehun/Amori) 연결
+#   2) Render가 이 파일을 읽어 서비스를 만든다. sync:false 값들은 배포 중 입력창이 뜬다.
+#   3) 서비스 생성 후 Environment → Secret Files 에 Firebase 키 JSON 업로드
+#      (파일명: firebase-adminsdk.json → GOOGLE_APPLICATION_CREDENTIALS 경로와 일치)
+services:
+  - type: web
+    name: amori-backend
+    runtime: python
+    plan: free           # 무료 티어(15분 미사용 시 슬립 → 첫 요청 콜드스타트)
+    rootDir: backend     # 백엔드는 리포의 backend/ 하위에 있다
+    branch: hoom         # 최신 백엔드(modoo 등)가 있는 브랜치. main은 뒤처져 있음.
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true     # 이 브랜치(hoom)에 push 되면 자동 재배포
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      # LLM — modoo(DevDive 채팅 + Gemini 임베딩)
+      - key: LLM_PROVIDER
+        value: modoo
+      - key: MODOO_API_KEY
+        sync: false      # 대시보드에서 입력 (리포에 노출 금지)
+      - key: GEMINI_API_KEY
+        sync: false      # 임베딩용 — modoo 모드에도 필요
+      # DB — Neon 공용 (asyncpg + ssl=require)
+      - key: DATABASE_URL
+        sync: false
+      # Firebase
+      - key: FIREBASE_PROJECT_ID
+        value: amori-260523
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/firebase-adminsdk.json  # Secret File 마운트 경로
+      # 운영 스위치
+      - key: AUTO_SIM_ENABLED
+        value: "false"   # 자동 소개팅 — 무료 쿼터 보호차 기본 off (필요 시 true)
+      - key: DEBUG
+        value: "false"   # 공개 서버 → dev 토큰 우회 차단(보안). dev uid 테스트하려면 true
