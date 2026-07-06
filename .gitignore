@@ -11,6 +11,7 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+AGENTS.md
 
 # IntelliJ related
 *.iml
@@ -57,7 +58,10 @@ _extract*.py
 # Local Claude Code settings (user-specific, not project)
 .claude/settings.local.json
 
-# Python (혹시 backend/llm 이 Python 으로 가는 경우)
+# oh-my-claudecode 세션 상태 (개발 도구 로컬 상태 — 커밋 금지)
+.omc/
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -68,19 +72,35 @@ venv/
 .mypy_cache/
 .ipynb_checkpoints/
 
-# Node (혹시 backend 가 Node 로 가는 경우)
+# Node
 node_modules/
+
+# Backend (FastAPI)
+backend/.env
+backend/.env.local
+# 주의: alembic 마이그레이션은 스키마의 단일 원천이라 반드시 커밋한다 (무시 금지).
 
 # Env / secrets — 절대 커밋 금지
 .env
 .env.local
 *.service-account.json
 *-credentials.json
+*firebase-adminsdk*.json
 
 # LLM weights / cache — 절대 커밋 금지
 *.bin
 *.safetensors
 **/models/
+# Flutter 데이터 모델은 예외
+!lib/data/models/
+!lib/data/models/**
+# 백엔드 SQLAlchemy 모델 패키지는 ML 가중치가 아니라 소스코드 — 예외
+# (디렉토리를 먼저 re-include한 뒤 .py만 허용해야 __pycache__는 계속 무시됨)
+!backend/app/models/
+!backend/app/models/*.py
+
+# 검증 스크립트의 생성 출력물 (대화 로그) — 트래킹 안 함
+backend/scripts/e2e_result.md
 **/.cache/
 
 # 제안서 / 개인 자료
