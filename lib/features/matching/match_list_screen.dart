@@ -9,17 +9,19 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../data/backend/amori_backend.dart';
 import '../../data/dummy/matches.dart';
+import '../../data/repositories/match_repository.dart';
 
 enum _MatchFilter { all, valueAlignment, humor, conversation }
 
 extension _MatchFilterX on _MatchFilter {
   String get label => switch (this) {
-        _MatchFilter.all => '전체',
-        _MatchFilter.valueAlignment => '가치관',
-        _MatchFilter.humor => '유머',
-        _MatchFilter.conversation => '대화 패턴',
-      };
+    _MatchFilter.all => '전체',
+    _MatchFilter.valueAlignment => '가치관',
+    _MatchFilter.humor => '유머',
+    _MatchFilter.conversation => '대화 패턴',
+  };
 }
 
 class MatchListScreen extends StatefulWidget {
@@ -31,12 +33,28 @@ class MatchListScreen extends StatefulWidget {
 
 class _MatchListScreenState extends State<MatchListScreen> {
   _MatchFilter _filter = _MatchFilter.all;
+  Future<List<MatchProfile>>? _matchFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AmoriBackend().currentUser != null) {
+      // BFF 벡터 매칭. 결과가 비었거나 오류면 빈 상태를 보여준다(예시 인물 없음).
+      _matchFuture = MatchRepository()
+          .findMatches()
+          .then(
+            (candidates) => [
+              for (final candidate in candidates) candidate.toProfile(),
+            ],
+          );
+    }
+  }
 
   void _onFilterTrailing() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('필터 옵션 — 다음 턴 작업 예정')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('필터 옵션 — 다음 턴 작업 예정')));
   }
 
   void _onMatchTap(MatchProfile match) {
@@ -70,23 +88,127 @@ class _MatchListScreenState extends State<MatchListScreen> {
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
+          _MatchListSliver(
+            future: _matchFuture,
+            filter: _filter,
+            onTap: _onMatchTap,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MatchListSliver extends StatelessWidget {
+  const _MatchListSliver({
+    required this.future,
+    required this.filter,
+    required this.onTap,
+  });
+
+  final Future<List<MatchProfile>>? future;
+  final _MatchFilter filter;
+  final ValueChanged<MatchProfile> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // 미로그인 상태: 아직 매칭이 없다는 빈 상태.
+    if (future == null) {
+      return const _EmptySliver();
+    }
+
+    return FutureBuilder<List<MatchProfile>>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const _EmptySliver();
+        final profiles = snapshot.data;
+        if (profiles == null) {
+          return const SliverPadding(
+            padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
-              AppSpacing.md,
+              AppSpacing.xl,
               AppSpacing.lg,
               AppSpacing.xl,
             ),
-            sliver: SliverList.separated(
-              itemCount: kMatches.length,
-              separatorBuilder: (_, _) => AppSpacing.vMd,
-              itemBuilder: (_, i) => _MatchCard(
-                match: kMatches[i],
-                onTap: () => _onMatchTap(kMatches[i]),
-              ),
+            sliver: SliverToBoxAdapter(
+              child: Center(child: CircularProgressIndicator()),
             ),
+          );
+        }
+        if (profiles.isEmpty) return const _EmptySliver();
+        return _cards(_filtered(profiles));
+      },
+    );
+  }
+
+  List<MatchProfile> _filtered(List<MatchProfile> matches) {
+    final sorted = [...matches];
+    switch (filter) {
+      case _MatchFilter.all:
+        sorted.sort((a, b) => b.score.compareTo(a.score));
+      case _MatchFilter.valueAlignment:
+        sorted.sort((a, b) => b.values.compareTo(a.values));
+      case _MatchFilter.humor:
+        sorted.sort((a, b) => b.humor.compareTo(a.humor));
+      case _MatchFilter.conversation:
+        sorted.sort((a, b) => b.communication.compareTo(a.communication));
+    }
+    return sorted;
+  }
+
+  Widget _cards(List<MatchProfile> matches) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xl,
+      ),
+      sliver: SliverList.separated(
+        itemCount: matches.length,
+        separatorBuilder: (_, _) => AppSpacing.vMd,
+        itemBuilder: (_, i) =>
+            _MatchCard(match: matches[i], onTap: () => onTap(matches[i])),
+      ),
+    );
+  }
+}
+
+class _EmptySliver extends StatelessWidget {
+  const _EmptySliver();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SliverPadding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.xxl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+      ),
+      sliver: SliverToBoxAdapter(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.favorite_border_rounded,
+                size: 48,
+                color: AppColors.ink300,
+              ),
+              SizedBox(height: 12),
+              Text(
+                '아직 검증된 인연이 없어요',
+                style: TextStyle(color: AppColors.ink500),
+              ),
+              SizedBox(height: 4),
+              Text(
+                '에이전트가 소개팅을 다녀오면 여기에 나타나요',
+                style: TextStyle(color: AppColors.ink300, fontSize: 12),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -113,8 +235,11 @@ class _TopBar extends StatelessWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.tune_rounded,
-                  size: 22, color: AppColors.ink900),
+              icon: const Icon(
+                Icons.tune_rounded,
+                size: 22,
+                color: AppColors.ink900,
+              ),
               onPressed: onTrailing,
             ),
           ],
@@ -137,8 +262,7 @@ class _VerifiedBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.shield_rounded,
-              size: 16, color: AppColors.coral),
+          const Icon(Icons.shield_rounded, size: 16, color: AppColors.coral),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -284,8 +408,10 @@ class _MatchCardState extends State<_MatchCard> {
                     ),
                   ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.coral.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(99),
@@ -304,12 +430,17 @@ class _MatchCardState extends State<_MatchCard> {
               AppSpacing.vMd,
               Row(
                 children: [
-                  Expanded(child: _MiniBar(label: '가치관', value: m.values)),
-                  AppSpacing.hMd,
-                  Expanded(child: _MiniBar(label: '유머', value: m.humor)),
+                  Expanded(
+                    child: _MiniBar(label: '가치관', value: m.values),
+                  ),
                   AppSpacing.hMd,
                   Expanded(
-                      child: _MiniBar(label: '대화', value: m.communication)),
+                    child: _MiniBar(label: '유머', value: m.humor),
+                  ),
+                  AppSpacing.hMd,
+                  Expanded(
+                    child: _MiniBar(label: '대화', value: m.communication),
+                  ),
                 ],
               ),
               AppSpacing.vMd,
@@ -321,10 +452,7 @@ class _MatchCardState extends State<_MatchCard> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                      color: AppColors.coral,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: AppColors.coral, width: 1.5),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -338,8 +466,11 @@ class _MatchCardState extends State<_MatchCard> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Icon(Icons.lock_rounded,
-                          size: 14, color: AppColors.coral),
+                      const Icon(
+                        Icons.lock_rounded,
+                        size: 14,
+                        color: AppColors.coral,
+                      ),
                     ],
                   ),
                 ),

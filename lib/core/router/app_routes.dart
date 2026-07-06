@@ -27,8 +27,8 @@ class AppRoutes {
   static const String requestTimeout = '/meet/timeout';
   static const String meetRequestReceive = '/meet/receive';
   static const String inbox = '/inbox';
+  static const String failedMatches = '/inbox/failed';
   static const String chat = '/chat';
-  static const String scheduling = '/scheduling';
   static const String feedback = '/feedback';
 
   // Phase 4
@@ -40,4 +40,7 @@ class AppRoutes {
 
   // Login (placeholder)
   static const String login = '/login';
+
+  static String dailyScenario(String code) =>
+      '$scenarioPlayer?mode=daily&code=$code';
 }

@@ -10,13 +10,13 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
+import '../../data/backend/amori_backend.dart';
 import '../../data/dummy/matches.dart';
+import '../../data/repositories/match_repository.dart';
+import '../../data/repositories/meet_repository.dart';
 
 class _StarterChip {
-  const _StarterChip({
-    required this.label,
-    required this.message,
-  });
+  const _StarterChip({required this.label, required this.message});
 
   final String label;
   final String message;
@@ -34,6 +34,8 @@ class MeetRequestSendScreen extends StatefulWidget {
 class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final AmoriBackend _backend = AmoriBackend();
+  bool _sending = false;
 
   static const List<_StarterChip> _starters = [
     _StarterChip(
@@ -51,7 +53,7 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
   ];
 
   MatchProfile get _match => widget.matchId == null
-      ? kMatches.first
+      ? kPlaceholderMatch
       : findMatchById(widget.matchId!);
 
   @override
@@ -71,13 +73,43 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
     });
   }
 
-  void _send() {
+  Future<void> _send() async {
     HapticFeedback.mediumImpact();
-    context.go(AppRoutes.requestStatus);
-  }
+    if (_backend.currentUser == null) {
+      context.go(AppRoutes.requestStatus);
+      return;
+    }
 
-  String _shortName(String fullName) =>
-      fullName.length <= 1 ? fullName : fullName.substring(1);
+    setState(() => _sending = true);
+    try {
+      // BFF 매칭 결과에서 이 match의 상대(receiver)를 찾는다.
+      // 플레이스홀더 매치 ID처럼 백엔드에 없는 매치는 데모 플로우로 진행.
+      final candidates = await MatchRepository().findMatches();
+      MatchCandidate? target;
+      for (final candidate in candidates) {
+        if (candidate.matchId == _match.id) {
+          target = candidate;
+          break;
+        }
+      }
+      if (target != null) {
+        await MeetRepository().createRequest(
+          matchId: target.matchId,
+          receiverId: target.userId,
+          message: _controller.text.trim(),
+        );
+      }
+      if (mounted) context.go(AppRoutes.requestStatus);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('만남 신청 저장에 실패했어요. 잠시 후 다시 시도해주세요.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,22 +127,15 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
                 AppSpacing.lg,
                 AppSpacing.lg,
               ),
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               children: [
                 _MatchSummaryCard(match: _match),
                 AppSpacing.vXl,
-                _MessageLabel(name: '${_shortName(_match.name)}님'),
+                _MessageLabel(name: '${_match.name}님'),
                 AppSpacing.vSm,
-                _MessageInput(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                ),
+                _MessageInput(controller: _controller, focusNode: _focusNode),
                 AppSpacing.vSm,
-                _StarterRow(
-                  starters: _starters,
-                  onTap: _applyStarter,
-                ),
+                _StarterRow(starters: _starters, onTap: _applyStarter),
                 AppSpacing.vXxs,
                 Text(
                   '탭하면 시작 문장이 자동 입력됩니다',
@@ -120,7 +145,7 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
                   ),
                 ),
                 AppSpacing.vXl,
-                _InfoCard(name: '${_shortName(_match.name)}님'),
+                _InfoCard(name: '${_match.name}님'),
               ],
             ),
           ),
@@ -134,18 +159,19 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
               ),
               child: GradientButton(
                 label: '만남 신청 보내기',
-                trailing: const Icon(Icons.send_rounded,
-                    color: Colors.white, size: 18),
-                onPressed: _send,
+                trailing: const Icon(
+                  Icons.send_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                onPressed: _sending ? null : _send,
               ),
             ),
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: Text(
                 '오늘 신청 가능: 1 / 3건 (프리미엄)',
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.ink500,
-                ),
+                style: AppTypography.caption.copyWith(color: AppColors.ink500),
               ),
             ),
           ],
@@ -172,11 +198,14 @@ class _MatchSummaryCard extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _Avatar(initial: '지'),
+              const _Avatar(initial: '나'),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.favorite_rounded,
-                    size: 16, color: AppColors.primary),
+                child: Icon(
+                  Icons.favorite_rounded,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
               ),
               _Avatar(initial: match.initial),
             ],
@@ -200,8 +229,11 @@ class _MatchSummaryCard extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check_rounded,
-                        size: 13, color: AppColors.primary),
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 13,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'AI 가상 소개팅 검증 완료',

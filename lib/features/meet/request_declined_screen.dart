@@ -13,7 +13,7 @@ import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
 
 class RequestDeclinedScreen extends StatelessWidget {
-  const RequestDeclinedScreen({super.key, this.targetName = '민준'});
+  const RequestDeclinedScreen({super.key, this.targetName = '상대'});
 
   final String targetName;
 

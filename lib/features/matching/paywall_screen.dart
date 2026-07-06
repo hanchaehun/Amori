@@ -11,7 +11,9 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 
 class PaywallScreen extends StatelessWidget {
-  const PaywallScreen({super.key});
+  const PaywallScreen({super.key, this.matchId});
+
+  final String? matchId;
 
   void _onClose(BuildContext context) {
     HapticFeedback.selectionClick();
@@ -24,19 +26,19 @@ class PaywallScreen extends StatelessWidget {
 
   void _onSelectPerUse(BuildContext context) {
     HapticFeedback.lightImpact();
-    context.go(AppRoutes.fullReport);
+    context.go('${AppRoutes.fullReport}?id=${matchId ?? ''}');
   }
 
   void _onSubscribe(BuildContext context) {
     HapticFeedback.mediumImpact();
-    context.go(AppRoutes.fullReport);
+    context.go('${AppRoutes.fullReport}?id=${matchId ?? ''}');
   }
 
   void _onLegal(BuildContext context, String label) {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label — 외부 페이지 (다음 턴 작업 예정)')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label — 외부 페이지 (다음 턴 작업 예정)')));
   }
 
   @override
@@ -88,8 +90,11 @@ class _CloseBar extends StatelessWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.close_rounded,
-                  size: 22, color: AppColors.ink900),
+              icon: const Icon(
+                Icons.close_rounded,
+                size: 22,
+                color: AppColors.ink900,
+              ),
               onPressed: onClose,
             ),
           ],
@@ -251,8 +256,10 @@ class _PremiumCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(99),
@@ -280,8 +287,7 @@ class _PremiumCard extends StatelessWidget {
           top: -12,
           right: 16,
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(99),
@@ -310,8 +316,7 @@ class _BulletRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.check_rounded,
-            size: 16, color: AppColors.primary),
+        const Icon(Icons.check_rounded, size: 16, color: AppColors.primary),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -436,9 +441,7 @@ class _LegalFooter extends StatelessWidget {
         children: [
           Text(
             '언제든 해지 가능 · 자동 결제 사전 알림',
-            style: AppTypography.caption.copyWith(
-              color: AppColors.ink500,
-            ),
+            style: AppTypography.caption.copyWith(color: AppColors.ink500),
           ),
           const SizedBox(height: 4),
           Row(

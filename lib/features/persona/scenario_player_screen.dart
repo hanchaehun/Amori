@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/agent_session_store.dart';
+
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -11,10 +13,23 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
+import '../../data/backend/scenario_answers_store.dart';
 import '../../data/dummy/scenarios.dart';
+import '../../data/repositories/persona_repository.dart';
+
+enum ScenarioPlayerMode { initial, daily }
 
 class ScenarioPlayerScreen extends StatefulWidget {
-  const ScenarioPlayerScreen({super.key});
+  const ScenarioPlayerScreen({
+    super.key,
+    this.mode = ScenarioPlayerMode.initial,
+    this.scenarioCodes,
+    this.personaRepository,
+  });
+
+  final ScenarioPlayerMode mode;
+  final List<String>? scenarioCodes;
+  final PersonaRepository? personaRepository;
 
   @override
   State<ScenarioPlayerScreen> createState() => _ScenarioPlayerScreenState();
@@ -22,34 +37,131 @@ class ScenarioPlayerScreen extends StatefulWidget {
 
 class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   int _index = 0;
+  // 객관식: 선택지 letter / 주관식: 사용자가 쓴 메시지 원문
   final Map<int, String> _answers = {};
+  final TextEditingController _freeTextController = TextEditingController();
+  late final PersonaRepository _personaRepository;
+  bool _submitting = false;
 
-  static const int _categoryCount = 8;
+  // 주관식은 "평소 말투"가 드러날 최소 길이만 요구 (한 마디면 충분)
+  static const int _minFreeTextLength = 5;
 
-  Scenario get _current => kScenarios[_index];
-  bool get _isLast => _index == kScenarios.length - 1;
-  double get _progress => (_index + 1) / kScenarios.length;
-  int get _categoryIndex => int.parse(_current.code.split('-').first);
+  List<Scenario> get _scenarios {
+    final codes =
+        widget.scenarioCodes ??
+        (widget.mode == ScenarioPlayerMode.initial
+            ? kInitialScenarioCodes
+            : kDailyScenarioCodes.take(1).toList());
+    final scenarios = scenariosByCodes(codes);
+    return scenarios.isEmpty
+        ? scenariosByCodes(kInitialScenarioCodes)
+        : scenarios;
+  }
+
+  Scenario get _current => _scenarios[_index];
+  bool get _isLast => _index == _scenarios.length - 1;
+  double get _progress => (_index + 1) / _scenarios.length;
   String? get _selectedLetter => _answers[_index];
+
+  bool get _canProceed {
+    final answer = _answers[_index];
+    if (answer == null) return false;
+    if (_current.isFreeText) return answer.trim().length >= _minFreeTextLength;
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _personaRepository = widget.personaRepository ?? PersonaRepository();
+  }
+
+  @override
+  void dispose() {
+    _freeTextController.dispose();
+    super.dispose();
+  }
 
   void _select(String letter) {
     HapticFeedback.selectionClick();
     setState(() => _answers[_index] = letter);
   }
 
-  void _next() {
-    if (_selectedLetter == null) return;
+  void _onFreeTextChanged(String text) {
+    setState(() => _answers[_index] = text);
+  }
+
+  /// 문항 이동 시 주관식 컨트롤러를 해당 문항의 저장값으로 동기화한다.
+  void _syncFreeTextController() {
+    if (_current.isFreeText) {
+      _freeTextController.text = _answers[_index] ?? '';
+    }
+  }
+
+  Future<void> _next() async {
+    if (!_canProceed || _submitting) return;
     HapticFeedback.lightImpact();
     if (_isLast) {
-      context.go(AppRoutes.personaLoading);
+      final answers = _toScenarioAnswers();
+      if (widget.mode == ScenarioPlayerMode.daily) {
+        await _submitDailyAnswer(answers.first);
+      } else {
+        ScenarioAnswersStore.save(answers);
+        if (mounted) context.go(AppRoutes.personaLoading);
+      }
     } else {
       setState(() => _index += 1);
+      _syncFreeTextController();
+    }
+  }
+
+  List<ScenarioAnswer> _toScenarioAnswers() {
+    final entries = _answers.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return entries.map((entry) {
+      final scenario = _scenarios[entry.key];
+      if (scenario.isFreeText) {
+        return ScenarioAnswer(
+          code: scenario.code,
+          category: scenario.category,
+          question: scenario.question,
+          answerLetter: '주관식',
+          answerText: entry.value.trim(),
+        );
+      }
+      final choice = scenario.choices.firstWhere(
+        (choice) => choice.letter == entry.value,
+      );
+      return ScenarioAnswer(
+        code: scenario.code,
+        category: scenario.category,
+        question: scenario.question,
+        answerLetter: choice.letter,
+        answerText: choice.text,
+      );
+    }).toList();
+  }
+
+  Future<void> _submitDailyAnswer(ScenarioAnswer answer) async {
+    setState(() => _submitting = true);
+    try {
+      final profile = await _personaRepository.updatePersona(answer);
+      AgentSessionStore.instance.profile = profile;
+      AgentSessionStore.instance.markDailyPersonaCompleted(DateTime.now());
+      if (mounted) context.go(AppRoutes.home);
+    } catch (error) {
+      if (mounted) {
+        _showError('오늘의 답변을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   void _previous() {
     HapticFeedback.selectionClick();
     setState(() => _index -= 1);
+    _syncFreeTextController();
   }
 
   Future<void> _handleBack() async {
@@ -62,7 +174,12 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
 
   Future<void> _exit() async {
     if (_answers.isEmpty) {
-      if (mounted) context.pop();
+      if (!mounted) return;
+      if (widget.mode == ScenarioPlayerMode.daily) {
+        context.go(AppRoutes.home);
+      } else {
+        context.pop();
+      }
       return;
     }
     final shouldExit = await showDialog<bool>(
@@ -71,8 +188,36 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
       builder: (_) => const _ExitConfirmDialog(),
     );
     if (shouldExit == true && mounted) {
-      context.pop();
+      if (widget.mode == ScenarioPlayerMode.daily) {
+        context.go(AppRoutes.home);
+      } else {
+        context.pop();
+      }
     }
+  }
+
+  void _skip() {
+    if (widget.mode == ScenarioPlayerMode.daily) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.personaLoading);
+    }
+  }
+
+  void _showError(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(AppSpacing.md),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+      ),
+    );
   }
 
   @override
@@ -90,10 +235,10 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   Widget _buildBody() {
     return AppScaffold(
       appBar: _ScenarioAppBar(
-        categoryIndex: _categoryIndex,
-        categoryTotal: _categoryCount,
+        stepIndex: _index + 1,
+        stepTotal: _scenarios.length,
         onClose: _exit,
-        onSkip: () => context.go(AppRoutes.personaLoading),
+        onSkip: _skip,
       ),
       body: Column(
         children: [
@@ -134,15 +279,22 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
                       ),
                     ),
                     AppSpacing.vMd,
-                    for (final c in _current.choices) ...[
-                      _ChoiceCard(
-                        letter: c.letter,
-                        text: c.text,
-                        selected: _selectedLetter == c.letter,
-                        onTap: () => _select(c.letter),
-                      ),
-                      AppSpacing.vSm,
-                    ],
+                    if (_current.isFreeText)
+                      _FreeTextCard(
+                        controller: _freeTextController,
+                        hint: _current.hint ?? '평소 말투 그대로 써주세요',
+                        onChanged: _onFreeTextChanged,
+                      )
+                    else
+                      for (final c in _current.choices) ...[
+                        _ChoiceCard(
+                          letter: c.letter,
+                          text: c.text,
+                          selected: _selectedLetter == c.letter,
+                          onTap: () => _select(c.letter),
+                        ),
+                        AppSpacing.vSm,
+                      ],
                   ],
                 ),
               ),
@@ -156,9 +308,15 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
               AppSpacing.lg,
             ),
             child: GradientButton(
-              label: _isLast ? '완료' : '다음',
+              label: _submitting
+                  ? '저장 중...'
+                  : (_isLast
+                        ? (widget.mode == ScenarioPlayerMode.daily
+                              ? '답변 저장'
+                              : '완료')
+                        : '다음'),
               trailing: _isLast ? null : const GradientArrowTrailing(),
-              onPressed: _selectedLetter == null ? null : _next,
+              onPressed: _canProceed && !_submitting ? () => _next() : null,
             ),
           ),
         ],
@@ -169,14 +327,14 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
 
 class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _ScenarioAppBar({
-    required this.categoryIndex,
-    required this.categoryTotal,
+    required this.stepIndex,
+    required this.stepTotal,
     required this.onClose,
     required this.onSkip,
   });
 
-  final int categoryIndex;
-  final int categoryTotal;
+  final int stepIndex;
+  final int stepTotal;
   final VoidCallback onClose;
   final VoidCallback onSkip;
 
@@ -198,13 +356,16 @@ class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(Icons.close_rounded,
-                  color: AppColors.ink900, size: 22),
+              icon: const Icon(
+                Icons.close_rounded,
+                color: AppColors.ink900,
+                size: 22,
+              ),
               onPressed: onClose,
             ),
             const SizedBox(width: 4),
             Text(
-              '$categoryIndex / $categoryTotal',
+              '$stepIndex / $stepTotal',
               style: AppTypography.label.copyWith(
                 color: AppColors.ink700,
                 fontWeight: FontWeight.w700,
@@ -245,7 +406,7 @@ class _ClonigBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            '페르소나 클로닝 중',
+            '에이전트 설정 중',
             style: AppTypography.caption.copyWith(
               color: AppColors.primary,
               fontWeight: FontWeight.w700,
@@ -304,8 +465,10 @@ class _SituationCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(99),
@@ -349,6 +512,88 @@ class _SituationCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _FreeTextCard extends StatelessWidget {
+  const _FreeTextCard({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: AppRadius.rMd,
+            border: Border.all(color: AppColors.ink100, width: 1.5),
+          ),
+          child: TextField(
+            controller: controller,
+            onChanged: onChanged,
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 200,
+            cursorColor: AppColors.primary,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.ink900,
+              fontSize: 15,
+              height: 1.5,
+            ),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: AppTypography.bodyMedium.copyWith(
+                color: AppColors.ink300,
+                fontSize: 14,
+                height: 1.5,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              isDense: true,
+              counterStyle: AppTypography.caption.copyWith(
+                color: AppColors.ink300,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ),
+        AppSpacing.vSm,
+        Row(
+          children: [
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 14,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '내 AI 에이전트의 말투를 조정해요',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.ink500,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -445,8 +690,11 @@ class _ChoiceCard extends StatelessWidget {
             ),
             if (selected) ...[
               const SizedBox(width: 8),
-              const Icon(Icons.check_rounded,
-                  color: AppColors.primary, size: 20),
+              const Icon(
+                Icons.check_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
             ],
           ],
         ),
@@ -470,10 +718,7 @@ class _ExitConfirmDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '지금 나가시겠어요?',
-              style: AppTypography.titleLarge,
-            ),
+            Text('지금 나가시겠어요?', style: AppTypography.titleLarge),
             AppSpacing.vSm,
             Text(
               '지금까지의 답변이 사라져요.\n다시 처음부터 시작해야 합니다.',
@@ -493,10 +738,13 @@ class _ExitConfirmDialog extends StatelessWidget {
                       foregroundColor: AppColors.ink900,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const RoundedRectangleBorder(
-                          borderRadius: AppRadius.rMd),
+                        borderRadius: AppRadius.rMd,
+                      ),
                     ),
-                    child: Text('계속하기',
-                        style: AppTypography.label.copyWith(fontSize: 15)),
+                    child: Text(
+                      '계속하기',
+                      style: AppTypography.label.copyWith(fontSize: 15),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -508,13 +756,16 @@ class _ExitConfirmDialog extends StatelessWidget {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const RoundedRectangleBorder(
-                          borderRadius: AppRadius.rMd),
+                        borderRadius: AppRadius.rMd,
+                      ),
                     ),
-                    child: Text('나가기',
-                        style: AppTypography.label.copyWith(
-                          fontSize: 15,
-                          color: Colors.white,
-                        )),
+                    child: Text(
+                      '나가기',
+                      style: AppTypography.label.copyWith(
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ],

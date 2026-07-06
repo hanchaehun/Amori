@@ -1,15 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/agent_session_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/dev_skip_button.dart';
+import '../../data/repositories/agent_flow.dart';
 
 class PersonaLoadingScreen extends StatefulWidget {
   const PersonaLoadingScreen({super.key});
@@ -23,15 +23,7 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
   late final AnimationController _pulse;
   late final AnimationController _progress;
 
-  static const List<String> _stages = [
-    '대화 스타일 분석 중...',
-    '관계 가치관 분석 중...',
-    '유머 코드 분석 중...',
-    '커뮤니케이션 패턴 분석 중...',
-    '페르소나 생성 마무리 중...',
-  ];
-
-  Timer? _completeTimer;
+  bool _leaving = false;
 
   @override
   void initState() {
@@ -41,22 +33,59 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
       duration: const Duration(milliseconds: 2400),
     )..repeat(reverse: true);
 
-    _progress = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    );
+    _progress = AnimationController(vsync: this);
 
-    _progress.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _completeTimer = Timer(const Duration(milliseconds: 700), _goHome);
-      }
+    // 진행률은 파이프라인 단계(실측)에 앵커 — 단계 안에서만 천천히 긴다.
+    // LLM 콜 한 번의 내부 진행률은 알 수 없으니, 단계 도달이 곧 실제 진행이다.
+    // (실측: persona 생성 콜 16~33초 → 고정 8초 애니메이션이 100%에서
+    //  한참 머무는 문제의 원인이었다.)
+    // 이 화면은 페르소나 생성까지만 책임진다 — 매칭·시뮬레이션은 백엔드
+    // 스케줄러가 하루 랜덤 N회 알아서 실행한다 (services/auto_sim.py).
+    AgentSessionStore.instance.addListener(_onPhaseChanged);
+    AgentFlow().run().whenComplete(() {
+      // 단계 신호를 못 받는 경로(조기 실패 등) 안전망.
+      if (mounted) _finish();
     });
-    _progress.forward();
+    _crawlTo(0.90, const Duration(seconds: 50)); // buildingPersona 진입 전 시작
+  }
+
+  void _onPhaseChanged() {
+    if (!mounted || _leaving) return;
+    switch (AgentSessionStore.instance.phase) {
+      case AgentFlowPhase.buildingPersona:
+        _crawlTo(0.90, const Duration(seconds: 50));
+      case AgentFlowPhase.matching:
+      case AgentFlowPhase.simulating:
+      case AgentFlowPhase.reporting:
+      case AgentFlowPhase.done:
+      case AgentFlowPhase.failed:
+        _finish();
+      case AgentFlowPhase.idle:
+        break;
+    }
+  }
+
+  /// easeOut 크롤 — 처음엔 빠르게, 목표치 근처에선 거의 멈춘 듯 기어간다.
+  /// 단계가 끝나기 전엔 목표치(<100%)를 넘지 않으니 "100%인데 안 넘어감"이 없다.
+  void _crawlTo(double target, Duration duration) {
+    if (_progress.value >= target) return;
+    _progress.animateTo(target, duration: duration, curve: Curves.easeOutCubic);
+  }
+
+  Future<void> _finish() async {
+    if (_leaving) return;
+    _leaving = true;
+    await _progress.animateTo(
+      1.0,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOut,
+    );
+    _goHome();
   }
 
   @override
   void dispose() {
-    _completeTimer?.cancel();
+    AgentSessionStore.instance.removeListener(_onPhaseChanged);
     _pulse.dispose();
     _progress.dispose();
     super.dispose();
@@ -68,15 +97,16 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
   }
 
   void _skip() {
+    _leaving = true;
     _progress.stop();
-    _completeTimer?.cancel();
     _goHome();
   }
 
   String _stageFor(double t) {
-    if (t >= 1.0) return '완료!';
-    final idx = (t * _stages.length).floor().clamp(0, _stages.length - 1);
-    return _stages[idx];
+    if (t >= 0.99) return '에이전트 준비 완료!';
+    if (t < 0.3) return '대화 스타일 분석 중...';
+    if (t < 0.6) return '관계 가치관 분석 중...';
+    return '페르소나 생성 중...';
   }
 
   @override
@@ -105,8 +135,7 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
                   AnimatedBuilder(
                     animation: Listenable.merge([_pulse, _progress]),
                     builder: (_, _) {
-                      final pulseT =
-                          Curves.easeInOut.transform(_pulse.value);
+                      final pulseT = Curves.easeInOut.transform(_pulse.value);
                       final progressT = _progress.value;
                       final percent = (progressT * 100).round();
                       return Column(
@@ -144,15 +173,17 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
                           AppSpacing.vLg,
                           Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.huge),
+                              horizontal: AppSpacing.huge,
+                            ),
                             child: _ProgressTrack(value: progressT),
                           ),
                           const Spacer(flex: 3),
                           Padding(
                             padding: const EdgeInsets.only(
-                                bottom: AppSpacing.xl),
+                              bottom: AppSpacing.xl,
+                            ),
                             child: Text(
-                              '잠시만 기다려주세요. 약 30초 소요됩니다',
+                              '실제 AI가 생성하고 있어요. 1분 정도 걸릴 수 있어요',
                               style: AppTypography.bodySmall.copyWith(
                                 color: Colors.white.withValues(alpha: 0.75),
                               ),
@@ -215,11 +246,20 @@ class _GlowOrb extends StatelessWidget {
             ),
             const Positioned(top: 20, right: 28, child: _Dot(size: 8)),
             const Positioned(
-                bottom: 30, left: 18, child: _Dot(size: 6, opacity: 0.7)),
+              bottom: 30,
+              left: 18,
+              child: _Dot(size: 6, opacity: 0.7),
+            ),
             const Positioned(
-                top: 56, left: 8, child: _Dot(size: 4, opacity: 0.5)),
+              top: 56,
+              left: 8,
+              child: _Dot(size: 4, opacity: 0.5),
+            ),
             const Positioned(
-                bottom: 40, right: 18, child: _Dot(size: 5, opacity: 0.6)),
+              bottom: 40,
+              right: 18,
+              child: _Dot(size: 5, opacity: 0.6),
+            ),
           ],
         ),
       ),

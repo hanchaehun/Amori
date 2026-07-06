@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../../features/onboarding/kyc_block_screen.dart';
+import '../../features/onboarding/login_screen.dart';
 import '../../features/onboarding/signup_screen.dart';
 import '../../features/onboarding/splash_screen.dart';
 import '../../features/onboarding/walkthrough_screen.dart';
@@ -14,7 +15,9 @@ import '../../features/matching/full_report_screen.dart';
 import '../../features/matching/locked_report_screen.dart';
 import '../../features/matching/match_list_screen.dart';
 import '../../features/matching/paywall_screen.dart';
+import '../../data/dummy/conversations.dart';
 import '../../features/meet/chat_screen.dart';
+import '../../features/meet/failed_matches_screen.dart';
 import '../../features/meet/feedback_screen.dart';
 import '../../features/meet/inbox_screen.dart';
 import '../../features/meet/meet_request_receive_screen.dart';
@@ -23,7 +26,6 @@ import '../../features/meet/quota_exceeded_screen.dart';
 import '../../features/meet/request_declined_screen.dart';
 import '../../features/meet/request_status_screen.dart';
 import '../../features/meet/request_timeout_screen.dart';
-import '../../features/meet/scheduling_screen.dart';
 import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
 import '../../features/persona/scenario_player_screen.dart';
@@ -42,8 +44,7 @@ class AppRouter {
     routes: [
       GoRoute(
         path: AppRoutes.splash,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const SplashScreen()),
+        pageBuilder: (context, state) => _fadePage(state, const SplashScreen()),
       ),
       GoRoute(
         path: AppRoutes.walkthrough,
@@ -67,8 +68,19 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.scenarioPlayer,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const ScenarioPlayerScreen()),
+        pageBuilder: (context, state) {
+          final mode = state.uri.queryParameters['mode'] == 'daily'
+              ? ScenarioPlayerMode.daily
+              : ScenarioPlayerMode.initial;
+          final code = state.uri.queryParameters['code'];
+          return _slidePage(
+            state,
+            ScenarioPlayerScreen(
+              mode: mode,
+              scenarioCodes: code == null ? null : [code],
+            ),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.personaLoading,
@@ -77,8 +89,7 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.home,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const HomeScreen()),
+        pageBuilder: (context, state) => _fadePage(state, const HomeScreen()),
       ),
       GoRoute(
         path: AppRoutes.agentChat,
@@ -99,8 +110,10 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.paywall,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const PaywallScreen()),
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          PaywallScreen(matchId: state.uri.queryParameters['id']),
+        ),
       ),
       GoRoute(
         path: AppRoutes.fullReport,
@@ -154,13 +167,13 @@ class AppRouter {
         path: AppRoutes.chat,
         pageBuilder: (context, state) => _slidePage(
           state,
-          ChatScreen(conversationId: state.uri.queryParameters['id']),
+          ChatScreen(
+            conversationId: state.uri.queryParameters['id'],
+            peer: state.extra is Conversation
+                ? state.extra as Conversation
+                : null,
+          ),
         ),
-      ),
-      GoRoute(
-        path: AppRoutes.scheduling,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const SchedulingScreen()),
       ),
       GoRoute(
         path: AppRoutes.feedback,
@@ -169,8 +182,18 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.inbox,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const InboxScreen()),
+        pageBuilder: (context, state) => _fadePage(state, const InboxScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.failedMatches,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          FailedMatchesScreen(
+            items: state.extra is List<FailedMatch>
+                ? state.extra as List<FailedMatch>
+                : const [],
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.profile,
@@ -199,8 +222,7 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.login,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const _ComingSoon(title: '로그인')),
+        pageBuilder: (context, state) => _slidePage(state, const LoginScreen()),
       ),
     ],
     errorBuilder: (context, state) =>
@@ -233,7 +255,10 @@ class AppRouter {
       child: child,
       transitionDuration: const Duration(milliseconds: 320),
       transitionsBuilder: (context, animation, _, c) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
@@ -282,13 +307,15 @@ class _ComingSoon extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.construction_rounded,
-                size: 56, color: AppColors.ink300),
+            const Icon(
+              Icons.construction_rounded,
+              size: 56,
+              color: AppColors.ink300,
+            ),
             const SizedBox(height: 16),
             Text(
               '곧 만들어집니다',
-              style:
-                  AppTypography.bodyLarge.copyWith(color: AppColors.ink500),
+              style: AppTypography.bodyLarge.copyWith(color: AppColors.ink500),
             ),
             const SizedBox(height: 32),
             TextButton.icon(

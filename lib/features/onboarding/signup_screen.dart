@@ -12,6 +12,9 @@ import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../core/widgets/primary_text_field.dart';
 import '../../core/widgets/segmented_selector.dart';
+import '../../data/backend/amori_backend.dart';
+import '../../data/backend/backend_exception.dart';
+import '../../data/repositories/user_repository.dart';
 
 enum _Gender { female, male, other }
 
@@ -33,6 +36,7 @@ class _SignupScreenState extends State<SignupScreen> {
   _Gender? _gender = _Gender.female;
   _InterestGender? _interestGender = _InterestGender.male;
   bool _obscurePassword = true;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -58,7 +62,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final missing = <String>[
       if (_nameController.text.trim().isEmpty) '이름',
       if (_emailController.text.trim().isEmpty) '이메일',
@@ -83,7 +87,38 @@ class _SignupScreenState extends State<SignupScreen> {
     }
 
     HapticFeedback.mediumImpact();
-    context.push(AppRoutes.kycBlock);
+    setState(() => _submitting = true);
+    try {
+      await AmoriBackend().signUpWithEmail(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        displayName: _nameController.text.trim(),
+      );
+      // 프로필은 Firestore가 아닌 BFF(Postgres 단일 원천)에 저장.
+      // BFF 미기동 등 일시 장애로 가입 자체를 막지는 않는다.
+      try {
+        await UserRepository().saveProfile(
+          displayName: _nameController.text.trim(),
+          birthDate: _toIsoDate(_birthController.text.trim()),
+          gender: (_gender ?? _Gender.other).name,
+          interestGender: (_interestGender ?? _InterestGender.both).name,
+        );
+      } catch (error) {
+        debugPrint('프로필 저장 실패(추후 재시도 필요): $error');
+      }
+      if (mounted) context.push(AppRoutes.kycBlock);
+    } on BackendException catch (error) {
+      _showError(error.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  /// '2000.03.15' → '2000-03-15' (BFF date 형식). 형식이 다르면 null.
+  String? _toIsoDate(String dotted) {
+    final match = RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})$').firstMatch(dotted);
+    if (match == null) return null;
+    return '${match[1]}-${match[2]}-${match[3]}';
   }
 
   bool _isEmailValid(String email) {
@@ -142,13 +177,14 @@ class _SignupScreenState extends State<SignupScreen> {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xl),
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               children: [
-                Text(
-                  '반가워요,\n몇 가지만 알려주세요',
-                  style: AppTypography.displayMedium,
-                ),
+                Text('반가워요,\n몇 가지만 알려주세요', style: AppTypography.displayMedium),
                 AppSpacing.vSm,
                 Text(
                   'AI 에이전트가 닮아갈 핵심적인 당신의\n정보예요.',
@@ -232,10 +268,14 @@ class _SignupScreenState extends State<SignupScreen> {
           if (!keyboardOpen) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.md,
+              ),
               child: GradientButton(
-                label: '계정 만들기',
-                onPressed: _submit,
+                label: _submitting ? '계정 만드는 중...' : '계정 만들기',
+                onPressed: _submitting ? null : _submit,
               ),
             ),
             Padding(
@@ -243,8 +283,9 @@ class _SignupScreenState extends State<SignupScreen> {
               child: RichText(
                 textAlign: TextAlign.center,
                 text: TextSpan(
-                  style:
-                      AppTypography.caption.copyWith(color: AppColors.ink500),
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.ink500,
+                  ),
                   children: [
                     const TextSpan(text: '가입하면 '),
                     TextSpan(
