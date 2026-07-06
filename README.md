@@ -1,45 +1,94 @@
 # AMORI
 
-AI Pre-Dating 플랫폼입니다. 사용자의 AI 에이전트가 백그라운드에서 가상 소개팅을 진행하고,
-케미가 검증된 인연만 오프라인으로 연결합니다.
+AI Pre-Dating 플랫폼입니다. 사용자의 AI 에이전트가 먼저 소개팅을 다녀와 대화 미리보기를 제공하고,
+사용자는 그 결과를 보고 만남을 정합니다.
 
-> 2026 인공지능 루키 대회 — 국내 AI 트랙 도전 과제
+> 제품 방향·핵심 설계·궁합 원칙·남은 작업: [`refatodo.md`](refatodo.md)
+
+## 아키텍처
+
+LLM 호출 경로는 **Flutter → BFF → LLM API** 하나뿐입니다. 클라이언트는 LLM API 키를 갖지 않으며,
+LLM provider는 환경변수로 스위치합니다(`mock` | `gemini` | `modoo`).
+
+```
+Flutter 앱
+ ├─ Firebase Auth (로그인, ID 토큰 발급)        ← Firebase 책임은 Auth + FCM까지
+ └─ ApiClient (Bearer ID토큰) ──→ FastAPI BFF (backend/)
+                                   ├─ auth/        Firebase ID 토큰 검증
+                                   ├─ routers/     users·persona·matches·simulation(SSE)·report·meet·feedback
+                                   ├─ llm/         LLMProvider 추상화 (mock | gemini | modoo)
+                                   │   └─ prompts/ 한국어 프롬프트
+                                   ├─ services/    자동 소개팅·시차 송출·말투 측정/게이트
+                                   ├─ matching/    관심 성별 상호 + 벡터 매칭
+                                   └─ 팀 공용 관리형 Postgres + pgvector (도메인 데이터 단일 원천)
+                                        + 외부: Gemini API (대화·임베딩) / DevDive API (대화)
+```
 
 ## 모노레포 구조
 
 ```
 amori/
-├── lib/                  Flutter 앱 (iOS·Android)               ─ 한채훈
-├── backend/              BFF (FastAPI / Node / 기타 — 자유)        ─ 손지민
-├── llm/                  KT Mi:dm 2.0 추론 + 프롬프트              ─ 이현정
-├── matching/             매칭 알고리즘 + 시뮬 오케스트레이션          ─ 명세현
-└── shared/schemas/       LLM 입출력 JSON 스키마 (계약, 고정)
+├── lib/                  Flutter 앱 (iOS·Android)
+│   └── data/dummy/       가입 질문지(시나리오)
+├── backend/              FastAPI BFF + LLM + 매칭 (단일 배포 단위)
+│   └── app/llm/prompts/  한국어 프롬프트 가공
+├── shared/schemas/       LLM structured output + 백엔드↔Flutter 응답 계약
+└── refatodo.md           제품 방향 & 진행
 ```
-
-각 폴더의 `README.md` 에 책임과 요구사항이 정리되어 있습니다. 기술 스택은 owner 가 자유롭게 선택합니다.
-
-## 역할 분담
-
-| 영역 | 담당 | 브랜치 prefix | 작업 시점 |
-|---|---|---|---|
-| Flutter 앱 (프론트엔드) | 한채훈 | `feat/fe-*` | 발표 전까지 |
-| 백엔드 | 손지민 | `be/*` | 발표 전까지 |
-| LLM | 이현정 | `llm/*` | 발표 전까지 |
-| 매칭 알고리즘 | 명세현 | `match/*` | LLM + 백엔드 완료 후 |
-| 공유 계약 (`shared/`) | 모두 리뷰 | `shared/*` | 상시 |
 
 ## 핵심 원칙
 
-1. **`shared/schemas/` 가 유일한 강제 계약입니다.** 그 외 모든 것(스택·구조·도구)은 각 owner 가 자유롭게 선택합니다.
-2. **LLM provider 추상화가 필수입니다.** 발표(6월 8일) 전까지는 mock, 예선 통과 후에는 대회 GPU 에 셀프호스팅된 LLM 모듈로 환경변수만 스위치할 수 있도록 구현합니다.
-3. **`main` 에 직접 푸시하지 않습니다.** 변경은 모두 PR 로 진행하며, 리뷰어는 작성자가 직접 지정합니다.
-4. **다른 사람의 디렉토리는 수정하지 않습니다.** `shared/schemas/` 변경은 양쪽 리뷰가 필수입니다.
+1. **클라이언트는 LLM을 직접 호출하지 않습니다.** API 키 유출·쿼터 우회·데이터 유실 방지를 위해 모든 LLM 호출은 BFF를 경유합니다.
+2. **도메인 데이터의 단일 원천은 Postgres입니다.** Firebase는 Authentication과 FCM 푸시 토큰까지만 사용합니다.
+3. **`shared/schemas/` 가 계약입니다.** LLM structured output 스키마이자 백엔드↔Flutter 응답 형태입니다.
+4. **LLM provider는 환경변수로 스위치합니다.** `LLM_PROVIDER=mock`(오프라인 데모/테스트) ↔ `gemini`(실 LLM).
+5. **`main` 에 직접 푸시하지 않습니다.** 변경은 모두 PR로 진행합니다.
 
-## 마일스톤
+## 로컬 개발 (USB 실기기 포함)
 
-| 시점 | 마일스톤 |
-|---|---|
-| 2026-06-08 | 예선 발표 — GPU 없이 mock 으로 작동하는 LLM + 백엔드 완성 |
-| 예선 통과 후 | 대회 GPU 에 LLM 모듈 셀프호스팅 전환, 명세현 매칭 알고리즘 작업 시작 |
-| 2026-08 | MVP 출시 (iOS·Android 베타), 시드 유저 100명 |
-| 2026-11 | PMF 검증 |
+```bash
+# 0. 최초 1회 — 백엔드 의존성 설치 + 시크릿 채널에서 backend/.env 받기
+#    (.env 항목은 backend/.env.example 참고. DB는 팀 공용 Neon — 각자 설치할 것 없음)
+cd backend
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt
+
+# 1. 백엔드 실행
+.venv/Scripts/python -m uvicorn app.main:app --port 8000
+
+# 2. (선택) 연결 화면용 시드 — mock provider, Gemini 쿼터 0콜. 공용 DB를 건드리니 팀 공지 후 실행
+.venv/Scripts/python -X utf8 scripts/seed_dev_inbox.py [본인 DEV_UID]
+
+# 3. Flutter — 루트 .env (gitignore) 에 아래 두 줄.
+#    ⚠ 이 파일이 없으면 flutter run이 asset 오류로 빌드조차 안 된다 (pubspec asset)
+#    API_BASE_URL=http://localhost:8000
+#    DEV_UID=dev_<본인이름>      ← Firebase 로그인 없이 'Bearer dev:<uid>' 인증.
+#                                  uid가 다르면 공용 DB 안에서도 서로 데이터가 격리된다
+flutter run
+```
+
+**USB 실기기에서는 `adb reverse`가 필수입니다.**
+
+```bash
+adb reverse tcp:8000 tcp:8000
+```
+
+폰에서 `localhost:8000`은 폰 자신을 가리키므로, 이 명령으로 폰의 8000 포트를
+USB 너머 PC의 백엔드로 터널링합니다. 한 번 실행하면 USB가 연결된 동안 유지되며,
+**케이블 재연결·폰/PC 재부팅·`adb kill-server` 후에만 다시 실행**하면 됩니다 (앱 재실행과는 무관).
+
+| 실행 타깃 | API_BASE_URL | 비고 |
+|---|---|---|
+| USB 실기기 (Android) | `http://localhost:8000` | `adb reverse` 필수. **`10.0.2.2`는 에뮬레이터 전용 별칭이라 실기기에선 요청이 타임아웃까지 매달림** |
+| Android 에뮬레이터 | 미설정 (기본값 `10.0.2.2`) 또는 `localhost` + `adb reverse` | |
+| Windows/웹 | 미설정 (기본값 `localhost`) | |
+| iOS 실기기 | (로컬 백엔드 불가) | 빌드에 Mac+Xcode 필요. iOS엔 `adb reverse`가 없고 ATS가 평문 http를 차단하므로 **https 배포 백엔드가 필요** (iOS 시뮬레이터는 Mac에서 `localhost` 가능) |
+
+백엔드에 닿지 않으면 연결 화면은 **빈 상태**로 표시됩니다 (더미 인물 폴백은 제거됨).
+시드를 깔았는데도 카드가 안 보이면 백엔드 연결부터 의심하세요 — 콘솔에
+`inbox: GET /matches 실패` 로그가 남습니다.
+
+## 로드맵
+
+- **MVP 출시** — iOS·Android 베타, 시드 유저 100명
+- **PMF 검증**
