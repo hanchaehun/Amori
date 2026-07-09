@@ -37,10 +37,6 @@ services:
         value: /etc/secrets/firebase-adminsdk.json  # Secret File 마운트 경로
       # 운영 스위치
       - key: AUTO_SIM_ENABLED
-<<<<<<< HEAD
-        value: "false"   # 자동 소개팅 — 무료 쿼터 보호차 기본 off (필요 시 true)
-=======
         value: "true"    # 자동 소개팅 — 유저당 DAILY_SIMULATION_LIMIT(기본 3회/일)로 쿼터 보호
->>>>>>> 1f4677efd502e60c9e3637dc833cfd3b7dd9e418
       - key: DEBUG
         value: "false"   # 공개 서버 → dev 토큰 우회 차단(보안). dev uid 테스트하려면 true
