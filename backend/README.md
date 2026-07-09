@@ -22,13 +22,23 @@ cd backend
 # 1. 환경변수 설정 — DATABASE_URL은 팀 공용 DB URL (시크릿 채널에서 받기)
 cp .env.example .env        # LLM_PROVIDER=mock 이면 GEMINI_API_KEY 불필요
 
+<<<<<<< HEAD
 # 2. 실행 (Docker 불필요 — 2026-07-04부로 제거)
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
+=======
+# 2. 의존성 설치 (최초 1회, Docker 불필요 — 2026-07-04부로 제거)
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt
+
+# 3. 실행
+.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+>>>>>>> 1f4677efd502e60c9e3637dc833cfd3b7dd9e418
 ```
 
 ## 데이터베이스 — 공용 관리형 Postgres
 
+<<<<<<< HEAD
 Docker/로컬 Postgres 대신 **팀이 하나의 관리형 Postgres를 공유**합니다
 (pgvector 내장 무료 티어: [Neon](https://neon.tech) 권장, Supabase도 가능).
 
@@ -57,6 +67,30 @@ alembic upgrade head
 `.env`의 `DATABASE_URL`·`GEMINI_API_KEY`만 있으면 1회 실행으로 끝납니다
 (재실행 멱등 — 기존 시드는 건너뜀, `--force`로 재생성):
 
+=======
+Docker/로컬 Postgres 대신 **팀이 하나의 관리형 Postgres를 공유**합니다.
+
+**최초 셋업은 완료됐습니다 (2026-07-05, Neon):** DB 생성·pgvector 확장·스키마
+마이그레이션(`alembic upgrade head`)·개발용 시드까지 적용된 상태입니다.
+새로 합류하는 사람은 **팀 시크릿 채널에서 DATABASE_URL을 받아 `.env`에 넣기만
+하면 됩니다** — DB를 만들거나 마이그레이션을 돌릴 필요가 없습니다.
+
+**공용 DB 운영 규칙:**
+
+- **마이그레이션은 스키마를 변경한 사람이 merge 후 1회만** `alembic upgrade head` 실행.
+  나머지 팀원은 실행할 필요도, 해서도 안 됩니다(멱등이지만 동시 실행은 피할 것).
+- 시드/삭제 스크립트(`seed_dev_inbox.py`, `seed_fake_users.py` 등)는 **공용 데이터를
+  건드리므로 팀 공지 후 실행**. 개인 실험은 각자 DEV_UID를 다르게 쓰면 격리됩니다.
+- Supabase 사용 시 pooler(6543) 말고 **직접 연결 포트(5432)** — asyncpg가 pooler와 충돌.
+
+### 개발용 매칭 풀 시드 (100명)
+
+실 가입자가 가입 직후 바로 매칭 상대를 만나도록, 이름에 `(개발용)`이 붙은
+가짜 계정 100명을 실제 Gemini 임베딩(1024차원)과 함께 깔 수 있습니다.
+`.env`의 `DATABASE_URL`·`GEMINI_API_KEY`만 있으면 1회 실행으로 끝납니다
+(재실행 멱등 — 기존 시드는 건너뜀, `--force`로 재생성):
+
+>>>>>>> 1f4677efd502e60c9e3637dc833cfd3b7dd9e418
 ```bash
 python -X utf8 scripts/seed_fake_users.py --count 100
 ```
