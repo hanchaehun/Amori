@@ -17,7 +17,12 @@ from app.models.database import Persona, User
 class RankedCandidate:
     user_id: str
     display_name: str | None
-    score: float  # 0~100, (1 - cosine_distance) * 100
+    score: float  # 0~100 기반, (1 - cosine_distance) * 100 + 지역 가점
+
+
+# 같은 활동 지역 가점 — 하드필터가 아니라 소프트 부스트(점수 만점의 5%).
+# 지역이 비어 있는 쪽(구버전 행·미설정)은 가점 없이 통과한다.
+SAME_REGION_BONUS = 5.0
 
 
 async def find_candidates(
@@ -27,6 +32,7 @@ async def find_candidates(
     top_k: int = 10,
     my_gender: str | None = None,
     my_interest_gender: str | None = None,
+    my_region: str | None = None,
 ) -> list[RankedCandidate]:
     """쿼리 임베딩과 가장 유사한 후보 top_k 를 점수와 함께 반환한다.
 
@@ -39,7 +45,7 @@ async def find_candidates(
     """
     distance = Persona.embedding.cosine_distance(query_embedding).label("distance")
     query = (
-        select(Persona.user_id, User.display_name, distance)
+        select(Persona.user_id, User.display_name, User.region, distance)
         .join(User, User.id == Persona.user_id, isouter=True)
         .where(Persona.user_id != exclude_user_id)
         .where(Persona.embedding.isnot(None))
@@ -56,12 +62,20 @@ async def find_candidates(
                 User.interest_gender == my_gender,
             )
         )
-    result = await db.execute(query.order_by(distance).limit(top_k))
-    return [
+    # 지역 가점이 top_k 경계를 바꿀 수 있으므로 여유 있게 뽑아 재정렬한다.
+    fetch_k = top_k * 3 if my_region else top_k
+    result = await db.execute(query.order_by(distance).limit(fetch_k))
+    candidates = [
         RankedCandidate(
             user_id=row.user_id,
             display_name=row.display_name,
-            score=round((1 - row.distance) * 100, 2),
+            score=round(
+                (1 - row.distance) * 100
+                + (SAME_REGION_BONUS if my_region and row.region == my_region else 0),
+                2,
+            ),
         )
         for row in result.all()
     ]
+    candidates.sort(key=lambda c: c.score, reverse=True)
+    return candidates[:top_k]

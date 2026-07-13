@@ -69,6 +69,7 @@ async def _pick_target(
         top_k=5,
         my_gender=me.gender if me else None,
         my_interest_gender=me.interest_gender if me else None,
+        my_region=me.region if me else None,
     )
     if not candidates:
         return None

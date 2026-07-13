@@ -10,11 +10,35 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/state/profile_store.dart';
 import '../../core/widgets/settings_row.dart';
-import 'availability_sheet.dart';
+import '../../data/backend/amori_backend.dart';
+import '../../data/repositories/user_repository.dart';
+import 'region_sheet.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  // 캐시를 먼저 그린다 — 로그인/앱 시작 때 미리 채워져 있어 즉시 이름이 뜬다.
+  MyProfile? _profile = ProfileStore.instance.profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProfile();
+  }
+
+  /// 백그라운드 최신화 — 실패해도 캐시(또는 '—')를 그대로 둔다.
+  Future<void> _refreshProfile() async {
+    await ProfileStore.instance.refresh();
+    final latest = ProfileStore.instance.profile;
+    if (mounted && latest != null) setState(() => _profile = latest);
+  }
 
   void _comingSoon(BuildContext context, String label) {
     HapticFeedback.selectionClick();
@@ -39,9 +63,22 @@ class ProfileScreen extends StatelessWidget {
     context.push(AppRoutes.personaIntro);
   }
 
-  void _onAvailability(BuildContext context) {
+  Future<void> _onRegion(BuildContext context) async {
     HapticFeedback.lightImpact();
-    showAvailabilitySheet(context);
+    final region = await showRegionSheet(context, current: _profile?.region);
+    if (region == null || region == _profile?.region) return;
+    try {
+      await UserRepository().saveProfile(region: region);
+      final updated = (_profile ?? const MyProfile()).copyWith(region: region);
+      ProfileStore.instance.set(updated);
+      if (mounted) setState(() => _profile = updated);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('지역을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
+        );
+      }
+    }
   }
 
   Future<void> _onLogout(BuildContext context) async {
@@ -56,7 +93,9 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
-      context.go(AppRoutes.splash);
+      // 세션을 실제로 끊어야 splash 자동 로그인이 홈으로 되돌려보내지 않는다.
+      await AmoriBackend().signOut();
+      if (context.mounted) context.go(AppRoutes.splash);
     }
   }
 
@@ -89,7 +128,10 @@ class ProfileScreen extends StatelessWidget {
             child: _TopBar(onSettings: () => _onSettings(context)),
           ),
           SliverToBoxAdapter(
-            child: _ProfileHero(onCameraTap: () => _onAvatarChange(context)),
+            child: _ProfileHero(
+              profile: _profile,
+              onCameraTap: () => _onAvatarChange(context),
+            ),
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -107,7 +149,8 @@ class ProfileScreen extends StatelessWidget {
           ),
           SliverToBoxAdapter(
             child: _SettingsList(
-              onAvailability: () => _onAvailability(context),
+              regionDetail: _profile?.region ?? '미설정',
+              onRegion: () => _onRegion(context),
               onComingSoon: (label) => _comingSoon(context, label),
               onLogout: () => _onLogout(context),
               onDeleteAccount: () => _onDeleteAccount(context),
@@ -154,12 +197,27 @@ class _TopBar extends StatelessWidget {
 }
 
 class _ProfileHero extends StatelessWidget {
-  const _ProfileHero({required this.onCameraTap});
+  const _ProfileHero({required this.profile, required this.onCameraTap});
+  final MyProfile? profile;
   final VoidCallback onCameraTap;
+
+  String get _name {
+    final name = profile?.displayName?.trim();
+    return (name == null || name.isEmpty) ? '—' : name;
+  }
+
+  /// "27세 · 서울" — 없는 값은 뺀다. 둘 다 없으면 빈 문자열.
+  String get _subtitle {
+    final age = profile?.age;
+    final region = profile?.region;
+    return [
+      if (age != null) '$age세',
+      if (region != null && region.isNotEmpty) region,
+    ].join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
-    final amori = context.amori;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Column(
@@ -179,7 +237,7 @@ class _ProfileHero extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Text(
-                    '지',
+                    _name == '—' ? '' : _name.characters.first,
                     style: AppTypography.displayMedium.copyWith(
                       color: AppColors.ink700,
                       fontSize: 36,
@@ -220,33 +278,28 @@ class _ProfileHero extends StatelessWidget {
             ),
           ),
           AppSpacing.vMd,
-          Text('회원', style: AppTypography.titleLarge.copyWith(fontSize: 22)),
-          const SizedBox(height: 4),
-          Text(
-            '26세 · 서울',
-            style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
-          ),
+          Text(_name, style: AppTypography.titleLarge.copyWith(fontSize: 22)),
+          if (_subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              _subtitle,
+              style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
+            ),
+          ],
           AppSpacing.vSm,
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: ShapeDecoration(
-              gradient: amori.primaryGradient,
-              shape: const StadiumBorder(),
+            decoration: const ShapeDecoration(
+              color: AppColors.surfaceMuted,
+              shape: StadiumBorder(),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.star_rounded, size: 14, color: Colors.white),
-                const SizedBox(width: 4),
-                Text(
-                  '프리미엄 멤버',
-                  style: AppTypography.caption.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+            child: Text(
+              '일반 멤버',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.ink700,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -362,13 +415,15 @@ class _AgentLink extends StatelessWidget {
 
 class _SettingsList extends StatelessWidget {
   const _SettingsList({
-    required this.onAvailability,
+    required this.regionDetail,
+    required this.onRegion,
     required this.onComingSoon,
     required this.onLogout,
     required this.onDeleteAccount,
   });
 
-  final VoidCallback onAvailability;
+  final String regionDetail;
+  final VoidCallback onRegion;
   final ValueChanged<String> onComingSoon;
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
@@ -383,9 +438,10 @@ class _SettingsList extends StatelessWidget {
             title: '매칭',
             rows: [
               SettingsRow(
-                icon: Icons.event_available_rounded,
-                label: '소개팅 가능 일정',
-                onTap: onAvailability,
+                icon: Icons.place_rounded,
+                label: '활동 지역',
+                detail: regionDetail,
+                onTap: onRegion,
               ),
               SettingsRow(
                 icon: Icons.favorite_rounded,
@@ -407,7 +463,7 @@ class _SettingsList extends StatelessWidget {
               SettingsRow(
                 icon: Icons.credit_card_rounded,
                 label: '구독 관리',
-                detail: '프리미엄',
+                detail: '무료',
                 onTap: () => onComingSoon('구독 관리'),
               ),
               SettingsRow(

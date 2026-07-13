@@ -38,6 +38,60 @@ class Availability {
   final List<BookedSlot> booked;
 }
 
+/// 내 프로필 스냅샷 — 프로필 화면 표시용 (`GET /users/me`).
+class MyProfile {
+  const MyProfile({
+    this.displayName,
+    this.birthDate,
+    this.gender,
+    this.interestGender,
+    this.region,
+  });
+
+  final String? displayName;
+  final DateTime? birthDate;
+  final String? gender;
+  final String? interestGender;
+  final String? region;
+
+  /// 만 나이. 생년월일이 없으면 null.
+  int? get age {
+    final birth = birthDate;
+    if (birth == null) return null;
+    final now = DateTime.now();
+    var years = now.year - birth.year;
+    if (now.month < birth.month ||
+        (now.month == birth.month && now.day < birth.day)) {
+      years -= 1;
+    }
+    return years;
+  }
+
+  factory MyProfile.fromJson(Map<String, dynamic> json) => MyProfile(
+    displayName: json['display_name'] as String?,
+    birthDate: DateTime.tryParse(json['birth_date'] as String? ?? ''),
+    gender: json['gender'] as String?,
+    interestGender: json['interest_gender'] as String?,
+    region: json['region'] as String?,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'display_name': displayName,
+    'birth_date': birthDate?.toIso8601String(),
+    'gender': gender,
+    'interest_gender': interestGender,
+    'region': region,
+  };
+
+  MyProfile copyWith({String? region}) => MyProfile(
+    displayName: displayName,
+    birthDate: birthDate,
+    gender: gender,
+    interestGender: interestGender,
+    region: region ?? this.region,
+  );
+}
+
 /// 사용자 프로필 — Firestore users 컬렉션 대신 Postgres 단일 원천 (`/users/me`).
 class UserRepository {
   UserRepository({ApiClient? api}) : _api = api ?? ApiClient();
@@ -49,6 +103,7 @@ class UserRepository {
     String? birthDate, // yyyy-MM-dd
     String? gender,
     String? interestGender,
+    String? region,
     String? photoUrl,
     String? fcmToken,
     List<AvailableSlot>? availableSlots,
@@ -58,11 +113,18 @@ class UserRepository {
       'birth_date': ?birthDate,
       'gender': ?gender,
       'interest_gender': ?interestGender,
+      'region': ?region,
       'photo_url': ?photoUrl,
       'fcm_token': ?fcmToken,
       if (availableSlots != null)
         'available_slots': [for (final s in availableSlots) s.toJson()],
     });
+  }
+
+  /// 내 프로필 조회 — 프로필 화면의 이름·나이·지역 표시용.
+  Future<MyProfile> fetchMe() async {
+    final json = await _api.getJson('/users/me') as Map<String, dynamic>;
+    return MyProfile.fromJson(json);
   }
 
   /// 저장된 가능 일정 + 약속으로 묶인 칸 — 프로필의 일정 편집 시트가 쓴다.

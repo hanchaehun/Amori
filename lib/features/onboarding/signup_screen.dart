@@ -12,7 +12,9 @@ import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../core/widgets/primary_text_field.dart';
 import '../../core/widgets/segmented_selector.dart';
+import '../../core/state/profile_store.dart';
 import '../../data/backend/amori_backend.dart';
+import '../../data/backend/auth_prefs.dart';
 import '../../data/backend/backend_exception.dart';
 import '../../data/repositories/user_repository.dart';
 
@@ -29,7 +31,8 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final _nameController = TextEditingController();
-  final _birthController = TextEditingController(text: '2000.03.15');
+  // 기본값을 미리 채우지 않는다 — 안 바꾸고 가입하면 가짜 나이가 서버에 남는다.
+  final _birthController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -49,7 +52,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
-    final initial = DateTime(2000, 3, 15);
+    final initial = _parseBirth(_birthController.text) ?? DateTime(2000, 1, 1);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -65,6 +68,7 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _submit() async {
     final missing = <String>[
       if (_nameController.text.trim().isEmpty) '이름',
+      if (_birthController.text.trim().isEmpty) '생년월일',
       if (_emailController.text.trim().isEmpty) '이메일',
       if (_passwordController.text.isEmpty) '비밀번호',
     ];
@@ -103,10 +107,20 @@ class _SignupScreenState extends State<SignupScreen> {
           gender: (_gender ?? _Gender.other).name,
           interestGender: (_interestGender ?? _InterestGender.both).name,
         );
+        // 방금 입력받은 값이 곧 프로필 — 서버 재조회 없이 캐시를 즉시 채운다.
+        ProfileStore.instance.set(MyProfile(
+          displayName: _nameController.text.trim(),
+          birthDate: _parseBirth(_birthController.text),
+          gender: (_gender ?? _Gender.other).name,
+          interestGender: (_interestGender ?? _InterestGender.both).name,
+        ));
       } catch (error) {
         debugPrint('프로필 저장 실패(추후 재시도 필요): $error');
       }
-      if (mounted) context.push(AppRoutes.kycBlock);
+      // 페르소나 생성 전이므로, 앱을 껐다 켜면 홈이 아니라 생성 플로우로 이어진다.
+      await AuthPrefs.instance.setPersonaReady(false);
+      // 계정이 이미 만들어졌으니 뒤로가기로 가입 폼에 돌아가지 않도록 스택 교체.
+      if (mounted) context.go(AppRoutes.kycBlock);
     } on BackendException catch (error) {
       _showError(error.message);
     } finally {
@@ -119,6 +133,11 @@ class _SignupScreenState extends State<SignupScreen> {
     final match = RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})$').firstMatch(dotted);
     if (match == null) return null;
     return '${match[1]}-${match[2]}-${match[3]}';
+  }
+
+  DateTime? _parseBirth(String dotted) {
+    final iso = _toIsoDate(dotted.trim());
+    return iso == null ? null : DateTime.tryParse(iso);
   }
 
   bool _isEmailValid(String email) {

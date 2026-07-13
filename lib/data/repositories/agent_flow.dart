@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/state/agent_session_store.dart';
+import '../backend/auth_prefs.dart';
 import '../backend/scenario_answers_store.dart';
 import 'persona_repository.dart';
 
@@ -32,6 +33,8 @@ class AgentFlow {
         ScenarioAnswersStore.answers,
       );
       _store.profile = profile;
+      // 서버 저장까지 성공 — 다음 앱 실행부터 splash가 홈으로 직행해도 된다.
+      await AuthPrefs.instance.setPersonaReady(true);
       _store.setPhase(AgentFlowPhase.done);
       ScenarioAnswersStore.clear();
     } catch (error) {

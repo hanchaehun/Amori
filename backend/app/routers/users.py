@@ -38,6 +38,7 @@ class UserProfileUpsert(BaseModel):
     birth_date: date | None = None
     gender: str | None = None
     interest_gender: str | None = None
+    region: str | None = None  # 활동 지역(시/도) — 매칭 랭킹 같은 지역 가점
     photo_url: str | None = None
     fcm_token: str | None = None
     available_slots: list[AvailableSlot] | None = Field(default=None, max_length=30)
@@ -50,6 +51,7 @@ class UserProfileResponse(BaseModel):
     birth_date: date | None
     gender: str | None
     interest_gender: str | None
+    region: str | None = None
     photo_url: str | None
     available_slots: list[AvailableSlot] = []
     booked_slots: list[BookedSlot] = []  # GET에서만 채워진다
@@ -81,6 +83,8 @@ async def upsert_my_profile(
         user_obj.gender = body.gender
     if body.interest_gender is not None:
         user_obj.interest_gender = body.interest_gender
+    if body.region is not None:
+        user_obj.region = body.region
     if body.photo_url is not None:
         user_obj.photo_url = body.photo_url
     if body.fcm_token is not None:
@@ -98,6 +102,7 @@ async def upsert_my_profile(
         birth_date=user_obj.birth_date,
         gender=user_obj.gender,
         interest_gender=user_obj.interest_gender,
+        region=user_obj.region,
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
     )
@@ -148,6 +153,7 @@ async def get_my_profile(
         birth_date=user_obj.birth_date,
         gender=user_obj.gender,
         interest_gender=user_obj.interest_gender,
+        region=user_obj.region,
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
         booked_slots=booked,

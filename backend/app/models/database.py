@@ -53,6 +53,8 @@ class User(Base):
     birth_date: Mapped[datetime | None] = mapped_column(Date)
     gender: Mapped[str | None] = mapped_column(String(20))
     interest_gender: Mapped[str | None] = mapped_column(String(20))
+    # 활동 지역(시/도 단위, 예: "서울") — 매칭 랭킹에서 같은 지역 가점.
+    region: Mapped[str | None] = mapped_column(String(30))
     photo_url: Mapped[str | None] = mapped_column(Text)
     fcm_token: Mapped[str | None] = mapped_column(Text)
     # 소개팅 가능 일정 [{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}, ...]

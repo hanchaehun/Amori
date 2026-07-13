@@ -43,6 +43,9 @@ dependencies:
   firebase_messaging: ^16.2.2
   http: ^1.2.0
   flutter_dotenv: ^6.0.1
+  # 로그인 편의 — 유지 플래그는 prefs, 저장 비밀번호는 Keystore 암호화 저장소
+  shared_preferences: ^2.3.0
+  flutter_secure_storage: ^9.2.4
 
 dev_dependencies:
   flutter_test:

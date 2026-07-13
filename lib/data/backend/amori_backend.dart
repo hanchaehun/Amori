@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../../core/state/agent_session_store.dart';
+import '../../core/state/profile_store.dart';
 import 'backend_exception.dart';
 
 /// Firebase 래퍼 — 책임은 Authentication과 FCM 토큰까지만 (리팩토링 결정 3).
@@ -61,6 +62,7 @@ class AmoriBackend {
 
   Future<void> signOut() async {
     AgentSessionStore.instance.reset();
+    ProfileStore.instance.reset();
     await _auth.signOut();
   }
 
@@ -70,8 +72,16 @@ class AmoriBackend {
     'email-already-in-use' => '이미 가입된 이메일이에요.',
     'invalid-email' => '올바른 이메일 형식이 아니에요.',
     'weak-password' => '비밀번호가 너무 약해요.',
-    'user-not-found' => '가입된 계정을 찾을 수 없어요.',
-    'wrong-password' => '비밀번호가 맞지 않아요.',
-    _ => error.message ?? '인증 요청에 실패했습니다.',
+    'user-not-found' => '아이디를 확인해 주세요.',
+    'wrong-password' => '비밀번호를 확인해 주세요.',
+    // 계정 열거 방지가 켜진 Firebase는 위 두 코드 대신 이것만 준다 —
+    // 아이디/비밀번호 중 무엇이 틀렸는지 서버가 알려주지 않는다.
+    'invalid-credential' ||
+    'INVALID_LOGIN_CREDENTIALS' => '아이디 또는 비밀번호를 확인해 주세요.',
+    'user-disabled' => '이용이 정지된 계정이에요.',
+    'too-many-requests' => '시도가 너무 많았어요. 잠시 후 다시 시도해 주세요.',
+    'network-request-failed' => '네트워크 연결을 확인해 주세요.',
+    // Firebase 원문(영어)을 그대로 노출하지 않는다.
+    _ => '요청에 실패했어요. 잠시 후 다시 시도해 주세요.',
   };
 }

@@ -206,6 +206,7 @@ async def find_matches(
         top_k=top_k,
         my_gender=me.gender if me else None,
         my_interest_gender=me.interest_gender if me else None,
+        my_region=me.region if me else None,
     )
 
     # 후보마다 Match 행을 find-or-create — 응답의 match_id가 곧 DB UUID라
