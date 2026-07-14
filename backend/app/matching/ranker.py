@@ -20,9 +20,16 @@ class RankedCandidate:
     score: float  # 0~100 기반, (1 - cosine_distance) * 100 + 지역 가점
 
 
-# 같은 활동 지역 가점 — 하드필터가 아니라 소프트 부스트(점수 만점의 5%).
-# 지역이 비어 있는 쪽(구버전 행·미설정)은 가점 없이 통과한다.
+# 지역 하드필터 — 같은 시/도끼리만 매칭. 예외로 수도권(서울·경기·인천)은
+# 상호 매칭 허용. 지역이 비어 있는 쪽(구버전 행·미설정)은 와일드카드로 통과한다.
+# 허용 집합 안에서는 정확히 같은 지역이 가점을 받아 먼저 온다(수도권 예외 대비).
+CAPITAL_AREA = frozenset({"서울", "경기", "인천"})
 SAME_REGION_BONUS = 5.0
+
+
+def _allowed_regions(my_region: str) -> frozenset[str]:
+    """내 지역과 매칭 가능한 지역 집합."""
+    return CAPITAL_AREA if my_region in CAPITAL_AREA else frozenset({my_region})
 
 
 async def find_candidates(
@@ -42,6 +49,9 @@ async def find_candidates(
     interest_gender ∈ {female, male, both} — 'both'는 모든 성별 허용.
     프로필이 비어 있는 쪽(개발 계정·구버전 행)은 와일드카드로 통과 —
     실가입 유저는 성별/관심 성별이 필수라 실서비스에선 전원 적용된다.
+
+    지역 필터 (제품 규칙, 2026-07-14): 같은 시/도끼리만 매칭하되
+    수도권(서울·경기·인천)은 상호 허용. 지역 미설정은 와일드카드 통과.
     """
     distance = Persona.embedding.cosine_distance(query_embedding).label("distance")
     query = (
@@ -60,6 +70,13 @@ async def find_candidates(
                 User.interest_gender.is_(None),
                 User.interest_gender == "both",
                 User.interest_gender == my_gender,
+            )
+        )
+    if my_region:
+        query = query.where(
+            or_(
+                User.region.is_(None),
+                User.region.in_(_allowed_regions(my_region)),
             )
         )
     # 지역 가점이 top_k 경계를 바꿀 수 있으므로 여유 있게 뽑아 재정렬한다.

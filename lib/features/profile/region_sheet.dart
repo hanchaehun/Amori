@@ -5,7 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 
-/// 활동 지역(시/도) 목록 — 매칭에서 같은 지역이 가점을 받는다.
+/// 활동 지역(시/도) 목록 — 같은 지역끼리만 매칭된다(수도권 서울·경기·인천은 상호 허용).
 const kRegions = [
   '서울',
   '경기',
