@@ -34,7 +34,18 @@ class Scenario {
   final String? hint;
 }
 
-const List<String> kInitialScenarioCodes = ['R-1', 'R-2', 'R-3', 'R-4', 'R-5'];
+// 온보딩 = 객관식 R-1~5(성향/매칭) + 주관식 9-1·9-2(실발화 → voice 원천).
+// 가입 직후부터 sample_messages가 LLM 창작이 아닌 실문장으로 시작한다
+// (persona_fidelity_design.md §3-1, 2026-07-13 적용). 9-3은 데일리 첫 질문.
+const List<String> kInitialScenarioCodes = [
+  'R-1',
+  'R-2',
+  'R-3',
+  'R-4',
+  'R-5',
+  '9-1',
+  '9-2',
+];
 
 const List<String> kDailyScenarioCodes = [
   '9-1',
