@@ -28,6 +28,7 @@ import '../../features/meet/request_status_screen.dart';
 import '../../features/meet/request_timeout_screen.dart';
 import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
+import '../../features/persona/persona_preview_screen.dart';
 import '../../features/persona/scenario_player_screen.dart';
 import '../../features/profile/notification_settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
@@ -86,6 +87,15 @@ class AppRouter {
         path: AppRoutes.personaLoading,
         pageBuilder: (context, state) =>
             _fadePage(state, const PersonaLoadingScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.personaPreview,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          PersonaPreviewScreen(
+            fromOnboarding: state.uri.queryParameters['from'] == 'onboarding',
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.home,

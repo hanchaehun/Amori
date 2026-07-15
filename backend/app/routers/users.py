@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.firebase import get_current_user
 from app.dependencies import get_db
+from app.llm.psych_mapping import valid_mbti
 from app.models.database import User
 from app.services.booking import get_booked_matches
 
@@ -39,6 +40,9 @@ class UserProfileUpsert(BaseModel):
     gender: str | None = None
     interest_gender: str | None = None
     region: str | None = None  # 활동 지역(시/도) — 매칭 랭킹 같은 지역 가점
+    # MBTI 16유형 — 프로필 표시 + big_five prior 전용. 매칭·시뮬 규칙 사용 금지
+    # (rationale §9 금지선). 빈 문자열 = 삭제.
+    mbti: str | None = None
     photo_url: str | None = None
     fcm_token: str | None = None
     available_slots: list[AvailableSlot] | None = Field(default=None, max_length=30)
@@ -52,6 +56,7 @@ class UserProfileResponse(BaseModel):
     gender: str | None
     interest_gender: str | None
     region: str | None = None
+    mbti: str | None = None
     photo_url: str | None
     available_slots: list[AvailableSlot] = []
     booked_slots: list[BookedSlot] = []  # GET에서만 채워진다
@@ -85,6 +90,21 @@ async def upsert_my_profile(
         user_obj.interest_gender = body.interest_gender
     if body.region is not None:
         user_obj.region = body.region
+    if body.mbti is not None:
+        # 16유형 검증 — 빈 문자열은 삭제, 무효 값은 422
+        if body.mbti == "":
+            user_obj.mbti = None
+        else:
+            normalized = valid_mbti(body.mbti)
+            if normalized is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error_code": "INVALID_MBTI",
+                        "message": "MBTI는 16유형 코드여야 합니다 (예: ENFP).",
+                    },
+                )
+            user_obj.mbti = normalized
     if body.photo_url is not None:
         user_obj.photo_url = body.photo_url
     if body.fcm_token is not None:
@@ -103,6 +123,7 @@ async def upsert_my_profile(
         gender=user_obj.gender,
         interest_gender=user_obj.interest_gender,
         region=user_obj.region,
+        mbti=user_obj.mbti,
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
     )
@@ -154,6 +175,7 @@ async def get_my_profile(
         gender=user_obj.gender,
         interest_gender=user_obj.interest_gender,
         region=user_obj.region,
+        mbti=user_obj.mbti,
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
         booked_slots=booked,

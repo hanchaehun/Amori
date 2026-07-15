@@ -3,9 +3,18 @@ from typing import Literal
 
 
 class PersonaTrait(BaseModel):
+    """성향 한 축 — 근거(evidence) 있는 카테고리만 생성한다 (바넘 방지, refatodo P0-A).
+
+    confidence는 LLM 자기보고가 아니라 코드가 evidence 개수로 계산한다
+    (routers/persona.py `_finalize_traits`). 기존 행(근거 필드 없음)은 기본값으로 읽힌다.
+    """
+
     category: str
     summary: str
     keywords: list[str]
+    evidence: list[str] = Field(default_factory=list)  # 근거 답변 코드 ("R-2:A")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    user_edited: bool = False  # P0-C: 사용자가 직접 수정 — LLM 업데이트가 덮지 못함
 
 
 class SpeechStyle(BaseModel):
@@ -87,7 +96,9 @@ class ResponsePreference(BaseModel):
 
 class PersonaResponse(BaseModel):
     user_id: str
-    traits: list[PersonaTrait] = Field(min_length=8, max_length=8)
+    # 8개 강제 해제(P0-A) — 근거 있는 카테고리만. 빈 카테고리는 앱이 "아직 몰라요"로 렌더.
+    # min 0: 사용자가 미리보기에서 전부 삭제할 수 있다 (LLM 출력은 PersonaOutput이 min 1 강제).
+    traits: list[PersonaTrait] = Field(default_factory=list, max_length=8)
     communication_style: str
     humor_style: str
     value_keywords: list[str] = Field(min_length=3, max_length=7)
@@ -96,6 +107,9 @@ class PersonaResponse(BaseModel):
     voice_stats: VoiceStats | None = None
     sample_bank: list[SampleBankItem] = Field(default_factory=list)
     voice_confidence: float | None = None
+    # P0-B 심리 기저층 — psych_mapping.py 산출물 (dict 그대로 — 스키마 진화 중이라 느슨하게)
+    psych_profile: dict | None = None
+    conversation_policy: dict | None = None
     response_preferences: list[ResponsePreference] = Field(default_factory=list)
     embedding: list[float] | None = None
     ai_generated: Literal[True] = True
@@ -104,6 +118,48 @@ class PersonaResponse(BaseModel):
     persona_revision: int = 1
     persona_confidence: Literal["low", "medium", "high"] = "low"
     last_answered_on: str | None = None
+
+
+class PreviewUtteranceItem(BaseModel):
+    """미리보기 발화 한 건 — register는 상황 라벨(첫인사/공감 리액션/완곡 거절/자유입력)."""
+
+    register: str
+    text: str
+
+
+class PersonaPreviewResponse(BaseModel):
+    utterances: list[PreviewUtteranceItem]
+    voice_confidence: float | None = None
+
+
+class TraitEdit(BaseModel):
+    """trait 부분 수정 — 수정하면 user_edited로 잠겨 LLM 업데이트가 덮지 못한다."""
+
+    category: str
+    summary: str | None = None
+    keywords: list[str] | None = None
+    delete: bool = False
+
+
+class SpeechEdits(BaseModel):
+    verbal_habits: str | None = None
+    punctuation_habits: str | None = None
+    # "평소에 이렇게 써요" 자유입력 — 의도적 오타·감탄사를 그대로. 습관 선언이므로
+    # sample_bank 최고 등급(user_written)으로 저장돼 통계·few-shot에 반영된다.
+    free_samples: list[str] = Field(default_factory=list)
+
+
+class PsychEdits(BaseModel):
+    """심리 카드 수정 — 사용자 공개·숨김권 (rationale §11)."""
+
+    hide: bool | None = None  # True=심리 카드 숨김, False=다시 표시
+
+
+class PersonaPatchRequest(BaseModel):
+    trait_edits: list[TraitEdit] = Field(default_factory=list)
+    utterance_fixes: list[PreviewUtteranceItem] = Field(default_factory=list)
+    speech_edits: SpeechEdits | None = None
+    psych_edits: PsychEdits | None = None
 
 
 class PersonaBuildRequest(BaseModel):

@@ -161,6 +161,9 @@ async def run_simulation(
         "speech_style": my_persona.speech_style,
         "sample_messages": my_persona.sample_messages,
         "voice_stats": my_persona.voice_stats,
+        # P0-B 심리 기저층 — _behavior_block이 행동 지시(갈등 모드·되묻기·성격 마커)로 변환
+        "conversation_policy": my_persona.conversation_policy,
+        "psych_profile": my_persona.psych_profile,
     }
     their_persona_dict = {
         "traits": their_persona.traits,
@@ -170,6 +173,8 @@ async def run_simulation(
         "speech_style": their_persona.speech_style,
         "sample_messages": their_persona.sample_messages,
         "voice_stats": their_persona.voice_stats,
+        "conversation_policy": their_persona.conversation_policy,
+        "psych_profile": their_persona.psych_profile,
     }
 
     # 6. 에이전트가 서로를 이름으로 부르도록 페르소나 dict에 이름을 싣는다.

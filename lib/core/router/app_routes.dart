@@ -10,6 +10,7 @@ class AppRoutes {
   static const String scenarioPlayer = '/persona/scenario';
   static const String dataImport = '/persona/import';
   static const String personaLoading = '/persona/loading';
+  static const String personaPreview = '/persona/preview';
   static const String home = '/home';
   static const String agentChat = '/home/agent-chat';
 

@@ -369,6 +369,21 @@ class MockLLMProvider(LLMProvider):
             "embedding": _random_embedding(),
         }
 
+    async def preview_utterances(self, persona: dict) -> list[dict]:
+        # 오프라인 데모 — 페르소나 sample_messages를 재활용하고 모자라면 기본 문장으로 채운다.
+        samples = list(persona.get("sample_messages") or [])
+        fallback = [
+            "안녕하세요! 프로필 보고 반가워서 먼저 연락드렸어요",
+            "헉 오늘 고생 많으셨어요ㅠㅠ",
+            "이번 주말은 일정이 있어서 어려울 것 같아요. 다음 주는 어떠세요?",
+        ]
+        texts = (samples + fallback)[:3]
+        registers = ["첫인사", "공감 리액션", "완곡 거절"]
+        return [{"register": r, "text": t} for r, t in zip(registers, texts)]
+
+    async def embed_persona(self, persona: dict) -> list[float] | None:
+        return _random_embedding()
+
     async def update_persona(
         self, user_id: str, current_persona: dict, answer: dict
     ) -> dict:

@@ -55,6 +55,9 @@ class User(Base):
     interest_gender: Mapped[str | None] = mapped_column(String(20))
     # 활동 지역(시/도 단위, 예: "서울") — 매칭 랭킹에서 같은 지역 가점.
     region: Mapped[str | None] = mapped_column(String(30))
+    # MBTI 16유형 — 프로필 표시 + big_five 약한 prior 전용. 매칭 점수·시뮬 규칙
+    # 사용 금지 (docs/persona_science_rationale.md §9 금지선).
+    mbti: Mapped[str | None] = mapped_column(String(4))
     photo_url: Mapped[str | None] = mapped_column(Text)
     fcm_token: Mapped[str | None] = mapped_column(Text)
     # 소개팅 가능 일정 [{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}, ...]
@@ -92,6 +95,12 @@ class Persona(Base):
     # 평가 전용 축: 리포트 채점에만 쓰고, 시뮬 프롬프트·매칭 하드필터엔 절대 넣지 않는다
     # (명시적 선호는 실제 끌림을 잘 예측하지 못한다 — Eastwick&Finkel 2008, Joel 2017).
     response_preferences: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # P0-B 심리 기저층 — psych_mapping.py가 결정적으로 계산 (big_five만 LLM+MBTI prior 합성).
+    # {signals, attachment_anxiety/avoidance, attachment_hint, big_five, user_visible}
+    psych_profile: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 2층 화용 행동 — {question_ratio, reaction_amplitude, conflict_mode,
+    #  reassurance_seeking, self_disclosure_pace}. 시뮬 프롬프트 행동 지시로 직결.
+    conversation_policy: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     embedding = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     # 점진형 페르소나 보정 상태. raw answer 전문은 저장하지 않고 문항 코드만 보관한다.
     answer_count: Mapped[int | None] = mapped_column(Integer)

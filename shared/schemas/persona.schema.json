@@ -9,17 +9,20 @@
     "user_id": { "type": "string" },
     "traits": {
       "type": "array",
-      "description": "8개 카테고리별 성향 요약 (연락 템포 / 유머 / 갈등 / 데이트 / 돈·시간 / 관계 속도 / 경계선 / 위로)",
+      "description": "근거 있는 카테고리만 (연락 템포 / 유머 / 갈등 / 데이트 / 돈·시간 / 관계 속도 / 경계선 / 위로 중 1~8개). 빈 카테고리는 앱이 '아직 몰라요'로 렌더 — 근거: docs/persona_science_rationale.md",
       "items": {
         "type": "object",
         "required": ["category", "summary", "keywords"],
         "properties": {
           "category": { "type": "string" },
           "summary": { "type": "string", "description": "한 문장 요약" },
-          "keywords": { "type": "array", "items": { "type": "string" } }
+          "keywords": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "type": "string" }, "description": "근거 답변 코드 (예 'R-2:A')" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "코드가 evidence 수로 계산 — LLM 자기보고 아님" },
+          "user_edited": { "type": "boolean", "description": "사용자 직접 수정 — LLM 업데이트가 덮지 못함" }
         }
       },
-      "minItems": 8,
+      "minItems": 1,
       "maxItems": 8
     },
     "communication_style": { "type": "string", "description": "예: '느린 일상·진심형'" },

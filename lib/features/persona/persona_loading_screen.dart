@@ -93,7 +93,13 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
 
   void _goHome() {
     if (!mounted) return;
-    context.go(AppRoutes.home);
+    // 생성 성공 시 미리보기·수정으로 — 첫인상에서 "나 같은지" 직접 확인·교정
+    // (refatodo P0-C). 실패 경로는 페르소나가 없을 수 있어 홈으로.
+    if (AgentSessionStore.instance.phase == AgentFlowPhase.failed) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go('${AppRoutes.personaPreview}?from=onboarding');
+    }
   }
 
   void _skip() {

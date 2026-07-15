@@ -17,13 +17,39 @@ from app.schemas.persona import PersonaTrait, SpeechStyle
 from app.schemas.report import Finding, Place, Warning
 
 
+class BigFiveEstimate(BaseModel):
+    """LLM의 Big Five 추정 (P0-B) — 근거 부족 시 생략 가능.
+
+    코드가 MBTI prior와 증거 수 가중 합성한다 (psych_mapping.compute_psych_profile).
+    """
+
+    E: float = Field(default=0.5, ge=0.0, le=1.0)  # 외향성
+    A: float = Field(default=0.5, ge=0.0, le=1.0)  # 친화성
+    C: float = Field(default=0.5, ge=0.0, le=1.0)  # 성실성
+    N: float = Field(default=0.5, ge=0.0, le=1.0)  # 신경성
+    O: float = Field(default=0.5, ge=0.0, le=1.0)  # 개방성
+    evidence: list[str] = Field(default_factory=list)
+
+
 class PersonaOutput(BaseModel):
-    traits: list[PersonaTrait] = Field(min_length=8, max_length=8)
+    # 8개 강제 해제(P0-A) — 근거 있는 카테고리만 생성. LLM이 8개를 다 채우면
+    # 근거 없는 trait은 바넘 문장이 된다 (refatodo 진단 1).
+    traits: list[PersonaTrait] = Field(min_length=1, max_length=8)
+    big_five: BigFiveEstimate | None = None
     communication_style: str
     humor_style: str
     value_keywords: list[str] = Field(min_length=3, max_length=7)
     speech_style: SpeechStyle
     sample_messages: list[str] = Field(min_length=1, max_length=3)
+
+
+class PreviewUtterance(BaseModel):
+    register: str  # 첫인사 | 공감 리액션 | 완곡 거절 (prompts/preview.PREVIEW_SITUATIONS)
+    text: str
+
+
+class PreviewOutput(BaseModel):
+    utterances: list[PreviewUtterance] = Field(min_length=3, max_length=3)
 
 
 class ConvTurn(BaseModel):

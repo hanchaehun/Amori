@@ -87,6 +87,39 @@ def merge_sample_bank(existing: list | None, answers: list[dict] | None) -> list
     return bank
 
 
+def add_user_samples(persona, samples: list[dict]) -> bool:
+    """미리보기 수정문·자유입력을 sample_bank에 추가하고 통계를 재계산한다 (P0-C).
+
+    samples: ``[{"register": str, "text": str}]``. 사용자가 직접 쓴 문장 =
+    user_written 최고 등급. 하나라도 새로 추가되면 True.
+    """
+    bank = [dict(item) for item in (persona.sample_bank or [])]
+    seen = {item.get("text") for item in bank}
+    added = False
+    for sample in samples:
+        text = (sample.get("text") or "").strip()
+        if not text or text in seen:
+            continue
+        bank.append(
+            {
+                "text": text,
+                "register": sample.get("register") or "",
+                "source": "user_written",
+                "collected_at": date.today().isoformat(),
+            }
+        )
+        seen.add(text)
+        added = True
+    if added:
+        persona.sample_bank = bank
+        measured = [item["text"] for item in bank if item.get("source") != "llm_seed"]
+        stats = extract_voice_stats(measured)
+        persona.voice_stats = stats
+        persona.voice_confidence = voice_confidence(stats)
+        persona.sample_messages = measured[-3:]
+    return added
+
+
 def apply_voice_profile(persona, answers: list[dict] | None) -> None:
     """Persona 행에 sample_bank → voice_stats → voice_confidence를 갱신한다.
 

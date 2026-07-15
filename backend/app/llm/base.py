@@ -70,6 +70,17 @@ class LLMProvider(ABC):
         """
         ...
 
+    async def preview_utterances(self, persona: dict) -> list[dict]:
+        """페르소나 미리보기 발화 3개 생성 (P0-C) — [{"register", "text"}].
+
+        abstractmethod가 아닌 이유: 구 provider 구현이 깨지지 않게 점진 도입.
+        """
+        raise NotImplementedError(f"{type(self).__name__}는 preview를 지원하지 않습니다.")
+
+    async def embed_persona(self, persona: dict) -> list[float] | None:
+        """페르소나 텍스트 임베딩 재계산 (PATCH로 traits가 바뀌었을 때). None=미지원."""
+        return None
+
     @abstractmethod
     async def generate_report(
         self,

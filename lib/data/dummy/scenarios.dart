@@ -34,14 +34,16 @@ class Scenario {
   final String? hint;
 }
 
-// 온보딩 = 객관식 R-1~5(성향/매칭) + 주관식 9-1·9-2(실발화 → voice 원천).
-// 가입 직후부터 sample_messages가 LLM 창작이 아닌 실문장으로 시작한다
-// (persona_fidelity_design.md §3-1, 2026-07-13 적용). 9-3은 데일리 첫 질문.
+// 온보딩 7문항 = 객관식 5(성향/매칭) + 주관식 2(실발화 → voice 원천).
+// 구성 근거(축당 2문항 하한, R-4↔8-3 교체 이유)는 docs/persona_science_rationale.md.
+// - R-4(받고 싶은 위로)는 선호(preference) 문항이라 trait 근거가 안 됨 → 데일리로.
+// - 8-3(답장이 짧아졌을 때)은 애착-불안 축의 행동 문항 — R-2와 함께 애착 2문항 확보.
+// 9-3은 데일리 첫 질문(주관식 3개째 = voice_confidence 0.35 도달).
 const List<String> kInitialScenarioCodes = [
   'R-1',
   'R-2',
   'R-3',
-  'R-4',
+  '8-3',
   'R-5',
   '9-1',
   '9-2',

@@ -89,6 +89,15 @@ class ApiClient {
     return _decode(response);
   }
 
+  /// 부분 수정 — persona PATCH는 임베딩 재계산(LLM)까지 갈 수 있어 넉넉하게.
+  Future<dynamic> patchJson(String path, Object body) async {
+    final response = await _send(
+      _http.patch(_uri(path), headers: await _headers(), body: jsonEncode(body)),
+      _llmTimeout,
+    );
+    return _decode(response);
+  }
+
   /// SSE(`text/event-stream`) POST — 이벤트의 data(JSON)를 순차 방출한다.
   Stream<Map<String, dynamic>> postSse(String path, Object body) async* {
     final request = http.Request('POST', _uri(path))

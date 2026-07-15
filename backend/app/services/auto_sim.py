@@ -48,6 +48,9 @@ def _persona_dict(p: Persona, *, voice: bool) -> dict:
         d["speech_style"] = p.speech_style
         d["sample_messages"] = p.sample_messages
         d["voice_stats"] = p.voice_stats  # 실측 말투 — _speech_block v2 수치 지시
+        # P0-B 심리 기저층 — _behavior_block 행동 지시 (갈등 모드·되묻기·성격 마커)
+        d["conversation_policy"] = p.conversation_policy
+        d["psych_profile"] = p.psych_profile
     return d
 
 

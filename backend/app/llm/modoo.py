@@ -25,8 +25,10 @@ from app.llm.oneshot import iter_finalized_turns
 from app.llm.output_schemas import (
     ConversationOutput,
     PersonaOutput,
+    PreviewOutput,
     ReportOutput,
 )
+from app.llm.prompts.preview import PREVIEW_SYSTEM_PROMPT, build_preview_user_message
 from app.llm.prompts import (
     PERSONA_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
@@ -50,10 +52,13 @@ _JSON_ONLY = (
 _PERSONA_JSON_HINT = """
 
 출력 JSON 키를 정확히 지키세요:
-{"traits":[{"category":"연락 템포","summary":"한 문장","keywords":["..",".."]}, ...총 8개, 순서: 연락 템포·유머·갈등·데이트·돈·시간·관계 속도·경계선·위로],
+{"traits":[{"category":"연락 템포","summary":"한 문장","keywords":["..",".."],"evidence":["근거 답변 코드"]}, ...근거 있는 카테고리만 1~8개. 카테고리는 연락 템포·유머·갈등·데이트·돈·시간·관계 속도·경계선·위로 중에서],
  "communication_style":"명사구","humor_style":"명사구","value_keywords":["..3~7개"],
  "speech_style":{"formality":"반말|존댓말|혼용","emoji_usage":"거의 안 씀|가끔|자주","laugh_style":"ㅋㅋ 등","sentence_length":"짧고 간결|보통|길게 풀어 씀","tone_keywords":["..2~4개"],"verbal_habits":"","punctuation_habits":"","reaction_style":"공감형|논리형|중간"},
- "sample_messages":["..1~3개"]}
+ "sample_messages":["..1~3개"],
+ "big_five":{"E":0.5,"A":0.5,"C":0.5,"N":0.5,"O":0.5,"evidence":["근거 답변 코드"]}}
+
+big_five는 근거가 있을 때만 — 없으면 키를 생략하세요.
 
 [말투 샘플]이 없으면 sample_messages를 빈 배열로 두지 말고, 추론한 speech_style에
 맞는 자연스러운 메신저 문장 1~3개를 직접 만들어 넣으세요(초기 온보딩은 객관식만 있음)."""
@@ -229,6 +234,19 @@ class ModooProvider(LLMProvider):
         persona["ai_generated"] = True
         persona["embedding"] = await self._get_embedder().embed(persona_embedding_text(persona))
         return persona
+
+    async def preview_utterances(self, persona: dict) -> list[dict]:
+        output = await self._chat_json(
+            PREVIEW_SYSTEM_PROMPT + _JSON_ONLY,
+            build_preview_user_message(persona),
+            PreviewOutput,
+            temperature=0.7,
+            max_tokens=800,
+        )
+        return [u.model_dump() for u in output.utterances]
+
+    async def embed_persona(self, persona: dict) -> list[float] | None:
+        return await self._get_embedder().embed(persona_embedding_text(persona))
 
     async def run_simulation(
         self,

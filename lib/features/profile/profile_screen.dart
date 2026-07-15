@@ -14,6 +14,7 @@ import '../../core/state/profile_store.dart';
 import '../../core/widgets/settings_row.dart';
 import '../../data/backend/amori_backend.dart';
 import '../../data/repositories/user_repository.dart';
+import 'mbti_sheet.dart';
 import 'region_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -55,8 +56,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _onAvatarChange(BuildContext context) =>
       _comingSoon(context, '프로필 사진 변경');
 
-  void _onPersonaInsight(BuildContext context) =>
-      _comingSoon(context, '성향 분석 카드');
+  void _onPersonaInsight(BuildContext context) {
+    HapticFeedback.lightImpact();
+    context.push(AppRoutes.personaPreview);
+  }
 
   void _onPersonaRelearn(BuildContext context) {
     HapticFeedback.lightImpact();
@@ -76,6 +79,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('지역을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _onMbti(BuildContext context) async {
+    HapticFeedback.lightImpact();
+    final mbti = await showMbtiSheet(context, current: _profile?.mbti);
+    if (mbti == null || mbti == (_profile?.mbti ?? '')) return;
+    try {
+      await UserRepository().saveProfile(mbti: mbti);
+      // copyWith로는 삭제('' → null)를 표현할 수 없어 서버 재조회로 동기화한다.
+      await ProfileStore.instance.refresh();
+      final latest = ProfileStore.instance.profile;
+      if (mounted && latest != null) setState(() => _profile = latest);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('MBTI를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
         );
       }
     }
@@ -150,7 +172,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SliverToBoxAdapter(
             child: _SettingsList(
               regionDetail: _profile?.region ?? '미설정',
+              mbtiDetail: _profile?.mbti ?? '미설정',
               onRegion: () => _onRegion(context),
+              onMbti: () => _onMbti(context),
               onComingSoon: (label) => _comingSoon(context, label),
               onLogout: () => _onLogout(context),
               onDeleteAccount: () => _onDeleteAccount(context),
@@ -416,14 +440,18 @@ class _AgentLink extends StatelessWidget {
 class _SettingsList extends StatelessWidget {
   const _SettingsList({
     required this.regionDetail,
+    required this.mbtiDetail,
     required this.onRegion,
+    required this.onMbti,
     required this.onComingSoon,
     required this.onLogout,
     required this.onDeleteAccount,
   });
 
   final String regionDetail;
+  final String mbtiDetail;
   final VoidCallback onRegion;
+  final VoidCallback onMbti;
   final ValueChanged<String> onComingSoon;
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
@@ -442,6 +470,12 @@ class _SettingsList extends StatelessWidget {
                 label: '활동 지역',
                 detail: regionDetail,
                 onTap: onRegion,
+              ),
+              SettingsRow(
+                icon: Icons.psychology_rounded,
+                label: 'MBTI',
+                detail: mbtiDetail,
+                onTap: onMbti,
               ),
               SettingsRow(
                 icon: Icons.favorite_rounded,

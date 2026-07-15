@@ -18,8 +18,10 @@ from app.llm.oneshot import iter_finalized_turns
 from app.llm.output_schemas import (
     ConversationOutput,
     PersonaOutput,
+    PreviewOutput,
     ReportOutput,
 )
+from app.llm.prompts.preview import PREVIEW_SYSTEM_PROMPT, build_preview_user_message
 from app.llm.prompts import (
     PERSONA_SYSTEM_PROMPT,
     REPORT_SYSTEM_PROMPT,
@@ -168,6 +170,18 @@ class GeminiProvider(LLMProvider):
         persona["ai_generated"] = True
         persona["embedding"] = await self._embed(persona_embedding_text(persona))
         return persona
+
+    async def preview_utterances(self, persona: dict) -> list[dict]:
+        output = await self._generate(
+            PREVIEW_SYSTEM_PROMPT,
+            build_preview_user_message(persona),
+            PreviewOutput,
+            temperature=0.7,
+        )
+        return [u.model_dump() for u in output.utterances]
+
+    async def embed_persona(self, persona: dict) -> list[float] | None:
+        return await self._embed(persona_embedding_text(persona))
 
     async def run_simulation(
         self,
