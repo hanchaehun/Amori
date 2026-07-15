@@ -109,7 +109,7 @@ class MyProfile {
 
 /// 사용자 프로필 — Firestore users 컬렉션 대신 Postgres 단일 원천 (`/users/me`).
 class UserRepository {
-  UserRepository({ApiClient? api}) : _api = api ?? ApiClient();
+  UserRepository({ApiClient? api}) : _api = api ?? ApiClient.shared;
 
   final ApiClient _api;
 

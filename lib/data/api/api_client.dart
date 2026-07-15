@@ -17,6 +17,10 @@ class ApiClient {
       _http = httpClient ?? http.Client(),
       _readTimeout = readTimeout ?? const Duration(seconds: 15);
 
+  /// 앱 전역 공유 인스턴스 — 리포지토리마다 http.Client를 새로 만들면
+  /// keep-alive 커넥션 재사용이 안 된다. 테스트는 생성자 주입으로 대체.
+  static final ApiClient shared = ApiClient();
+
   // Firebase는 비-dev 인증 경로에서만 지연 참조 — DEV_UID 모드/테스트에서 초기화 불필요.
   final FirebaseAuth? _auth;
   final http.Client _http;

@@ -94,7 +94,7 @@ class PreviewUtterance {
 
 /// 페르소나 생성/조회 — BFF `/persona/*` 경유 (클라이언트 직접 LLM 호출 제거).
 class PersonaRepository {
-  PersonaRepository({ApiClient? api}) : _api = api ?? ApiClient();
+  PersonaRepository({ApiClient? api}) : _api = api ?? ApiClient.shared;
 
   final ApiClient _api;
 

@@ -2,7 +2,7 @@ import '../api/api_client.dart';
 
 /// 만남 신청 — BFF `/meet/*` (Firestore 직접 쓰기 대체, 일일 쿼터는 서버가 강제).
 class MeetRepository {
-  MeetRepository({ApiClient? api}) : _api = api ?? ApiClient();
+  MeetRepository({ApiClient? api}) : _api = api ?? ApiClient.shared;
 
   final ApiClient _api;
 

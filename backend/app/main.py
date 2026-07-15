@@ -30,14 +30,17 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="AMORI BFF API", version="0.1.3", lifespan=lifespan)
+app = FastAPI(title="AMORI BFF API", version="0.1.4", lifespan=lifespan)
 
 app.middleware("http")(error_handler_middleware)
 
+# CORS는 브라우저 전용 방어 — 모바일 앱은 영향 없다. 웹 디버그 빌드를 위해
+# origin은 열어두되, credentials(쿠키)는 쓰지 않으므로 끈다.
+# (allow_origins="*" + allow_credentials=True 조합은 스펙 위반이자 과개방 — 보안 점검 7/15)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

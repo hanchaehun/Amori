@@ -3,7 +3,7 @@ import '../api/api_client.dart';
 
 /// 궁합 리포트 — BFF `GET /report/{match_id}` (서버 캐싱).
 class ReportRepository {
-  ReportRepository({ApiClient? api}) : _api = api ?? ApiClient();
+  ReportRepository({ApiClient? api}) : _api = api ?? ApiClient.shared;
 
   final ApiClient _api;
 

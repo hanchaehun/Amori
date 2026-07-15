@@ -52,9 +52,43 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
     ),
   ];
 
-  MatchProfile get _match => widget.matchId == null
-      ? kPlaceholderMatch
-      : findMatchById(widget.matchId!);
+  /// 연결 목록에서 불러온 이 매치의 실데이터 — 상대 이름 표시·신청 수신자 식별.
+  MatchSummary? _summary;
+
+  MatchProfile get _match {
+    final s = _summary;
+    if (s == null) return kPlaceholderMatch;
+    final name = (s.partnerName?.isNotEmpty ?? false) ? s.partnerName! : '상대';
+    return MatchProfile(
+      id: s.matchId,
+      initial: name.substring(0, 1),
+      name: name,
+      age: 0,
+      score: s.reportScore ?? s.score?.round() ?? 0,
+      values: 0,
+      humor: 0,
+      communication: 0,
+      photoUrl: s.partnerPhotoUrl,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMatch();
+  }
+
+  Future<void> _loadMatch() async {
+    final id = widget.matchId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final summaries = await MatchRepository().listMatches();
+      final found = summaries.where((s) => s.matchId == id).toList();
+      if (mounted && found.isNotEmpty) setState(() => _summary = found.first);
+    } catch (_) {
+      // 네트워크 실패 — 플레이스홀더 표시 유지, 전송 시 재시도된다
+    }
+  }
 
   @override
   void dispose() {
@@ -82,23 +116,24 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
 
     setState(() => _sending = true);
     try {
-      // BFF 매칭 결과에서 이 match의 상대(receiver)를 찾는다.
-      // 플레이스홀더 매치 ID처럼 백엔드에 없는 매치는 데모 플로우로 진행.
-      final candidates = await MatchRepository().findMatches();
-      MatchCandidate? target;
-      for (final candidate in candidates) {
-        if (candidate.matchId == _match.id) {
-          target = candidate;
-          break;
-        }
+      // 수신자는 연결 목록(listMatches)의 매치에서 찾는다 — 구현이 후보 검색
+      // (findMatches)을 쓰면 검증된 매치가 목록에 없어 신청이 조용히 유실됐다.
+      var target = _summary;
+      if (target == null && widget.matchId != null) {
+        final summaries = await MatchRepository().listMatches();
+        final found = summaries
+            .where((s) => s.matchId == widget.matchId)
+            .toList();
+        target = found.isEmpty ? null : found.first;
       }
-      if (target != null) {
-        await MeetRepository().createRequest(
-          matchId: target.matchId,
-          receiverId: target.userId,
-          message: _controller.text.trim(),
-        );
+      if (target == null) {
+        throw StateError('match not found');
       }
+      await MeetRepository().createRequest(
+        matchId: target.matchId,
+        receiverId: target.partnerId,
+        message: _controller.text.trim(),
+      );
       if (mounted) context.go(AppRoutes.requestStatus);
     } catch (_) {
       if (mounted) {

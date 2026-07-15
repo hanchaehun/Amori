@@ -219,6 +219,13 @@
   (PASS/NICE — 스토어 출시 전 필수: 나이·성별 위변조 방지 + 데이팅 카테고리 정책).
 - Flutter 약속 UI 정리(시뮬 약속 폐지 후속), 레거시 컬럼(appointment_slot·available_slots) 정리.
 - FCM 푸시("에이전트가 다녀왔어요"), 리포트 반응성 렌즈 실검증, LLM 유료 티어 전환(실유저 PII 전).
+- **7/15 전체 리뷰에서 남긴 항목**: ①결제 스텁이 클라이언트 저장(PurchaseStore) —
+  실연동 시 서버 영수증 검증으로 교체(리포트 열람 권한을 서버가 판정) ②LLM 엔드포인트
+  (persona build/preview) 사용자별 rate limit 없음 — 실유저 전 도입(시뮬은 쿼터 있음)
+  ③`freeLockReport` 라우트·화면이 진입 경로 없이 잔존 — 무료 티어 기획 확정 시 배선
+  또는 삭제 ④잠금 리포트가 점수 조회용 listMatches를 별도 호출 — 매칭 탭에서 라우터
+  extra로 전달하면 절약(소소) ⑤photo_url은 https 검증만 — 도메인 화이트리스트
+  (firebasestorage)로 좁히는 건 사진 업로드 실사용 확인 후.
 - 가입 계정 초기화(reset_accounts.py 준비됨 — 팀원 실가입 직전 실행, 손지민 조율).
 
 ## 운영 메모

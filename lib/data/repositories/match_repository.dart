@@ -248,7 +248,7 @@ class MatchCancelResult {
 
 /// 벡터 유사도 매칭 — BFF 경유 (Firestore 데모 시딩 대체).
 class MatchRepository {
-  MatchRepository({ApiClient? api}) : _api = api ?? ApiClient();
+  MatchRepository({ApiClient? api}) : _api = api ?? ApiClient.shared;
 
   final ApiClient _api;
 

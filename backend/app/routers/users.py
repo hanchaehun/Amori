@@ -35,16 +35,17 @@ class BookedSlot(BaseModel):
 
 
 class UserProfileUpsert(BaseModel):
-    display_name: str | None = None
+    # 길이 상한은 DB 컬럼과 일치 — 없으면 초과 입력이 DB DataError로 500이 된다 (보안 점검 7/15).
+    display_name: str | None = Field(default=None, max_length=100)
     birth_date: date | None = None
-    gender: str | None = None
-    interest_gender: str | None = None
-    region: str | None = None  # 활동 지역(시/도) — 매칭 랭킹 같은 지역 가점
+    gender: str | None = Field(default=None, max_length=20)
+    interest_gender: str | None = Field(default=None, max_length=20)
+    region: str | None = Field(default=None, max_length=30)  # 활동 지역(시/도)
     # MBTI 16유형 — 프로필 표시 + big_five prior 전용. 매칭·시뮬 규칙 사용 금지
     # (rationale §9 금지선). 빈 문자열 = 삭제.
     mbti: str | None = None
     bio: str | None = Field(default=None, max_length=200)  # 한줄 소개
-    photo_url: str | None = None
+    photo_url: str | None = Field(default=None, max_length=2000)
     fcm_token: str | None = None
     available_slots: list[AvailableSlot] | None = Field(default=None, max_length=30)
 
@@ -109,6 +110,16 @@ async def upsert_my_profile(
             user_obj.mbti = normalized
     if body.bio is not None:
         user_obj.bio = body.bio.strip() or None
+    if body.photo_url is not None and body.photo_url != "":
+        # 상대방 앱에서 그대로 로드되는 URL — https만 허용 (보안 점검 7/15)
+        if not body.photo_url.startswith("https://"):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "INVALID_PHOTO_URL",
+                    "message": "사진 URL은 https여야 합니다.",
+                },
+            )
     if body.photo_url is not None:
         user_obj.photo_url = body.photo_url
     if body.fcm_token is not None:

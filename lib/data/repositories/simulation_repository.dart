@@ -7,7 +7,7 @@ import '../api/api_exception.dart';
 /// 백엔드의 2-에이전트 턴 루프가 만든 실제 턴이 이벤트 단위로 내려온다.
 /// (가짜 타이핑 연출 → 진짜 실시간 스트리밍의 기반)
 class SimulationRepository {
-  SimulationRepository({ApiClient? api}) : _api = api ?? ApiClient();
+  SimulationRepository({ApiClient? api}) : _api = api ?? ApiClient.shared;
 
   final ApiClient _api;
 
