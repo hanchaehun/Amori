@@ -43,6 +43,7 @@ class UserProfileUpsert(BaseModel):
     # MBTI 16유형 — 프로필 표시 + big_five prior 전용. 매칭·시뮬 규칙 사용 금지
     # (rationale §9 금지선). 빈 문자열 = 삭제.
     mbti: str | None = None
+    bio: str | None = Field(default=None, max_length=200)  # 한줄 소개
     photo_url: str | None = None
     fcm_token: str | None = None
     available_slots: list[AvailableSlot] | None = Field(default=None, max_length=30)
@@ -57,6 +58,7 @@ class UserProfileResponse(BaseModel):
     interest_gender: str | None
     region: str | None = None
     mbti: str | None = None
+    bio: str | None = None
     photo_url: str | None
     available_slots: list[AvailableSlot] = []
     booked_slots: list[BookedSlot] = []  # GET에서만 채워진다
@@ -105,6 +107,8 @@ async def upsert_my_profile(
                     },
                 )
             user_obj.mbti = normalized
+    if body.bio is not None:
+        user_obj.bio = body.bio.strip() or None
     if body.photo_url is not None:
         user_obj.photo_url = body.photo_url
     if body.fcm_token is not None:
@@ -124,6 +128,7 @@ async def upsert_my_profile(
         interest_gender=user_obj.interest_gender,
         region=user_obj.region,
         mbti=user_obj.mbti,
+        bio=user_obj.bio,
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
     )
@@ -176,6 +181,7 @@ async def get_my_profile(
         interest_gender=user_obj.interest_gender,
         region=user_obj.region,
         mbti=user_obj.mbti,
+        bio=user_obj.bio,
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
         booked_slots=booked,

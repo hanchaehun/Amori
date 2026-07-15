@@ -58,6 +58,8 @@ class User(Base):
     # MBTI 16유형 — 프로필 표시 + big_five 약한 prior 전용. 매칭 점수·시뮬 규칙
     # 사용 금지 (docs/persona_science_rationale.md §9 금지선).
     mbti: Mapped[str | None] = mapped_column(String(4))
+    # 한줄 소개 — 상대 프로필 카드(리포트 내 프로필 보기)에 노출.
+    bio: Mapped[str | None] = mapped_column(String(200))
     photo_url: Mapped[str | None] = mapped_column(Text)
     fcm_token: Mapped[str | None] = mapped_column(Text)
     # 소개팅 가능 일정 [{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}, ...]

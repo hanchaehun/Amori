@@ -39,6 +39,7 @@ class MatchSummary {
     required this.matchId,
     required this.partnerId,
     required this.partnerName,
+    this.partnerPhotoUrl,
     required this.status,
     required this.score,
     required this.appointmentReady,
@@ -58,6 +59,7 @@ class MatchSummary {
   final String matchId;
   final String partnerId;
   final String? partnerName;
+  final String? partnerPhotoUrl;
   final String status; // simulated | scheduled | met
   final double? score;
   final bool appointmentReady;
@@ -89,6 +91,7 @@ class MatchSummary {
     matchId: json['match_id'] as String? ?? '',
     partnerId: json['partner_id'] as String? ?? '',
     partnerName: json['partner_name'] as String?,
+    partnerPhotoUrl: json['partner_photo_url'] as String?,
     status: json['status'] as String? ?? 'simulated',
     score: (json['score'] as num?)?.toDouble(),
     appointmentReady: json['appointment_ready'] as bool? ?? false,
@@ -206,6 +209,35 @@ class MatchConversation {
       );
 }
 
+/// 매치 상대의 공개 프로필 (`GET /matches/{id}/partner-profile`) —
+/// 리포트 내 '상대 프로필 보기'. 매칭된 쌍에게만 서버가 공개한다.
+class PartnerProfile {
+  const PartnerProfile({
+    required this.displayName,
+    this.age,
+    this.region,
+    this.mbti,
+    this.bio,
+    this.photoUrl,
+  });
+
+  final String displayName;
+  final int? age;
+  final String? region;
+  final String? mbti;
+  final String? bio;
+  final String? photoUrl;
+
+  factory PartnerProfile.fromJson(Map<String, dynamic> json) => PartnerProfile(
+    displayName: json['display_name'] as String? ?? '상대',
+    age: json['age'] as int?,
+    region: json['region'] as String?,
+    mbti: json['mbti'] as String?,
+    bio: json['bio'] as String?,
+    photoUrl: json['photo_url'] as String?,
+  );
+}
+
 /// 약속 취소 결과 (`POST /matches/{id}/cancel`).
 class MatchCancelResult {
   const MatchCancelResult({required this.status, required this.notice});
@@ -254,6 +286,12 @@ class MatchRepository {
   }
 
   /// 대화방 — 에이전트 대화 + 직접 채팅. 진행 중이면 읽기 전용으로 내려온다.
+  Future<PartnerProfile> getPartnerProfile(String matchId) async {
+    final json = await _api.getJson('/matches/$matchId/partner-profile')
+        as Map<String, dynamic>;
+    return PartnerProfile.fromJson(json);
+  }
+
   Future<MatchConversation> getConversation(String matchId) async {
     final json =
         await _api.getJson('/matches/$matchId/conversation')

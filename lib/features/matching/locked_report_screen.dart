@@ -5,17 +5,70 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/profile_store.dart';
+import '../../core/state/purchase_store.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_gradients.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/photo_viewer.dart';
 import '../../data/dummy/matches.dart';
+import '../../data/repositories/match_repository.dart';
 
-class LockedReportScreen extends StatelessWidget {
+class LockedReportScreen extends StatefulWidget {
   const LockedReportScreen({super.key, this.matchId});
 
   final String? matchId;
+
+  @override
+  State<LockedReportScreen> createState() => _LockedReportScreenState();
+}
+
+class _LockedReportScreenState extends State<LockedReportScreen> {
+  String? get matchId => widget.matchId;
+
+  // 실데이터 — 잠금 화면이라도 케미 점수·상대 이니셜·사진은 진짜를 보여준다
+  // (0점 플레이스홀더는 신뢰를 깎는다 — 2026-07-15 제품 결정).
+  int _score = 0;
+  String _partnerInitial = '?';
+  String _partnerName = '상대';
+  String? _partnerPhotoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = matchId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final repository = MatchRepository();
+      final results = await Future.wait<Object?>([
+        repository.listMatches().then<Object?>((s) => s, onError: (_) => null),
+        repository
+            .getPartnerProfile(id)
+            .then<Object?>((p) => p, onError: (_) => null),
+      ]);
+      if (!mounted) return;
+      final summaries = results[0] as List<MatchSummary>?;
+      final partner = results[1] as PartnerProfile?;
+      final match = summaries?.where((s) => s.matchId == id).firstOrNull;
+      setState(() {
+        if (match != null) {
+          _score = match.reportScore ?? match.score?.round() ?? 0;
+          final name = match.partnerName ?? '';
+          _partnerInitial = name.isEmpty ? '?' : name.substring(0, 1);
+          if (name.isNotEmpty) _partnerName = name;
+        }
+        _partnerPhotoUrl = partner?.photoUrl;
+      });
+    } catch (_) {
+      // 네트워크 실패 — 0점 표시 유지
+    }
+  }
 
   void _onClose(BuildContext context) {
     HapticFeedback.selectionClick();
@@ -26,20 +79,26 @@ class LockedReportScreen extends StatelessWidget {
     }
   }
 
-  void _onUnlock(BuildContext context) {
+  /// 이미 구독·단건 구매한 사용자는 페이월 없이 바로 리포트로.
+  Future<void> _onUnlock(BuildContext context) async {
     HapticFeedback.lightImpact();
-    context.push('${AppRoutes.paywall}?id=${matchId ?? kPlaceholderMatch.id}');
+    final id = matchId ?? kPlaceholderMatch.id;
+    final canView = await PurchaseStore.instance.canViewReport(id);
+    if (!context.mounted) return;
+    if (canView) {
+      context.push('${AppRoutes.fullReport}?id=$id');
+    } else {
+      context.push('${AppRoutes.paywall}?id=$id');
+    }
   }
 
-  void _onSubscribe(BuildContext context) {
+  Future<void> _onSubscribe(BuildContext context) async {
     HapticFeedback.selectionClick();
-    context.push('${AppRoutes.paywall}?id=${matchId ?? kPlaceholderMatch.id}');
+    return _onUnlock(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final match = matchId == null ? kPlaceholderMatch : findMatchById(matchId!);
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -66,19 +125,12 @@ class LockedReportScreen extends StatelessWidget {
                     children: [
                       _Hero(
                         myInitial: '나',
-                        themInitial: match.initial,
-                        score: match.score,
+                        themInitial: _partnerInitial,
+                        themName: _partnerName,
+                        score: _score,
+                        myPhotoUrl: ProfileStore.instance.profile?.photoUrl,
+                        themPhotoUrl: _partnerPhotoUrl,
                       ),
-                      AppSpacing.vXl,
-                      _ScoreBar(label: '가치관 일치', value: match.values),
-                      AppSpacing.vMd,
-                      _ScoreBar(label: '유머 코드', value: match.humor),
-                      AppSpacing.vMd,
-                      _ScoreBar(label: '대화 패턴', value: match.communication),
-                      AppSpacing.vXl,
-                      const _SectionLabel(text: '추천 대화 주제'),
-                      AppSpacing.vSm,
-                      _TopicChips(topics: match.recommendedTopics),
                       AppSpacing.vXl,
                       const _SectionLabel(
                         text: '더 자세한 인사이트',
@@ -166,11 +218,17 @@ class _Hero extends StatelessWidget {
     required this.myInitial,
     required this.themInitial,
     required this.score,
+    this.themName,
+    this.myPhotoUrl,
+    this.themPhotoUrl,
   });
 
   final String myInitial;
   final String themInitial;
+  final String? themName;
   final int score;
+  final String? myPhotoUrl;
+  final String? themPhotoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -179,11 +237,15 @@ class _Hero extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _AvatarRing(initial: myInitial),
+            _AvatarRing(initial: myInitial, photoUrl: myPhotoUrl),
             const SizedBox(width: 16),
             const Icon(Icons.favorite_rounded, color: Colors.white, size: 28),
             const SizedBox(width: 16),
-            _AvatarRing(initial: themInitial),
+            _AvatarRing(
+              initial: themInitial,
+              photoUrl: themPhotoUrl,
+              caption: themName,
+            ),
           ],
         ),
         AppSpacing.vMd,
@@ -228,12 +290,15 @@ class _Hero extends StatelessWidget {
 }
 
 class _AvatarRing extends StatelessWidget {
-  const _AvatarRing({required this.initial});
+  const _AvatarRing({required this.initial, this.photoUrl, this.caption});
   final String initial;
+  final String? photoUrl; // 있으면 사진, 없으면 이니셜
+  final String? caption; // 사진 확대 뷰어의 이름 표시
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
+    final ring = Container(
       width: 64,
       height: 64,
       alignment: Alignment.center,
@@ -244,71 +309,33 @@ class _AvatarRing extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.45),
           width: 1.5,
         ),
+        image: hasPhoto
+            ? DecorationImage(
+                image: NetworkImage(photoUrl!),
+                fit: BoxFit.cover,
+              )
+            : null,
       ),
-      child: Text(
-        initial,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: 22,
-        ),
-      ),
-    );
-  }
-}
-
-class _ScoreBar extends StatelessWidget {
-  const _ScoreBar({required this.label, required this.value});
-  final String label;
-  final int value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: AppTypography.label.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              '$value',
-              style: AppTypography.label.copyWith(
+      child: hasPhoto
+          ? null
+          : Text(
+              initial,
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
-                fontSize: 14,
+                fontSize: 22,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          height: 6,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(99),
-          ),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: (value / 100).clamp(0.0, 1.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+    );
+    if (!hasPhoto) return ring;
+    return GestureDetector(
+      onTap: () => showPhotoViewer(
+        context,
+        photoUrl: photoUrl!,
+        caption: caption,
+        heroTag: 'locked-photo-$photoUrl',
+      ),
+      child: Hero(tag: 'locked-photo-$photoUrl', child: ring),
     );
   }
 }
@@ -337,37 +364,6 @@ class _SectionLabel extends StatelessWidget {
             color: Colors.white.withValues(alpha: 0.85),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class _TopicChips extends StatelessWidget {
-  const _TopicChips({required this.topics});
-  final List<String> topics;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final t in topics)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(99),
-            ),
-            child: Text(
-              t,
-              style: AppTypography.label.copyWith(
-                color: AppColors.coral,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
-            ),
-          ),
       ],
     );
   }

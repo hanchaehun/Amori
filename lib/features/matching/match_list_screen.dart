@@ -13,16 +13,10 @@ import '../../data/backend/amori_backend.dart';
 import '../../data/dummy/matches.dart';
 import '../../data/repositories/match_repository.dart';
 
-enum _MatchFilter { all, valueAlignment, humor, conversation }
-
-extension _MatchFilterX on _MatchFilter {
-  String get label => switch (this) {
-    _MatchFilter.all => '전체',
-    _MatchFilter.valueAlignment => '가치관',
-    _MatchFilter.humor => '유머',
-    _MatchFilter.conversation => '대화 패턴',
-  };
-}
+/// 케미 게이트(백엔드 report_pass_score=75) 통과 매치만 이 탭에 띄운다.
+/// 후보 검색(/matches/find)이 아니라 시뮬 대화·리포트가 끝난 결과(/matches)가
+/// 원천 — "AI가 먼저 만나보고 검증된 인연"이라는 제품 약속과 배너 문구의 구현.
+const int kVerifiedScoreThreshold = 75;
 
 class MatchListScreen extends StatefulWidget {
   const MatchListScreen({super.key});
@@ -32,29 +26,36 @@ class MatchListScreen extends StatefulWidget {
 }
 
 class _MatchListScreenState extends State<MatchListScreen> {
-  _MatchFilter _filter = _MatchFilter.all;
   Future<List<MatchProfile>>? _matchFuture;
 
   @override
   void initState() {
     super.initState();
-    if (AmoriBackend().currentUser != null) {
-      // BFF 벡터 매칭. 결과가 비었거나 오류면 빈 상태를 보여준다(예시 인물 없음).
-      _matchFuture = MatchRepository()
-          .findMatches()
-          .then(
-            (candidates) => [
-              for (final candidate in candidates) candidate.toProfile(),
-            ],
-          );
+    if (AmoriBackend().isAuthenticated) {
+      _matchFuture = MatchRepository().listMatches().then((summaries) {
+        final verified = [
+          for (final s in summaries)
+            // 송출 중(reportScore null)·게이트 미만(failed)은 제외 —
+            // 진행 중은 연결 탭, 미달은 닿지 않은 인연의 몫.
+            if (!s.failed && (s.reportScore ?? 0) >= kVerifiedScoreThreshold)
+              MatchProfile(
+                id: s.matchId,
+                initial: (s.partnerName?.isNotEmpty ?? false)
+                    ? s.partnerName!.substring(0, 1)
+                    : '?',
+                name: s.partnerName ?? '상대',
+                age: 0,
+                score: s.reportScore!,
+                values: 0,
+                humor: 0,
+                communication: 0,
+                photoUrl: s.partnerPhotoUrl,
+              ),
+        ];
+        verified.sort((a, b) => b.score.compareTo(a.score));
+        return verified;
+      });
     }
-  }
-
-  void _onFilterTrailing() {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('필터 옵션 — 다음 턴 작업 예정')));
   }
 
   void _onMatchTap(MatchProfile match) {
@@ -69,30 +70,12 @@ class _MatchListScreenState extends State<MatchListScreen> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(child: _TopBar(onTrailing: _onFilterTrailing)),
+          const SliverToBoxAdapter(child: _TopBar()),
           const SliverPadding(
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             sliver: SliverToBoxAdapter(child: _VerifiedBanner()),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.md,
-              AppSpacing.lg,
-              AppSpacing.sm,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: _FilterRow(
-                value: _filter,
-                onChanged: (v) => setState(() => _filter = v),
-              ),
-            ),
-          ),
-          _MatchListSliver(
-            future: _matchFuture,
-            filter: _filter,
-            onTap: _onMatchTap,
-          ),
+          _MatchListSliver(future: _matchFuture, onTap: _onMatchTap),
         ],
       ),
     );
@@ -100,14 +83,9 @@ class _MatchListScreenState extends State<MatchListScreen> {
 }
 
 class _MatchListSliver extends StatelessWidget {
-  const _MatchListSliver({
-    required this.future,
-    required this.filter,
-    required this.onTap,
-  });
+  const _MatchListSliver({required this.future, required this.onTap});
 
   final Future<List<MatchProfile>>? future;
-  final _MatchFilter filter;
   final ValueChanged<MatchProfile> onTap;
 
   @override
@@ -136,24 +114,9 @@ class _MatchListSliver extends StatelessWidget {
           );
         }
         if (profiles.isEmpty) return const _EmptySliver();
-        return _cards(_filtered(profiles));
+        return _cards(profiles);
       },
     );
-  }
-
-  List<MatchProfile> _filtered(List<MatchProfile> matches) {
-    final sorted = [...matches];
-    switch (filter) {
-      case _MatchFilter.all:
-        sorted.sort((a, b) => b.score.compareTo(a.score));
-      case _MatchFilter.valueAlignment:
-        sorted.sort((a, b) => b.values.compareTo(a.values));
-      case _MatchFilter.humor:
-        sorted.sort((a, b) => b.humor.compareTo(a.humor));
-      case _MatchFilter.conversation:
-        sorted.sort((a, b) => b.communication.compareTo(a.communication));
-    }
-    return sorted;
   }
 
   Widget _cards(List<MatchProfile> matches) {
@@ -215,9 +178,7 @@ class _EmptySliver extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onTrailing});
-
-  final VoidCallback onTrailing;
+  const _TopBar();
 
   @override
   Widget build(BuildContext context) {
@@ -229,20 +190,7 @@ class _TopBar extends StatelessWidget {
       child: SizedBox(
         height: 56,
         child: Row(
-          children: [
-            Text('검증된 인연', style: AppTypography.titleLarge),
-            const Spacer(),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(
-                Icons.tune_rounded,
-                size: 22,
-                color: AppColors.ink900,
-              ),
-              onPressed: onTrailing,
-            ),
-          ],
+          children: [Text('검증된 인연', style: AppTypography.titleLarge)],
         ),
       ),
     );
@@ -274,75 +222,6 @@ class _VerifiedBanner extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FilterRow extends StatelessWidget {
-  const _FilterRow({required this.value, required this.onChanged});
-
-  final _MatchFilter value;
-  final ValueChanged<_MatchFilter> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        children: [
-          for (final f in _MatchFilter.values) ...[
-            _FilterChip(
-              label: f.label,
-              selected: f == value,
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onChanged(f);
-              },
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? AppColors.coral : AppColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: Text(
-          label,
-          style: AppTypography.label.copyWith(
-            color: selected ? Colors.white : AppColors.ink700,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-            fontSize: 13,
-          ),
-        ),
       ),
     );
   }
@@ -388,22 +267,30 @@ class _MatchCardState extends State<_MatchCard> {
                     width: 48,
                     height: 48,
                     alignment: Alignment.center,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.surfaceMuted,
                       shape: BoxShape.circle,
+                      image: (m.photoUrl?.isNotEmpty ?? false)
+                          ? DecorationImage(
+                              image: NetworkImage(m.photoUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: Text(
-                      m.initial,
-                      style: AppTypography.titleMedium.copyWith(
-                        color: AppColors.ink700,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+                    child: (m.photoUrl?.isNotEmpty ?? false)
+                        ? null
+                        : Text(
+                            m.initial,
+                            style: AppTypography.titleMedium.copyWith(
+                              color: AppColors.ink700,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                   ),
                   AppSpacing.hMd,
                   Expanded(
                     child: Text(
-                      '${m.name}, ${m.age}',
+                      m.name,
                       style: AppTypography.titleMedium.copyWith(fontSize: 16),
                     ),
                   ),
@@ -424,22 +311,6 @@ class _MatchCardState extends State<_MatchCard> {
                         fontSize: 14,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              AppSpacing.vMd,
-              Row(
-                children: [
-                  Expanded(
-                    child: _MiniBar(label: '가치관', value: m.values),
-                  ),
-                  AppSpacing.hMd,
-                  Expanded(
-                    child: _MiniBar(label: '유머', value: m.humor),
-                  ),
-                  AppSpacing.hMd,
-                  Expanded(
-                    child: _MiniBar(label: '대화', value: m.communication),
                   ),
                 ],
               ),
@@ -483,54 +354,3 @@ class _MatchCardState extends State<_MatchCard> {
   }
 }
 
-class _MiniBar extends StatelessWidget {
-  const _MiniBar({required this.label, required this.value});
-
-  final String label;
-  final int value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppTypography.caption.copyWith(
-            color: AppColors.ink500,
-            fontSize: 11,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '$value',
-          style: AppTypography.label.copyWith(
-            color: AppColors.ink900,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 3,
-          decoration: BoxDecoration(
-            color: AppColors.ink100,
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: (value / 100).clamp(0.0, 1.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.coral,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}

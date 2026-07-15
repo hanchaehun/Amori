@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/router/app_routes.dart';
+import '../../core/state/notification_store.dart';
+import '../../core/state/profile_store.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -12,6 +14,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/gradient_text.dart';
+import '../../data/backend/local_notifications.dart';
 import '../../data/repositories/match_repository.dart';
 import '../../data/repositories/persona_repository.dart';
 
@@ -91,6 +94,35 @@ class _HomeScreenState extends State<HomeScreen> {
     final dailyStatus = await dailyStatusFuture;
     if (mounted) {
       setState(() => _dailyStatus = dailyStatus);
+    }
+    await _refreshNotifications(dailyStatus);
+  }
+
+  /// 알림 배지 계산 + 프로필 미완성 시 하루 1회 폰 알림 예약.
+  Future<void> _refreshNotifications(DailyPersonaStatus? dailyStatus) async {
+    await ProfileStore.instance.refresh();
+    final profile = ProfileStore.instance.profile;
+    final dailyCode =
+        (dailyStatus != null && !dailyStatus.completedToday)
+        ? dailyStatus.scenarioCode
+        : null;
+    await NotificationStore.instance.refresh(
+      profile: profile,
+      dailyScenarioCode: dailyCode,
+    );
+
+    // 폰 알림 — 프로필 넛지(데일리 제외)가 남아 있으면 하루 1회 리마인드.
+    final nudges = NotificationStore.instance.items
+        .where((n) => n.id != 'daily')
+        .toList();
+    await LocalNotifications.instance.requestPermission();
+    if (nudges.isNotEmpty) {
+      await LocalNotifications.instance.scheduleProfileNudge(
+        title: nudges.first.title,
+        body: '프로필이 완성될수록 매칭이 정확해져요',
+      );
+    } else {
+      await LocalNotifications.instance.cancelProfileNudge();
     }
   }
 
@@ -223,6 +255,21 @@ class _HomeScreenState extends State<HomeScreen> {
 class _TopBar extends StatelessWidget {
   const _TopBar();
 
+  Future<void> _openNotifications(BuildContext context) async {
+    HapticFeedback.selectionClick();
+    final store = NotificationStore.instance;
+    await store.markSeen();
+    if (!context.mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => _NotificationSheet(items: store.items),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -232,16 +279,186 @@ class _TopBar extends StatelessWidget {
       ),
       child: SizedBox(
         height: 56,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: GradientText(
-            'amori',
-            style: AppTypography.titleLarge.copyWith(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.8,
+        child: Row(
+          children: [
+            GradientText(
+              'amori',
+              style: AppTypography.titleLarge.copyWith(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.8,
+              ),
             ),
-          ),
+            const Spacer(),
+            ListenableBuilder(
+              listenable: NotificationStore.instance,
+              builder: (context, _) => _BellButton(
+                count: NotificationStore.instance.unseenCount,
+                onTap: () => _openNotifications(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BellButton extends StatelessWidget {
+  const _BellButton({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Icon(
+              Icons.notifications_none_rounded,
+              size: 24,
+              color: AppColors.ink900,
+            ),
+            if (count > 0)
+              Positioned(
+                top: 6,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
+                  constraints: const BoxConstraints(minWidth: 15),
+                  decoration: BoxDecoration(
+                    color: AppColors.coral,
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: Text(
+                    '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationSheet extends StatelessWidget {
+  const _NotificationSheet({required this.items});
+
+  final List<AppNotification> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: const BoxDecoration(
+                  color: AppColors.ink300,
+                  borderRadius: BorderRadius.all(Radius.circular(2)),
+                ),
+              ),
+            ),
+            Text('알림', style: AppTypography.titleLarge),
+            AppSpacing.vMd,
+            if (items.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                child: Center(
+                  child: Text(
+                    '새 알림이 없어요',
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.ink500,
+                    ),
+                  ),
+                ),
+              )
+            else
+              for (final item in items) ...[
+                InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.of(context).pop();
+                    context.push(item.route);
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(item.emoji, style: const TextStyle(fontSize: 22)),
+                        AppSpacing.hMd,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                style: AppTypography.bodyMedium.copyWith(
+                                  color: AppColors.ink900,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item.body,
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: AppColors.ink500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.ink300,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                AppSpacing.vXs,
+              ],
+          ],
         ),
       ),
     );

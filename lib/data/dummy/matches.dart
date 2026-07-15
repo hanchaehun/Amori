@@ -9,6 +9,7 @@ class MatchProfile {
     required this.humor,
     required this.communication,
     this.recommendedTopics = const [],
+    this.photoUrl,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class MatchProfile {
   final int humor;
   final int communication;
   final List<String> recommendedTopics;
+  final String? photoUrl;
 }
 
 /// 실제 매칭 데이터가 아직 배선되지 않은 화면(잠금 리포트·만남 신청 등)이

@@ -2,6 +2,7 @@ import uuid
 from datetime import date as date_cls, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,7 +88,8 @@ async def list_my_matches(
     latest_jobs = {j.match_id: j for j in jobs_result.scalars().all()}
 
     users_result = await db.execute(select(User).where(User.id.in_(partner_ids)))
-    partner_names = {u.id: u.display_name for u in users_result.scalars().all()}
+    partner_users = {u.id: u for u in users_result.scalars().all()}
+    partner_names = {uid: u.display_name for uid, u in partner_users.items()}
 
     reports_result = await db.execute(
         select(Report).where(Report.match_id.in_(match_ids))
@@ -140,6 +142,9 @@ async def list_my_matches(
                 match_id=str(match_obj.id),
                 partner_id=partner_id,
                 partner_name=partner_names.get(partner_id),
+                partner_photo_url=(
+                    p.photo_url if (p := partner_users.get(partner_id)) else None
+                ),
                 status=match_obj.status,
                 score=match_obj.score,
                 appointment_ready=ready,
@@ -159,8 +164,12 @@ async def list_my_matches(
                 ),
                 report_score=None if live else (report.score if report else None),
                 failed=failed,
+                # warnings 항목은 {title, body} dict — 문자열 필드에 dict를 넣으면
+                # 응답 검증이 죽어 목록 전체가 500이 된다 (E2E 7/15 발견).
                 failure_reason=(
-                    report.warnings[0] if failed and report.warnings else None
+                    (report.warnings[0].get("title") or report.warnings[0].get("body"))
+                    if failed and report.warnings
+                    else None
                 ),
                 failed_expires_at=(
                     failed_expires_at.isoformat() if failed_expires_at else None
@@ -245,6 +254,61 @@ async def _load_my_match(db: AsyncSession, match_id: str, uid: str, request_id: 
             detail={"error_code": "NOT_FOUND", "message": "매칭 정보를 찾을 수 없습니다.", "request_id": request_id},
         )
     return match_obj
+
+
+class PartnerProfileResponse(BaseModel):
+    """리포트 내 '상대 프로필 보기' — 매칭된 쌍에게만 공개하는 최소 프로필."""
+
+    user_id: str
+    display_name: str | None = None
+    age: int | None = None
+    region: str | None = None
+    mbti: str | None = None
+    bio: str | None = None
+    photo_url: str | None = None
+
+
+@router.get("/{match_id}/partner-profile", response_model=PartnerProfileResponse)
+async def get_partner_profile(
+    match_id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """매치 상대의 공개 프로필. 참가자 본인만 조회 가능 (그 외 404)."""
+    request_id = str(uuid.uuid4())
+    match_obj = await _load_my_match(db, match_id, user["uid"], request_id)
+    other_uid = next(
+        pid for pid in match_obj.participant_ids if pid != user["uid"]
+    )
+    result = await db.execute(select(User).where(User.id == other_uid))
+    partner = result.scalar_one_or_none()
+    if not partner:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error_code": "NOT_FOUND",
+                "message": "상대 프로필을 찾을 수 없습니다.",
+                "request_id": request_id,
+            },
+        )
+    age = None
+    if partner.birth_date:
+        today = date_cls.today()
+        born = partner.birth_date
+        age = (
+            today.year
+            - born.year
+            - ((today.month, today.day) < (born.month, born.day))
+        )
+    return PartnerProfileResponse(
+        user_id=partner.id,
+        display_name=partner.display_name,
+        age=age,
+        region=partner.region,
+        mbti=partner.mbti,
+        bio=partner.bio,
+        photo_url=partner.photo_url,
+    )
 
 
 @router.get("/{match_id}/conversation", response_model=MatchConversationResponse)

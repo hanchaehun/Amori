@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
 import '../../core/state/agent_session_store.dart';
-import '../../core/theme/amori_theme_ext.dart';
+import '../../core/state/profile_store.dart';
 import '../../data/models/compatibility_report.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -13,7 +13,10 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
+import '../../core/widgets/photo_viewer.dart';
 import '../../data/dummy/matches.dart';
+import '../../data/repositories/match_repository.dart';
+import '../../data/repositories/report_repository.dart';
 
 class FullReportScreen extends StatefulWidget {
   const FullReportScreen({super.key, this.matchId});
@@ -27,13 +30,60 @@ class FullReportScreen extends StatefulWidget {
 class _FullReportScreenState extends State<FullReportScreen> {
   int _tabIndex = 0;
 
-  static const _tabs = ['요약', '대화 로그', '첫 만남 가이드'];
+  // 대화 로그 탭은 제거(2026-07-15 제품 결정) — 대화는 연결 탭에서 이미 보고 오고,
+  // 리포트는 '요약 → 상대가 누구인지 → 만나면 뭘 할지'로 결정을 돕는 화면이다.
+  static const _tabs = ['요약', '상대 프로필', '첫 만남 가이드'];
+
+  bool _loading = true;
+  CompatibilityReport? _fetched;
+  PartnerProfile? _partner;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// 리포트·상대 프로필을 백엔드에서 병렬 로드 (실데이터 배선).
+  /// 개별 실패는 폴백(세션 스토어·기본 문구)으로 흡수한다.
+  Future<void> _load() async {
+    final id = widget.matchId;
+    if (id == null || id.isEmpty) {
+      setState(() => _loading = false);
+      return;
+    }
+    final results = await Future.wait<Object?>([
+      ReportRepository().fetch(id).then<Object?>((r) => r, onError: (_) => null),
+      MatchRepository()
+          .getPartnerProfile(id)
+          .then<Object?>((p) => p, onError: (_) => null),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _fetched = results[0] as CompatibilityReport?;
+      _partner = results[1] as PartnerProfile?;
+      _loading = false;
+    });
+  }
+
+  CompatibilityReport? get _report =>
+      _fetched ?? AgentSessionStore.instance.report;
+
+  String get _partnerName => _partner?.displayName ?? '상대';
 
   MatchProfile get _match => widget.matchId == null
       ? kPlaceholderMatch
-      : findMatchById(widget.matchId!);
+      : MatchProfile(
+          id: widget.matchId!,
+          initial: _partnerName.isEmpty ? '?' : _partnerName.substring(0, 1),
+          name: _partnerName,
+          age: _partner?.age ?? 0,
+          score: _report?.score ?? 0,
+          values: 0,
+          humor: 0,
+          communication: 0,
+        );
 
-  CompatibilityReport? get _report => AgentSessionStore.instance.report;
   int get _score => _report?.score ?? _match.score;
 
   void _onShare() {
@@ -64,9 +114,18 @@ class _FullReportScreenState extends State<FullReportScreen> {
           onPressed: _onShare,
         ),
       ),
-      body: Column(
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.coral),
+            )
+          : Column(
         children: [
-          _HeroSection(match: _match, score: _score),
+          _HeroSection(
+            match: _match,
+            score: _score,
+            myPhotoUrl: ProfileStore.instance.profile?.photoUrl,
+            partnerPhotoUrl: _partner?.photoUrl,
+          ),
           _TabBar(
             active: _tabIndex,
             tabs: _tabs,
@@ -82,7 +141,7 @@ class _FullReportScreenState extends State<FullReportScreen> {
                 key: ValueKey(_tabIndex),
                 child: switch (_tabIndex) {
                   0 => _SummaryTab(match: _match, report: _report),
-                  1 => _ChatLogTab(themInitial: _match.initial),
+                  1 => _PartnerProfileTab(partner: _partner),
                   _ => _GuideTab(match: _match, report: _report),
                 },
               ),
@@ -108,9 +167,16 @@ class _FullReportScreenState extends State<FullReportScreen> {
 }
 
 class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.match, required this.score});
+  const _HeroSection({
+    required this.match,
+    required this.score,
+    this.myPhotoUrl,
+    this.partnerPhotoUrl,
+  });
   final MatchProfile match;
   final int score;
+  final String? myPhotoUrl;
+  final String? partnerPhotoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -123,16 +189,16 @@ class _HeroSection extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _Avatar(initial: '나'),
+          _Avatar(initial: '나', photoUrl: myPhotoUrl),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
             child: Icon(
               Icons.favorite_rounded,
               size: 16,
-              color: AppColors.primary,
+              color: AppColors.coral,
             ),
           ),
-          _Avatar(initial: match.initial),
+          _Avatar(initial: match.initial, photoUrl: partnerPhotoUrl),
           AppSpacing.hMd,
           Expanded(
             child: Column(
@@ -146,7 +212,7 @@ class _HeroSection extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.primary,
+                        color: AppColors.coral,
                         height: 1.0,
                         letterSpacing: -0.8,
                       ),
@@ -207,27 +273,37 @@ class _HeroSection extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.initial});
+  const _Avatar({required this.initial, this.photoUrl});
   final String initial;
+  final String? photoUrl; // 있으면 사진, 없으면 이니셜
 
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     return Container(
       width: 36,
       height: 36,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surfaceMuted,
         shape: BoxShape.circle,
+        image: hasPhoto
+            ? DecorationImage(
+                image: NetworkImage(photoUrl!),
+                fit: BoxFit.cover,
+              )
+            : null,
       ),
-      child: Text(
-        initial,
-        style: AppTypography.label.copyWith(
-          color: AppColors.ink700,
-          fontWeight: FontWeight.w900,
-          fontSize: 14,
-        ),
-      ),
+      child: hasPhoto
+          ? null
+          : Text(
+              initial,
+              style: AppTypography.label.copyWith(
+                color: AppColors.ink700,
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+              ),
+            ),
     );
   }
 }
@@ -266,7 +342,7 @@ class _TabBar extends StatelessWidget {
                     border: Border(
                       bottom: BorderSide(
                         color: i == active
-                            ? AppColors.primary
+                            ? AppColors.coral
                             : Colors.transparent,
                         width: 2.5,
                       ),
@@ -275,7 +351,7 @@ class _TabBar extends StatelessWidget {
                   child: Text(
                     tabs[i],
                     style: AppTypography.label.copyWith(
-                      color: i == active ? AppColors.primary : AppColors.ink500,
+                      color: i == active ? AppColors.coral : AppColors.ink500,
                       fontWeight: i == active
                           ? FontWeight.w800
                           : FontWeight.w600,
@@ -456,148 +532,139 @@ class _WarningCard extends StatelessWidget {
   }
 }
 
-class _ChatLogTab extends StatelessWidget {
-  const _ChatLogTab({required this.themInitial});
-  final String themInitial;
+class _PartnerProfileTab extends StatelessWidget {
+  const _PartnerProfileTab({required this.partner});
 
-  static const _fallbackMessages = [
-    _PreviewMsg(true, '안녕하세요! 주말에는 보통 어떻게 보내세요?'),
-    _PreviewMsg(false, '저는 주로 성수나 연남 카페에서 책 읽거나, 여행 준비해요.'),
-    _PreviewMsg(true, '와 저도 이번에 오사카 다녀왔는데! 음악도 좋아하시나요?'),
-    _PreviewMsg(false, '잔잔한 인디 위주로 들어요. 새소년이나 잠비나이 같은.'),
-    _PreviewMsg(true, '연애에서 가장 중요하게 생각하는 게 뭐예요?'),
-    _PreviewMsg(false, '서로의 일상을 존중하면서도, 함께 있을 때 편안한 거요.'),
-  ];
+  /// 매칭된 쌍에게만 서버가 공개하는 최소 프로필 — 사진·나이·지역·MBTI·한줄 소개.
+  final PartnerProfile? partner;
 
   @override
   Widget build(BuildContext context) {
-    // PersonaStore에서 최대 6개 미리보기, 없으면 폴백
-    final stored = AgentSessionStore.instance.conversation
-        .where((m) => !m.isSystem)
-        .take(6)
-        .map((m) => _PreviewMsg(m.isMe, m.text))
-        .toList();
-    final previewMessages = stored.isNotEmpty ? stored : _fallbackMessages;
-    final total = AgentSessionStore.instance.conversation.isEmpty
-        ? 24
-        : AgentSessionStore.instance.conversation.length;
-
+    final p = partner;
+    if (p == null) {
+      return Center(
+        child: Text(
+          '상대 프로필을 불러오지 못했어요',
+          style: AppTypography.bodyMedium.copyWith(color: AppColors.ink500),
+        ),
+      );
+    }
+    final photo = p.photoUrl;
+    final chips = <String>[
+      if (p.region != null && p.region!.isNotEmpty) '📍 ${p.region}',
+      if (p.mbti != null && p.mbti!.isNotEmpty) p.mbti!,
+    ];
     return ListView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.xl,
         AppSpacing.lg,
         AppSpacing.md,
       ),
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.06),
-            borderRadius: AppRadius.rSm,
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.bolt_rounded,
-                size: 16,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.ink700,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    children: [
-                      TextSpan(text: '$total개 메시지 중 '),
-                      TextSpan(
-                        text: '${previewMessages.length}개 미리보기',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
+        Center(
+          child: GestureDetector(
+            onTap: (photo != null && photo.isNotEmpty)
+                ? () => showPhotoViewer(
+                    context,
+                    photoUrl: photo,
+                    caption: p.age != null
+                        ? '${p.displayName}, ${p.age}'
+                        : p.displayName,
+                    heroTag: 'partner-photo-$photo',
+                  )
+                : null,
+            child: Hero(
+              tag: 'partner-photo-${photo ?? p.displayName}',
+              child: Container(
+                width: 96,
+                height: 96,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.coral.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                  image: (photo != null && photo.isNotEmpty)
+                      ? DecorationImage(
+                          image: NetworkImage(photo),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
+                child: (photo == null || photo.isEmpty)
+                    ? Text(
+                        p.displayName.isEmpty
+                            ? '?'
+                            : p.displayName.substring(0, 1),
+                        style: AppTypography.titleXl.copyWith(
+                          color: AppColors.coral,
+                        ),
+                      )
+                    : null,
               ),
-            ],
+            ),
           ),
         ),
-        AppSpacing.vLg,
-        for (final m in previewMessages) ...[
-          _PreviewBubble(message: m),
-          AppSpacing.vSm,
-        ],
         AppSpacing.vMd,
         Center(
           child: Text(
-            '─  실제 시뮬레이션 결과 기반  ─',
-            style: AppTypography.caption.copyWith(
-              color: AppColors.ink300,
-              fontSize: 11,
+            p.age != null ? '${p.displayName}, ${p.age}' : p.displayName,
+            style: AppTypography.titleLarge,
+          ),
+        ),
+        if (chips.isNotEmpty) ...[
+          AppSpacing.vSm,
+          Wrap(
+            spacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              for (final chip in chips)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    chip,
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.ink700,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+        if (p.bio != null && p.bio!.isNotEmpty) ...[
+          AppSpacing.vLg,
+          Container(
+            padding: AppSpacing.cardPadding,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(16),
             ),
+            child: Text(
+              '"${p.bio}"',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.ink700,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+        AppSpacing.vLg,
+        Center(
+          child: Text(
+            '사진과 프로필은 매칭된 상대에게만 공개돼요',
+            style: AppTypography.caption.copyWith(color: AppColors.ink300),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PreviewMsg {
-  const _PreviewMsg(this.isMe, this.text);
-  final bool isMe;
-  final String text;
-}
-
-class _PreviewBubble extends StatelessWidget {
-  const _PreviewBubble({required this.message});
-  final _PreviewMsg message;
-
-  @override
-  Widget build(BuildContext context) {
-    final amori = context.amori;
-    final isMe = message.isMe;
-    final radius = isMe
-        ? const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(16),
-            bottomRight: Radius.circular(4),
-          )
-        : const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(4),
-            bottomRight: Radius.circular(16),
-          );
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: isMe ? amori.primaryGradient : null,
-            color: isMe ? null : AppColors.surfaceMuted,
-            borderRadius: radius,
-          ),
-          child: Text(
-            message.text,
-            style: AppTypography.bodyMedium.copyWith(
-              color: isMe ? Colors.white : AppColors.ink900,
-              fontSize: 14,
-              height: 1.45,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -724,10 +791,10 @@ class _StarterCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.06),
+        color: AppColors.coral.withValues(alpha: 0.06),
         borderRadius: AppRadius.rSm,
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.18),
+          color: AppColors.coral.withValues(alpha: 0.18),
           width: 1,
         ),
       ),

@@ -8,7 +8,6 @@ import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/widgets/dev_skip_button.dart';
 import '../../data/repositories/agent_flow.dart';
 
 class PersonaLoadingScreen extends StatefulWidget {
@@ -102,12 +101,6 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
     }
   }
 
-  void _skip() {
-    _leaving = true;
-    _progress.stop();
-    _goHome();
-  }
-
   String _stageFor(double t) {
     if (t >= 0.99) return '에이전트 준비 완료!';
     if (t < 0.3) return '대화 스타일 분석 중...';
@@ -133,11 +126,6 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
             child: SafeArea(
               child: Stack(
                 children: [
-                  Positioned(
-                    top: AppSpacing.md,
-                    right: AppSpacing.md,
-                    child: DevSkipButton(onPressed: _skip, dark: true),
-                  ),
                   AnimatedBuilder(
                     animation: Listenable.merge([_pulse, _progress]),
                     builder: (_, _) {

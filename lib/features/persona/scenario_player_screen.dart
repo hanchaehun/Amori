@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +13,6 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/backend/scenario_answers_store.dart';
 import '../../data/dummy/scenarios.dart';
@@ -41,7 +42,6 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   final Map<int, String> _answers = {};
   final TextEditingController _freeTextController = TextEditingController();
   late final PersonaRepository _personaRepository;
-  bool _submitting = false;
 
   // 주관식은 "평소 말투"가 드러날 최소 길이만 요구 (한 마디면 충분)
   static const int _minFreeTextLength = 5;
@@ -99,12 +99,12 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
   }
 
   Future<void> _next() async {
-    if (!_canProceed || _submitting) return;
+    if (!_canProceed) return;
     HapticFeedback.lightImpact();
     if (_isLast) {
       final answers = _toScenarioAnswers();
       if (widget.mode == ScenarioPlayerMode.daily) {
-        await _submitDailyAnswer(answers.first);
+        _submitDailyAnswer(answers.first);
       } else {
         ScenarioAnswersStore.save(answers);
         if (mounted) context.go(AppRoutes.personaLoading);
@@ -142,20 +142,27 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     }).toList();
   }
 
-  Future<void> _submitDailyAnswer(ScenarioAnswer answer) async {
-    setState(() => _submitting = true);
-    try {
-      final profile = await _personaRepository.updatePersona(answer);
-      AgentSessionStore.instance.profile = profile;
-      AgentSessionStore.instance.markDailyPersonaCompleted(DateTime.now());
-      if (mounted) context.go(AppRoutes.home);
-    } catch (error) {
-      if (mounted) {
-        _showError('오늘의 답변을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
+  /// 낙관적 저장 (2026-07-15) — 데일리 보정은 LLM 호출이라 ~20초 걸린다.
+  /// 사용자를 붙잡지 않고 즉시 완료 처리 후 홈으로 보내고, 저장은 백그라운드.
+  /// 실패하면 완료 표시를 되돌려 오늘 다시 답할 수 있게 한다(답변 유실 방지).
+  void _submitDailyAnswer(ScenarioAnswer answer) {
+    final store = AgentSessionStore.instance;
+    final previousCode = store.dailyScenarioCode;
+    store.markDailyPersonaCompleted(DateTime.now());
+    context.go(AppRoutes.home);
+    unawaited(
+      _personaRepository
+          .updatePersona(answer)
+          .then((profile) {
+            store.profile = profile;
+          })
+          .catchError((Object _) {
+            store.setDailyPersonaStatus(
+              scenarioCode: previousCode,
+              completedDate: null,
+            );
+          }),
+    );
   }
 
   void _previous() {
@@ -196,30 +203,6 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     }
   }
 
-  void _skip() {
-    if (widget.mode == ScenarioPlayerMode.daily) {
-      context.go(AppRoutes.home);
-    } else {
-      context.go(AppRoutes.personaLoading);
-    }
-  }
-
-  void _showError(String message) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(AppSpacing.md),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-        ),
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -238,7 +221,6 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
         stepIndex: _index + 1,
         stepTotal: _scenarios.length,
         onClose: _exit,
-        onSkip: _skip,
       ),
       body: Column(
         children: [
@@ -308,15 +290,11 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
               AppSpacing.lg,
             ),
             child: GradientButton(
-              label: _submitting
-                  ? '저장 중...'
-                  : (_isLast
-                        ? (widget.mode == ScenarioPlayerMode.daily
-                              ? '답변 저장'
-                              : '완료')
-                        : '다음'),
+              label: _isLast
+                  ? (widget.mode == ScenarioPlayerMode.daily ? '답변 저장' : '완료')
+                  : '다음',
               trailing: _isLast ? null : const GradientArrowTrailing(),
-              onPressed: _canProceed && !_submitting ? () => _next() : null,
+              onPressed: _canProceed ? () => _next() : null,
             ),
           ),
         ],
@@ -330,13 +308,11 @@ class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.stepIndex,
     required this.stepTotal,
     required this.onClose,
-    required this.onSkip,
   });
 
   final int stepIndex;
   final int stepTotal;
   final VoidCallback onClose;
-  final VoidCallback onSkip;
 
   @override
   Size get preferredSize => const Size.fromHeight(56);
@@ -371,8 +347,6 @@ class _ScenarioAppBar extends StatelessWidget implements PreferredSizeWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 8),
-            DevSkipButton(onPressed: onSkip),
             const Spacer(),
             const _ClonigBadge(),
           ],

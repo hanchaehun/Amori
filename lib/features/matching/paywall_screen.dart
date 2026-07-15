@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/state/purchase_store.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
@@ -24,14 +26,24 @@ class PaywallScreen extends StatelessWidget {
     }
   }
 
-  void _onSelectPerUse(BuildContext context) {
+  // ⚠️ 결제 스텁 (실 IAP/PG 연동 전) — 결제 없이 열람 권한만 기록된다.
+  Future<void> _onSelectPerUse(BuildContext context) async {
     HapticFeedback.lightImpact();
-    context.go('${AppRoutes.fullReport}?id=${matchId ?? ''}');
+    final id = matchId;
+    if (id != null && id.isNotEmpty) {
+      await PurchaseStore.instance.unlockMatch(id); // 단건: 이 매치만 열람
+    }
+    if (context.mounted) {
+      context.go('${AppRoutes.fullReport}?id=${matchId ?? ''}');
+    }
   }
 
-  void _onSubscribe(BuildContext context) {
+  Future<void> _onSubscribe(BuildContext context) async {
     HapticFeedback.mediumImpact();
-    context.go('${AppRoutes.fullReport}?id=${matchId ?? ''}');
+    await PurchaseStore.instance.setSubscribed(true); // 구독: 전체 열람
+    if (context.mounted) {
+      context.go('${AppRoutes.fullReport}?id=${matchId ?? ''}');
+    }
   }
 
   void _onLegal(BuildContext context, String label) {

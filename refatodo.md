@@ -212,9 +212,11 @@
 
 ## 기존 잔여 작업 (페르소나 외 — 이전 문서에서 이관)
 
-- **KYC 개발용 통과 버튼 릴리스 처리 (릴리스 블로커)** — "(개발용) 인증 성공" 버튼이
-  릴리스 빌드에 노출. 팀 테스트 배포 전 처리 방식 결정 필요.
-- 이메일 인증(sendEmailVerification + email_verified 클레임 강제), 통신사 본인인증(KYC 스텁).
+- ~~KYC 개발용 통과 버튼 릴리스 처리~~ → **해소(7/15)**: 본인인증 실연동은 스토어 출시
+  전으로 결정, KYC 화면을 가입 흐름에서 임시 제외(가입→바로 페르소나 인트로).
+  화면·라우트는 보존 — 실연동 시 signup_screen의 `personaIntro`를 `kycBlock`으로 복원.
+- 이메일 인증(sendEmailVerification + email_verified 클레임 강제), 통신사 본인인증
+  (PASS/NICE — 스토어 출시 전 필수: 나이·성별 위변조 방지 + 데이팅 카테고리 정책).
 - Flutter 약속 UI 정리(시뮬 약속 폐지 후속), 레거시 컬럼(appointment_slot·available_slots) 정리.
 - FCM 푸시("에이전트가 다녀왔어요"), 리포트 반응성 렌즈 실검증, LLM 유료 티어 전환(실유저 PII 전).
 - 가입 계정 초기화(reset_accounts.py 준비됨 — 팀원 실가입 직전 실행, 손지민 조율).

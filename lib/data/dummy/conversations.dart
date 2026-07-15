@@ -19,6 +19,7 @@ class Conversation {
     required this.time,
     required this.status,
     required this.unread,
+    this.photoUrl,
     this.appointmentReady = false,
     this.appointmentLabel,
     this.partnerAccepted = false,
@@ -28,6 +29,7 @@ class Conversation {
   final String id;
   final String name;
   final String initial;
+  final String? photoUrl;
   final int score;
   final String lastMessage;
   final String time;
@@ -64,6 +66,7 @@ class Conversation {
       id: id,
       name: name,
       initial: initial,
+      photoUrl: photoUrl,
       score: score,
       lastMessage: lastMessage ?? this.lastMessage,
       time: time ?? this.time,

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
+import '../../core/state/purchase_store.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
@@ -97,6 +98,7 @@ class _InboxScreenState extends State<InboxScreen> {
       id: m.matchId,
       name: name,
       initial: name.substring(0, 1),
+      photoUrl: m.partnerPhotoUrl,
       score: m.score?.round() ?? 0,
       lastMessage: m.lastMessage ?? '에이전트 대화 ${m.turnCount}턴 완료',
       time: _formatTime(m.updatedAt),
@@ -173,6 +175,19 @@ class _InboxScreenState extends State<InboxScreen> {
   void _openFailed() {
     HapticFeedback.lightImpact();
     context.push(AppRoutes.failedMatches, extra: _failed);
+  }
+
+  /// [리포트 먼저 보기] — 수락 전 리포트 열람. 구독자·단건 구매자는 바로,
+  /// 아니면 페이월(단건결제/구독 선택)로 보낸다.
+  Future<void> _onViewReport(Conversation c) async {
+    HapticFeedback.lightImpact();
+    final canView = await PurchaseStore.instance.canViewReport(c.id);
+    if (!mounted) return;
+    if (canView) {
+      context.push('${AppRoutes.fullReport}?id=${c.id}');
+    } else {
+      context.push('${AppRoutes.paywall}?id=${c.id}');
+    }
   }
 
   /// [수락] — 양쪽이 모두 수락하면 '만남 예정'으로 이동한다.
@@ -274,6 +289,8 @@ class _InboxScreenState extends State<InboxScreen> {
                                   onTap: () =>
                                       _onConversationTap(_conversations[i]),
                                   onAccept: () => _onAccept(_conversations[i]),
+                                  onViewReport: () =>
+                                      _onViewReport(_conversations[i]),
                                 ),
                               ),
                       ),
@@ -463,10 +480,12 @@ class _ConversationCard extends StatefulWidget {
     required this.conversation,
     required this.onTap,
     required this.onAccept,
+    required this.onViewReport,
   });
   final Conversation conversation;
   final VoidCallback onTap;
   final VoidCallback onAccept;
+  final VoidCallback onViewReport;
 
   @override
   State<_ConversationCard> createState() => _ConversationCardState();
@@ -516,17 +535,25 @@ class _ConversationCardState extends State<_ConversationCard> {
                     width: 48,
                     height: 48,
                     alignment: Alignment.center,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.surfaceMuted,
                       shape: BoxShape.circle,
+                      image: (c.photoUrl?.isNotEmpty ?? false)
+                          ? DecorationImage(
+                              image: NetworkImage(c.photoUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: Text(
-                      c.initial,
-                      style: AppTypography.titleMedium.copyWith(
-                        color: AppColors.ink700,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+                    child: (c.photoUrl?.isNotEmpty ?? false)
+                        ? null
+                        : Text(
+                            c.initial,
+                            style: AppTypography.titleMedium.copyWith(
+                              color: AppColors.ink700,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                   ),
                   AppSpacing.hMd,
                   Expanded(
@@ -659,6 +686,10 @@ class _ConversationCardState extends State<_ConversationCard> {
               ),
               if (highlight) ...[
                 const SizedBox(height: 12),
+                // 수락 전에 리포트를 먼저 볼 수 있게 — 구독자는 바로,
+                // 비구독자는 페이월(단건/구독) 경유 (제품 결정 2026-07-15).
+                _ViewReportAction(onViewReport: widget.onViewReport),
+                const SizedBox(height: 8),
                 _AcceptAction(
                   youAccepted: c.youAccepted,
                   onAccept: widget.onAccept,
@@ -702,6 +733,49 @@ class _AppointmentBadge extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ViewReportAction extends StatelessWidget {
+  const _ViewReportAction({required this.onViewReport});
+
+  final VoidCallback onViewReport;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onViewReport,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: double.infinity,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primary, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.description_outlined,
+              size: 18,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '리포트 먼저 보기',
+              style: AppTypography.label.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

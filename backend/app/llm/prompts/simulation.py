@@ -21,6 +21,16 @@ def _persona_block(persona: dict) -> str:
     )
 
 
+def _shrunk_pct(p: float, n: int, *, prior: float = 0.4, k: int = 5) -> int:
+    """소표본 비율 축소 → % 정수.
+
+    표본 2~5개에서 나온 '웃음 80~100%'를 문자 그대로 지시하면 LLM이 모든
+    문장에 기계적으로 붙인다(캐리커처 — 2026-07-15 실사용 확인). 베이지안
+    축소(가상 표본 k개, prior 0.4)로 보수화한다 — 표본이 쌓이면 실측에 수렴.
+    """
+    return int(round((n * p + k * prior) / (n + k) * 100))
+
+
 def _voice_stats_lines(stats: dict, style: dict) -> list[str]:
     """실측 카드 — voice_features가 계산한 통계를 수치 지시로 변환한다.
 
@@ -43,10 +53,14 @@ def _voice_stats_lines(stats: dict, style: dict) -> list[str]:
     if lc.get("p50"):
         parts.append(f"문장 {lc.get('p25', 0)}~{lc.get('p75', 0)}자(중앙 {lc['p50']}자)")
 
+    sample_count = stats.get("sample_count") or 0
     laugh = stats.get("laugh") or {}
     if laugh.get("token"):
-        per = int(round((laugh.get("per_msg") or 0) * 100))
-        parts.append(f"웃음 {laugh['token']} {laugh.get('avg_run', 0):g}연속꼴·메시지 {per}%에")
+        per = _shrunk_pct(laugh.get("per_msg") or 0, sample_count)
+        parts.append(
+            f"웃음 {laugh['token']} {laugh.get('avg_run', 0):g}연속꼴"
+            f"·대화 전체에서 메시지 {per}% 정도에만"
+        )
     else:
         banned.append("ㅋㅋ/ㅎㅎ 등 웃음 표현")
 
@@ -77,6 +91,11 @@ def _voice_stats_lines(stats: dict, style: dict) -> list[str]:
         f"말투(실측 {stats.get('sample_count', 0)}개 발화 통계 — 반드시 재현): "
         + " | ".join(parts)
     ]
+    lines.append(
+        "위 비율은 상한이지 규칙이 아닙니다 — 웃음·부호·이모지는 웃기거나 멋쩍거나"
+        " 들뜬 맥락에서만 자연스럽게 쓰고, 매 문장 끝에 기계적으로 붙이거나 연속된"
+        " 메시지에 똑같이 반복하지 마세요. 담백한 문장이 섞여야 진짜 사람입니다."
+    )
     if banned:
         lines.append("절대 사용 금지(실측에 없는 습관 — 쓰면 그 사람이 아님): " + ", ".join(banned))
     return lines

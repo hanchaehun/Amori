@@ -47,6 +47,8 @@ class MyProfile {
     this.interestGender,
     this.region,
     this.mbti,
+    this.bio,
+    this.photoUrl,
   });
 
   final String? displayName;
@@ -55,6 +57,8 @@ class MyProfile {
   final String? interestGender;
   final String? region;
   final String? mbti;
+  final String? bio;
+  final String? photoUrl;
 
   /// 만 나이. 생년월일이 없으면 null.
   int? get age {
@@ -76,6 +80,8 @@ class MyProfile {
     interestGender: json['interest_gender'] as String?,
     region: json['region'] as String?,
     mbti: json['mbti'] as String?,
+    bio: json['bio'] as String?,
+    photoUrl: json['photo_url'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -85,15 +91,19 @@ class MyProfile {
     'interest_gender': interestGender,
     'region': region,
     'mbti': mbti,
+    'bio': bio,
+    'photo_url': photoUrl,
   };
 
-  MyProfile copyWith({String? region, String? mbti}) => MyProfile(
+  MyProfile copyWith({String? region, String? mbti, String? bio}) => MyProfile(
     displayName: displayName,
     birthDate: birthDate,
     gender: gender,
     interestGender: interestGender,
     region: region ?? this.region,
     mbti: mbti ?? this.mbti,
+    bio: bio ?? this.bio,
+    photoUrl: photoUrl,
   );
 }
 
@@ -110,6 +120,7 @@ class UserRepository {
     String? interestGender,
     String? region,
     String? mbti,
+    String? bio,
     String? photoUrl,
     String? fcmToken,
     List<AvailableSlot>? availableSlots,
@@ -121,6 +132,7 @@ class UserRepository {
       'interest_gender': ?interestGender,
       'region': ?region,
       'mbti': ?mbti,
+      'bio': ?bio,
       'photo_url': ?photoUrl,
       'fcm_token': ?fcmToken,
       if (availableSlots != null)

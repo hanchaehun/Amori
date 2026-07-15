@@ -11,8 +11,9 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
-import '../../core/widgets/outline_button.dart';
 import '../../core/widgets/soft_card.dart';
+import '../../data/backend/pending_profile_store.dart';
+import '../../data/repositories/user_repository.dart';
 
 class PersonaIntroScreen extends StatefulWidget {
   const PersonaIntroScreen({super.key});
@@ -32,6 +33,26 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
       vsync: this,
       duration: const Duration(milliseconds: 3600),
     )..repeat(reverse: true);
+    _commitPendingProfile();
+  }
+
+  /// 가입 폼 프로필의 DB 커밋 — 이 화면은 본인인증 통과 후에만 도달하므로
+  /// "인증 성공 전에는 users에 저장하지 않는다" 정책의 커밋 지점이다.
+  /// 실패하면 대기 저장소에 남아 다음 진입 때 자동 재시도된다.
+  Future<void> _commitPendingProfile() async {
+    final pending = await PendingProfileStore.load();
+    if (pending == null) return;
+    try {
+      await UserRepository().saveProfile(
+        displayName: pending['display_name'] as String?,
+        birthDate: pending['birth_date'] as String?,
+        gender: pending['gender'] as String?,
+        interestGender: pending['interest_gender'] as String?,
+      );
+      await PendingProfileStore.clear();
+    } catch (_) {
+      // BFF 일시 장애 — pending 유지, 다음 진입(스플래시→인트로) 때 재시도
+    }
   }
 
   @override
@@ -43,13 +64,6 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
   void _start() {
     HapticFeedback.lightImpact();
     context.push(AppRoutes.scenarioPlayer);
-  }
-
-  void _connectExternal() {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('S05-Import · 외부 데이터 연동 — 다음 턴 작업 예정')),
-    );
   }
 
   @override
@@ -75,9 +89,9 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
                   ),
                   AppSpacing.vSm,
                   Text(
-                    '대표 질문 5개로 AI 에이전트 초안을 만들고\n'
+                    '질문 7개로 AI 에이전트 초안을 만들고\n'
                     '매일 1문항으로 더 정교하게 업데이트합니다.\n'
-                    '약 2분 소요',
+                    '약 3분 소요',
                     textAlign: TextAlign.center,
                     style: AppTypography.bodyMedium.copyWith(
                       color: AppColors.ink500,
@@ -120,11 +134,6 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
                   label: '시작하기',
                   trailing: const GradientArrowTrailing(),
                   onPressed: _start,
-                ),
-                AppSpacing.vSm,
-                OutlineCtaButton(
-                  label: 'Spotify · Strava · Instagram 연동하기',
-                  onPressed: _connectExternal,
                 ),
                 AppSpacing.vSm,
                 Row(

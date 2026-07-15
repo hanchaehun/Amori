@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/state/agent_session_store.dart';
 import '../../core/state/profile_store.dart';
 import 'backend_exception.dart';
@@ -19,6 +20,10 @@ class AmoriBackend {
   final FirebaseMessaging _messaging;
 
   User? get currentUser => _auth.currentUser;
+
+  /// BFF를 호출할 수 있는 인증 상태인가 — 실 Firebase 로그인 또는 DEV_UID 우회.
+  /// (매칭 탭 등 currentUser로 게이트하던 화면이 dev 모드에서 빈 화면이 되던 문제)
+  bool get isAuthenticated => _auth.currentUser != null || AppConfig.devUid != null;
 
   String get requireUid {
     final uid = currentUser?.uid;

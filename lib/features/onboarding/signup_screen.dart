@@ -8,7 +8,6 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
-import '../../core/widgets/dev_skip_button.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../core/widgets/primary_text_field.dart';
 import '../../core/widgets/segmented_selector.dart';
@@ -16,6 +15,7 @@ import '../../core/state/profile_store.dart';
 import '../../data/backend/amori_backend.dart';
 import '../../data/backend/auth_prefs.dart';
 import '../../data/backend/backend_exception.dart';
+import '../../data/backend/pending_profile_store.dart';
 import '../../data/repositories/user_repository.dart';
 
 enum _Gender { female, male, other }
@@ -98,29 +98,28 @@ class _SignupScreenState extends State<SignupScreen> {
         password: _passwordController.text,
         displayName: _nameController.text.trim(),
       );
-      // 프로필은 Firestore가 아닌 BFF(Postgres 단일 원천)에 저장.
-      // BFF 미기동 등 일시 장애로 가입 자체를 막지는 않는다.
-      try {
-        await UserRepository().saveProfile(
-          displayName: _nameController.text.trim(),
-          birthDate: _toIsoDate(_birthController.text.trim()),
-          gender: (_gender ?? _Gender.other).name,
-          interestGender: (_interestGender ?? _InterestGender.both).name,
-        );
-        // 방금 입력받은 값이 곧 프로필 — 서버 재조회 없이 캐시를 즉시 채운다.
-        ProfileStore.instance.set(MyProfile(
-          displayName: _nameController.text.trim(),
-          birthDate: _parseBirth(_birthController.text),
-          gender: (_gender ?? _Gender.other).name,
-          interestGender: (_interestGender ?? _InterestGender.both).name,
-        ));
-      } catch (error) {
-        debugPrint('프로필 저장 실패(추후 재시도 필요): $error');
-      }
+      // 프로필은 아직 DB에 저장하지 않는다 — 본인인증(KYC) 통과 후에만 저장
+      // (2026-07-15 정책: 인증 이탈 계정이 users에 쌓이는 것 방지).
+      // 로컬 대기 저장소에 보관하고, 인증 통과 후 첫 화면(페르소나 인트로)에서 커밋한다.
+      await PendingProfileStore.save(
+        displayName: _nameController.text.trim(),
+        birthDate: _toIsoDate(_birthController.text.trim()),
+        gender: (_gender ?? _Gender.other).name,
+        interestGender: (_interestGender ?? _InterestGender.both).name,
+      );
+      // 방금 입력받은 값이 곧 프로필 — 화면 표시용 캐시는 즉시 채운다.
+      ProfileStore.instance.set(MyProfile(
+        displayName: _nameController.text.trim(),
+        birthDate: _parseBirth(_birthController.text),
+        gender: (_gender ?? _Gender.other).name,
+        interestGender: (_interestGender ?? _InterestGender.both).name,
+      ));
       // 페르소나 생성 전이므로, 앱을 껐다 켜면 홈이 아니라 생성 플로우로 이어진다.
       await AuthPrefs.instance.setPersonaReady(false);
       // 계정이 이미 만들어졌으니 뒤로가기로 가입 폼에 돌아가지 않도록 스택 교체.
-      if (mounted) context.go(AppRoutes.kycBlock);
+      // 본인인증(KYC)은 스토어 출시 전 실연동 시점에 복원한다(2026-07-15 결정) —
+      // 그때 AppRoutes.personaIntro → AppRoutes.kycBlock으로 되돌리면 된다.
+      if (mounted) context.go(AppRoutes.personaIntro);
     } on BackendException catch (error) {
       _showError(error.message);
     } finally {
@@ -186,11 +185,7 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return AppScaffold(
-      appBar: BackAppBar(
-        trailing: DevSkipButton(
-          onPressed: () => context.push(AppRoutes.kycBlock),
-        ),
-      ),
+      appBar: const BackAppBar(),
       body: Column(
         children: [
           Expanded(

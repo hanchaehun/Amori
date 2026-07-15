@@ -117,6 +117,7 @@ class MatchListItem(BaseModel):
     match_id: str
     partner_id: str
     partner_name: str | None = None
+    partner_photo_url: str | None = None
     status: str  # simulated | scheduled | met
     score: float | None = None
     # 07-04부터 의미 재정의: '수락 가능(리포트 게이트 통과)'. 필드명은 Flutter 하위호환.

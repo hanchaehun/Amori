@@ -13,6 +13,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/state/profile_store.dart';
 import '../../core/widgets/settings_row.dart';
 import '../../data/backend/amori_backend.dart';
+import '../../data/backend/profile_photo_uploader.dart';
 import '../../data/repositories/user_repository.dart';
 import 'mbti_sheet.dart';
 import 'region_sheet.dart';
@@ -53,8 +54,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.push(AppRoutes.settings);
   }
 
-  void _onAvatarChange(BuildContext context) =>
-      _comingSoon(context, '프로필 사진 변경');
+  bool _uploadingPhoto = false;
+
+  Future<void> _onAvatarChange(BuildContext context) async {
+    if (_uploadingPhoto) return;
+    HapticFeedback.lightImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _uploadingPhoto = true);
+    try {
+      final url = await ProfilePhotoUploader().pickAndUpload();
+      if (url == null) return; // 선택 취소
+      await UserRepository().saveProfile(photoUrl: url);
+      await ProfileStore.instance.refresh();
+      final latest = ProfileStore.instance.profile;
+      if (mounted && latest != null) setState(() => _profile = latest);
+      messenger.showSnackBar(const SnackBar(content: Text('프로필 사진을 변경했어요.')));
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('사진을 올리지 못했어요. 잠시 후 다시 시도해 주세요.')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
 
   void _onPersonaInsight(BuildContext context) {
     HapticFeedback.lightImpact();
@@ -98,6 +120,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('MBTI를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _onBio(BuildContext context) async {
+    HapticFeedback.lightImpact();
+    final controller = TextEditingController(text: _profile?.bio ?? '');
+    final bio = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.lg,
+          right: AppSpacing.lg,
+          top: AppSpacing.lg,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('한줄 소개', style: AppTypography.titleMedium),
+            AppSpacing.vXs,
+            Text(
+              '만남이 성사된 상대에게 보여져요.',
+              style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
+            ),
+            AppSpacing.vMd,
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 100,
+              style: AppTypography.bodyLarge,
+              decoration: InputDecoration(
+                hintText: '예: 주말엔 한강에서 러닝해요. 맛집 탐방 좋아합니다!',
+                hintStyle: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.ink300,
+                ),
+                filled: true,
+                fillColor: AppColors.surfaceMuted,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            AppSpacing.vSm,
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(controller.text.trim()),
+                child: Text('저장', style: AppTypography.button),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (bio == null || bio == (_profile?.bio ?? '')) return;
+    try {
+      await UserRepository().saveProfile(bio: bio);
+      await ProfileStore.instance.refresh();
+      final latest = ProfileStore.instance.profile;
+      if (mounted && latest != null) setState(() => _profile = latest);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('한줄 소개를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
         );
       }
     }
@@ -173,8 +276,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: _SettingsList(
               regionDetail: _profile?.region ?? '미설정',
               mbtiDetail: _profile?.mbti ?? '미설정',
+              bioDetail: (_profile?.bio?.isNotEmpty ?? false) ? '작성됨' : '미설정',
               onRegion: () => _onRegion(context),
               onMbti: () => _onMbti(context),
+              onBio: () => _onBio(context),
               onComingSoon: (label) => _comingSoon(context, label),
               onLogout: () => _onLogout(context),
               onDeleteAccount: () => _onDeleteAccount(context),
@@ -256,17 +361,25 @@ class _ProfileHero extends StatelessWidget {
                   width: 88,
                   height: 88,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.surfaceMuted,
                     shape: BoxShape.circle,
+                    image: (profile?.photoUrl?.isNotEmpty ?? false)
+                        ? DecorationImage(
+                            image: NetworkImage(profile!.photoUrl!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: Text(
-                    _name == '—' ? '' : _name.characters.first,
-                    style: AppTypography.displayMedium.copyWith(
-                      color: AppColors.ink700,
-                      fontSize: 36,
-                    ),
-                  ),
+                  child: (profile?.photoUrl?.isNotEmpty ?? false)
+                      ? null
+                      : Text(
+                          _name == '—' ? '' : _name.characters.first,
+                          style: AppTypography.displayMedium.copyWith(
+                            color: AppColors.ink700,
+                            fontSize: 36,
+                          ),
+                        ),
                 ),
                 Positioned(
                   right: 0,
@@ -441,8 +554,10 @@ class _SettingsList extends StatelessWidget {
   const _SettingsList({
     required this.regionDetail,
     required this.mbtiDetail,
+    required this.bioDetail,
     required this.onRegion,
     required this.onMbti,
+    required this.onBio,
     required this.onComingSoon,
     required this.onLogout,
     required this.onDeleteAccount,
@@ -450,8 +565,10 @@ class _SettingsList extends StatelessWidget {
 
   final String regionDetail;
   final String mbtiDetail;
+  final String bioDetail;
   final VoidCallback onRegion;
   final VoidCallback onMbti;
+  final VoidCallback onBio;
   final ValueChanged<String> onComingSoon;
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
@@ -476,6 +593,12 @@ class _SettingsList extends StatelessWidget {
                 label: 'MBTI',
                 detail: mbtiDetail,
                 onTap: onMbti,
+              ),
+              SettingsRow(
+                icon: Icons.edit_note_rounded,
+                label: '한줄 소개',
+                detail: bioDetail,
+                onTap: onBio,
               ),
               SettingsRow(
                 icon: Icons.favorite_rounded,
