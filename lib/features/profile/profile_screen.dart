@@ -10,6 +10,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/exit_guard.dart';
 import '../../core/state/profile_store.dart';
 import '../../core/widgets/settings_row.dart';
 import '../../data/backend/amori_backend.dart';
@@ -274,52 +275,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      bottomBar: const AmoriTabBar(active: AmoriTab.profile),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: _TopBar(onSettings: () => _onSettings(context)),
-          ),
-          SliverToBoxAdapter(
-            child: _ProfileHero(
-              profile: _profile,
-              onCameraTap: () => _onAvatarChange(context),
+    return ExitGuard(
+      child: AppScaffold(
+        bottomBar: const AmoriTabBar(active: AmoriTab.profile),
+        body: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: _TopBar(onSettings: () => _onSettings(context)),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.lg,
-                AppSpacing.lg,
-                0,
-              ),
-              child: _AgentCard(
-                onInsight: () => _onPersonaInsight(context),
-                onRelearn: () => _onPersonaRelearn(context),
+            SliverToBoxAdapter(
+              child: _ProfileHero(
+                profile: _profile,
+                onCameraTap: () => _onAvatarChange(context),
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: _SettingsList(
-              regionDetail: _profile?.region ?? '미설정',
-              matchPrefDetail:
-                  '위 ${_profile?.matchAgeOlder ?? kDefaultAgeGap} · '
-                  '아래 ${_profile?.matchAgeYounger ?? kDefaultAgeGap}',
-              mbtiDetail: _profile?.mbti ?? '미설정',
-              bioDetail: (_profile?.bio?.isNotEmpty ?? false) ? '작성됨' : '미설정',
-              onRegion: () => _onRegion(context),
-              onMatchPref: () => _onMatchPref(context),
-              onMbti: () => _onMbti(context),
-              onBio: () => _onBio(context),
-              onComingSoon: (label) => _comingSoon(context, label),
-              onLogout: () => _onLogout(context),
-              onDeleteAccount: () => _onDeleteAccount(context),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  0,
+                ),
+                child: _AgentCard(
+                  onInsight: () => _onPersonaInsight(context),
+                  onRelearn: () => _onPersonaRelearn(context),
+                ),
+              ),
             ),
-          ),
-        ],
+            SliverToBoxAdapter(
+              child: _SettingsList(
+                regionDetail: _profile?.region ?? '미설정',
+                matchPrefDetail:
+                    '위 ${_profile?.matchAgeOlder ?? kDefaultAgeGap} · '
+                    '아래 ${_profile?.matchAgeYounger ?? kDefaultAgeGap}',
+                mbtiDetail: _profile?.mbti ?? '미설정',
+                bioDetail: (_profile?.bio?.isNotEmpty ?? false) ? '작성됨' : '미설정',
+                onRegion: () => _onRegion(context),
+                onMatchPref: () => _onMatchPref(context),
+                onMbti: () => _onMbti(context),
+                onBio: () => _onBio(context),
+                onComingSoon: (label) => _comingSoon(context, label),
+                onLogout: () => _onLogout(context),
+                onDeleteAccount: () => _onDeleteAccount(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

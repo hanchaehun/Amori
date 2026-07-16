@@ -9,6 +9,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/exit_guard.dart';
 import '../../data/backend/amori_backend.dart';
 import '../../data/dummy/matches.dart';
 import '../../data/repositories/match_repository.dart';
@@ -65,18 +66,20 @@ class _MatchListScreenState extends State<MatchListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      bottomBar: const AmoriTabBar(active: AmoriTab.match),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          const SliverToBoxAdapter(child: _TopBar()),
-          const SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            sliver: SliverToBoxAdapter(child: _VerifiedBanner()),
-          ),
-          _MatchListSliver(future: _matchFuture, onTap: _onMatchTap),
-        ],
+    return ExitGuard(
+      child: AppScaffold(
+        bottomBar: const AmoriTabBar(active: AmoriTab.match),
+        body: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            const SliverToBoxAdapter(child: _TopBar()),
+            const SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              sliver: SliverToBoxAdapter(child: _VerifiedBanner()),
+            ),
+            _MatchListSliver(future: _matchFuture, onTap: _onMatchTap),
+          ],
+        ),
       ),
     );
   }
@@ -160,10 +163,7 @@ class _EmptySliver extends StatelessWidget {
                 color: AppColors.ink300,
               ),
               SizedBox(height: 12),
-              Text(
-                '아직 검증된 인연이 없어요',
-                style: TextStyle(color: AppColors.ink500),
-              ),
+              Text('아직 검증된 인연이 없어요', style: TextStyle(color: AppColors.ink500)),
               SizedBox(height: 4),
               Text(
                 '에이전트가 소개팅을 다녀오면 여기에 나타나요',
@@ -189,9 +189,7 @@ class _TopBar extends StatelessWidget {
       ),
       child: SizedBox(
         height: 56,
-        child: Row(
-          children: [Text('검증된 인연', style: AppTypography.titleLarge)],
-        ),
+        child: Row(children: [Text('검증된 인연', style: AppTypography.titleLarge)]),
       ),
     );
   }
@@ -353,4 +351,3 @@ class _MatchCardState extends State<_MatchCard> {
     );
   }
 }
-

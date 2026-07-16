@@ -10,6 +10,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/exit_guard.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/dummy/conversations.dart';
 import '../../data/repositories/match_repository.dart';
@@ -241,70 +242,73 @@ class _InboxScreenState extends State<InboxScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      bottomBar: const AmoriTabBar(active: AmoriTab.connect),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              _TopBar(onSearch: _onSearch),
-              _SubTabs(
-                active: _tab,
-                activeCount: _active.length,
-                scheduledCount: _scheduled.length,
-                completedCount: _completed.length,
-                onChange: (t) => setState(() => _tab = t),
-              ),
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : RefreshIndicator(
-                        onRefresh: _load,
-                        child: _conversations.isEmpty
-                            ? LayoutBuilder(
-                                builder: (context, constraints) =>
-                                    SingleChildScrollView(
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(),
-                                      child: SizedBox(
-                                        height: constraints.maxHeight,
-                                        child: const _EmptyState(),
+    return ExitGuard(
+      child: AppScaffold(
+        bottomBar: const AmoriTabBar(active: AmoriTab.connect),
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                _TopBar(onSearch: _onSearch),
+                _SubTabs(
+                  active: _tab,
+                  activeCount: _active.length,
+                  scheduledCount: _scheduled.length,
+                  completedCount: _completed.length,
+                  onChange: (t) => setState(() => _tab = t),
+                ),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: _conversations.isEmpty
+                              ? LayoutBuilder(
+                                  builder: (context, constraints) =>
+                                      SingleChildScrollView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        child: SizedBox(
+                                          height: constraints.maxHeight,
+                                          child: const _EmptyState(),
+                                        ),
                                       ),
-                                    ),
-                              )
-                            : ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(
-                                  parent: BouncingScrollPhysics(),
+                                )
+                              : ListView.separated(
+                                  physics: const AlwaysScrollableScrollPhysics(
+                                    parent: BouncingScrollPhysics(),
+                                  ),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppSpacing.lg,
+                                    AppSpacing.lg,
+                                    AppSpacing.lg,
+                                    AppSpacing.xl,
+                                  ),
+                                  itemCount: _conversations.length,
+                                  separatorBuilder: (_, _) => AppSpacing.vSm,
+                                  itemBuilder: (_, i) => _ConversationCard(
+                                    conversation: _conversations[i],
+                                    onTap: () =>
+                                        _onConversationTap(_conversations[i]),
+                                    onAccept: () =>
+                                        _onAccept(_conversations[i]),
+                                    onViewReport: () =>
+                                        _onViewReport(_conversations[i]),
+                                  ),
                                 ),
-                                padding: const EdgeInsets.fromLTRB(
-                                  AppSpacing.lg,
-                                  AppSpacing.lg,
-                                  AppSpacing.lg,
-                                  AppSpacing.xl,
-                                ),
-                                itemCount: _conversations.length,
-                                separatorBuilder: (_, _) => AppSpacing.vSm,
-                                itemBuilder: (_, i) => _ConversationCard(
-                                  conversation: _conversations[i],
-                                  onTap: () =>
-                                      _onConversationTap(_conversations[i]),
-                                  onAccept: () => _onAccept(_conversations[i]),
-                                  onViewReport: () =>
-                                      _onViewReport(_conversations[i]),
-                                ),
-                              ),
-                      ),
-              ),
-            ],
-          ),
-          // 닿지 않은 인연(케미 75점 미만) 진입 버튼 — 데이터가 있을 때만 노출
-          if (!_loading && _failed.isNotEmpty)
-            Positioned(
-              right: AppSpacing.lg,
-              bottom: AppSpacing.lg,
-              child: _FailedFab(count: _failed.length, onTap: _openFailed),
+                        ),
+                ),
+              ],
             ),
-        ],
+            // 닿지 않은 인연(케미 75점 미만) 진입 버튼 — 데이터가 있을 때만 노출
+            if (!_loading && _failed.isNotEmpty)
+              Positioned(
+                right: AppSpacing.lg,
+                bottom: AppSpacing.lg,
+                child: _FailedFab(count: _failed.length, onTap: _openFailed),
+              ),
+          ],
+        ),
       ),
     );
   }

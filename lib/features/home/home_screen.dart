@@ -13,6 +13,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/exit_guard.dart';
 import '../../core/widgets/gradient_text.dart';
 import '../../data/backend/local_notifications.dart';
 import '../../data/repositories/match_repository.dart';
@@ -108,8 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshNotifications(DailyPersonaStatus? dailyStatus) async {
     await ProfileStore.instance.refresh();
     final profile = ProfileStore.instance.profile;
-    final dailyCode =
-        (dailyStatus != null && !dailyStatus.completedToday)
+    final dailyCode = (dailyStatus != null && !dailyStatus.completedToday)
         ? dailyStatus.scenarioCode
         : null;
     await NotificationStore.instance.refresh(
@@ -187,83 +187,86 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      bottomBar: const AmoriTabBar(active: AmoriTab.home),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          const SliverToBoxAdapter(child: _TopBar()),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.xs,
-              AppSpacing.lg,
-              AppSpacing.xl,
-            ),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                ListenableBuilder(
-                  listenable: ProfileStore.instance,
-                  builder: (_, _) => _Greeting(
-                    name: _friendlyName(
-                      ProfileStore.instance.profile?.displayName,
+    return ExitGuard(
+      isHome: true,
+      child: AppScaffold(
+        bottomBar: const AmoriTabBar(active: AmoriTab.home),
+        body: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            const SliverToBoxAdapter(child: _TopBar()),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.xs,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  ListenableBuilder(
+                    listenable: ProfileStore.instance,
+                    builder: (_, _) => _Greeting(
+                      name: _friendlyName(
+                        ProfileStore.instance.profile?.displayName,
+                      ),
                     ),
                   ),
-                ),
-                AppSpacing.vLg,
-                _HeroAICard(data: _hero, onTap: _openConnect),
-                if (_showDailyQuestion) ...[
-                  AppSpacing.vMd,
-                  _DailyQuestionCard(
-                    answerCount: _dailyStatus!.answerCount,
-                    onTap: _openDailyQuestion,
-                  ),
-                ],
-                if (AppConfig.devUid != null) ...[
-                  AppSpacing.vSm,
-                  _DevAdvanceDayButton(
-                    isLoading: _advancingDay,
-                    onPressed: _advanceDayForDev,
-                  ),
-                ],
-                AppSpacing.vXl,
-                const _StatusTracker(
-                  stages: [
-                    _StageItem(
-                      Icons.check_rounded,
-                      '페르소나 생성',
-                      _StageState.done,
-                    ),
-                    _StageItem(
-                      Icons.sync_rounded,
-                      'Pre-Dating',
-                      _StageState.active,
-                    ),
-                    _StageItem(
-                      Icons.description_outlined,
-                      '리포트 발행',
-                      _StageState.locked,
-                    ),
-                    _StageItem(
-                      Icons.favorite_outline_rounded,
-                      '만남 연결',
-                      _StageState.locked,
+                  AppSpacing.vLg,
+                  _HeroAICard(data: _hero, onTap: _openConnect),
+                  if (_showDailyQuestion) ...[
+                    AppSpacing.vMd,
+                    _DailyQuestionCard(
+                      answerCount: _dailyStatus!.answerCount,
+                      onTap: _openDailyQuestion,
                     ),
                   ],
-                ),
-                if (_pendingReports.isNotEmpty) ...[
+                  if (AppConfig.devUid != null) ...[
+                    AppSpacing.vSm,
+                    _DevAdvanceDayButton(
+                      isLoading: _advancingDay,
+                      onPressed: _advanceDayForDev,
+                    ),
+                  ],
                   AppSpacing.vXl,
-                  _ReportSection(
-                    matches: _pendingReports,
-                    onHeaderTap: () => context.push(AppRoutes.matchList),
-                    onCardTap: (m) =>
-                        context.push('${AppRoutes.chat}?id=${m.matchId}'),
+                  const _StatusTracker(
+                    stages: [
+                      _StageItem(
+                        Icons.check_rounded,
+                        '페르소나 생성',
+                        _StageState.done,
+                      ),
+                      _StageItem(
+                        Icons.sync_rounded,
+                        'Pre-Dating',
+                        _StageState.active,
+                      ),
+                      _StageItem(
+                        Icons.description_outlined,
+                        '리포트 발행',
+                        _StageState.locked,
+                      ),
+                      _StageItem(
+                        Icons.favorite_outline_rounded,
+                        '만남 연결',
+                        _StageState.locked,
+                      ),
+                    ],
                   ),
-                ],
-              ]),
+                  if (_pendingReports.isNotEmpty) ...[
+                    AppSpacing.vXl,
+                    _ReportSection(
+                      matches: _pendingReports,
+                      onHeaderTap: () => context.push(AppRoutes.matchList),
+                      onCardTap: (m) =>
+                          context.push('${AppRoutes.chat}?id=${m.matchId}'),
+                    ),
+                  ],
+                ]),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
