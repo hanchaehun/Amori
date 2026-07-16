@@ -101,6 +101,9 @@ class MatchConversationResponse(BaseModel):
     # 에이전트 대화가 아직 시차 송출 중인가 — True면 다음 턴이 곧 도착한다(라이브 관전).
     # 클라이언트는 이 플래그로 타이핑 인디케이터·폴링 지속 여부를 정한다.
     agent_live: bool = False
+    # 다음에 공개될 턴의 화자(me|them, 요청자 시점) — 타이핑 인디케이터를
+    # 상대 말풍선에 붙일지 내 입력창에 붙일지 정한다. 송출 끝이면 None.
+    agent_next_speaker: str | None = None
     agent_turns: list[AgentTurnItem]
     messages: list[ChatMessageItem]
 

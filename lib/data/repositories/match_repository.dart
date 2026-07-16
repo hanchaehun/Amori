@@ -166,6 +166,7 @@ class MatchConversation {
     required this.messages,
     this.appointmentSlot,
     this.agentLive = false,
+    this.agentNextSpeaker,
   });
 
   final String matchId;
@@ -177,6 +178,19 @@ class MatchConversation {
 
   /// 에이전트 대화가 시차 송출 중 — True면 다음 턴이 곧 도착한다(라이브 관전).
   final bool agentLive;
+
+  /// 다음에 공개될 턴의 화자('me'|'them', 내 시점) — 타이핑 인디케이터를
+  /// 상대 말풍선에 붙일지 내 입력창에 붙일지 정한다. 송출 끝이면 null.
+  final String? agentNextSpeaker;
+
+  /// [agentNextSpeaker]에 구버전 서버 폴백을 얹은 값 — 필드가 없으면
+  /// 마지막 공개 턴의 반대편으로 추정한다(시뮬 발화는 교대로 진행).
+  String? get effectiveNextSpeaker {
+    if (!agentLive) return null;
+    if (agentNextSpeaker != null) return agentNextSpeaker;
+    if (agentTurns.isEmpty) return 'me'; // 첫 턴은 요청자(내 AI)부터
+    return agentTurns.last.isMe ? 'them' : 'me';
+  }
   final List<AgentTurn> agentTurns;
   final List<DirectMessage> messages;
 
@@ -190,6 +204,7 @@ class MatchConversation {
         status: json['status'] as String? ?? 'simulated',
         chatEnabled: json['chat_enabled'] as bool? ?? false,
         agentLive: json['agent_live'] as bool? ?? false,
+        agentNextSpeaker: json['agent_next_speaker'] as String?,
         agentTurns: [
           for (final t
               in (json['agent_turns'] as List? ?? [])

@@ -64,6 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
   DailyPersonaStatus? _dailyStatus;
   bool _advancingDay = false;
 
+  /// 리포트가 아직 잠긴(시차 송출 중) 매치 — '리포트 준비 중' 섹션 실데이터.
+  List<MatchSummary> _pendingReports = [];
+
   bool get _showDailyQuestion =>
       _dailyStatus != null &&
       !_dailyStatus!.completedToday &&
@@ -85,7 +88,10 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final matches = await _repo.listMatches();
       if (!mounted) return;
-      setState(() => _hero = _summarize(matches));
+      setState(() {
+        _hero = _summarize(matches);
+        _pendingReports = matches.where((m) => m.agentLive).toList();
+      });
     } catch (error) {
       if (!mounted) return;
       // 백엔드 미연결(오프라인/dev 미설정) — 데모용 정적 상태로.
@@ -196,7 +202,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                const _Greeting(name: '회원'),
+                ListenableBuilder(
+                  listenable: ProfileStore.instance,
+                  builder: (_, _) => _Greeting(
+                    name: _friendlyName(
+                      ProfileStore.instance.profile?.displayName,
+                    ),
+                  ),
+                ),
                 AppSpacing.vLg,
                 _HeroAICard(data: _hero, onTap: _openConnect),
                 if (_showDailyQuestion) ...[
@@ -238,11 +251,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                AppSpacing.vXl,
-                _ReportSection(
-                  onHeaderTap: () => context.push(AppRoutes.matchList),
-                  onCardTap: () => context.push(AppRoutes.lockedReport),
-                ),
+                if (_pendingReports.isNotEmpty) ...[
+                  AppSpacing.vXl,
+                  _ReportSection(
+                    matches: _pendingReports,
+                    onHeaderTap: () => context.push(AppRoutes.matchList),
+                    onCardTap: (m) =>
+                        context.push('${AppRoutes.chat}?id=${m.matchId}'),
+                  ),
+                ],
               ]),
             ),
           ),
@@ -250,6 +267,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+/// '한채훈' → '채훈' — 한글 3글자 이름만 성을 뗀다.
+/// 외자(2글자)·복성 가능성(4글자+)·영문은 그대로 두고, 이름이 없으면 '회원'.
+String _friendlyName(String? displayName) {
+  final name = displayName?.trim() ?? '';
+  if (name.isEmpty) return '회원';
+  final allHangul = name.runes.every((r) => r >= 0xAC00 && r <= 0xD7A3);
+  if (allHangul && name.length == 3) return name.substring(1);
+  return name;
 }
 
 class _TopBar extends StatelessWidget {
@@ -942,11 +969,17 @@ class _DashedLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+/// 시차 송출 중이라 리포트가 아직 잠긴 매치들 — 실데이터. 없으면 홈에서 숨긴다.
 class _ReportSection extends StatelessWidget {
-  const _ReportSection({required this.onHeaderTap, required this.onCardTap});
+  const _ReportSection({
+    required this.matches,
+    required this.onHeaderTap,
+    required this.onCardTap,
+  });
 
+  final List<MatchSummary> matches;
   final VoidCallback onHeaderTap;
-  final VoidCallback onCardTap;
+  final ValueChanged<MatchSummary> onCardTap;
 
   @override
   Widget build(BuildContext context) {
@@ -974,15 +1007,18 @@ class _ReportSection extends StatelessWidget {
             ),
           ),
         ),
-        AppSpacing.vSm,
-        _LockedMatchCard(onTap: onCardTap),
+        for (final m in matches.take(3)) ...[
+          AppSpacing.vSm,
+          _LockedMatchCard(match: m, onTap: () => onCardTap(m)),
+        ],
       ],
     );
   }
 }
 
 class _LockedMatchCard extends StatefulWidget {
-  const _LockedMatchCard({required this.onTap});
+  const _LockedMatchCard({required this.match, required this.onTap});
+  final MatchSummary match;
   final VoidCallback onTap;
 
   @override
@@ -994,6 +1030,9 @@ class _LockedMatchCardState extends State<_LockedMatchCard> {
 
   @override
   Widget build(BuildContext context) {
+    final name = (widget.match.partnerName?.isNotEmpty ?? false)
+        ? widget.match.partnerName!
+        : '상대';
     return AnimatedScale(
       scale: _pressed ? 0.99 : 1.0,
       duration: const Duration(milliseconds: 120),
@@ -1027,7 +1066,7 @@ class _LockedMatchCardState extends State<_LockedMatchCard> {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  '상',
+                  name.substring(0, 1),
                   style: AppTypography.titleMedium.copyWith(
                     color: AppColors.ink700,
                     fontWeight: FontWeight.w900,
@@ -1040,12 +1079,12 @@ class _LockedMatchCardState extends State<_LockedMatchCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '상대',
+                      name,
                       style: AppTypography.titleMedium.copyWith(fontSize: 15),
                     ),
                     AppSpacing.vXxs,
                     Text(
-                      '케미스트리 점수 확인 대기 중',
+                      '대화가 끝나면 케미 점수가 열려요',
                       style: AppTypography.bodySmall.copyWith(
                         color: AppColors.ink500,
                       ),

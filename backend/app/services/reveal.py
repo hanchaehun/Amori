@@ -77,3 +77,15 @@ def revealed_turns(turns: list[dict] | None, now: datetime) -> list[dict]:
 def reveal_complete(turns: list[dict] | None, now: datetime) -> bool:
     """모든 턴이 공개됐는가. 턴이 없으면(빈 리스트) 송출 끝난 것으로 본다."""
     return all(_is_visible(t, now) for t in (turns or []))
+
+
+def next_hidden_speaker(turns: list[dict] | None, now: datetime) -> str | None:
+    """아직 공개되지 않은 첫 턴의 speaker(me|them). 송출이 끝났으면 None.
+
+    클라이언트가 타이핑 인디케이터를 어느 쪽에 붙일지(상대 말풍선 vs 내 입력창)
+    정하는 데 쓴다. speaker는 요청자 flip 전의 원본 값이므로 호출부에서 뒤집는다.
+    """
+    for t in turns or []:
+        if not _is_visible(t, now):
+            return t.get("speaker", "me")
+    return None

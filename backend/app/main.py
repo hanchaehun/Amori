@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="AMORI BFF API", version="0.1.5", lifespan=lifespan)
+app = FastAPI(title="AMORI BFF API", version="0.1.6", lifespan=lifespan)
 
 app.middleware("http")(error_handler_middleware)
 

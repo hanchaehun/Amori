@@ -11,6 +11,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/typing_dots.dart';
 import '../../data/repositories/match_repository.dart';
 
 enum _Sender { me, them, system }
@@ -110,10 +111,8 @@ class AgentChatScreen extends StatefulWidget {
   State<AgentChatScreen> createState() => _AgentChatScreenState();
 }
 
-class _AgentChatScreenState extends State<AgentChatScreen>
-    with SingleTickerProviderStateMixin {
+class _AgentChatScreenState extends State<AgentChatScreen> {
   late final MatchRepository _repo;
-  late final AnimationController _typing;
   final ScrollController _scroll = ScrollController();
 
   Timer? _poll;
@@ -131,17 +130,12 @@ class _AgentChatScreenState extends State<AgentChatScreen>
   void initState() {
     super.initState();
     _repo = widget.repository ?? MatchRepository();
-    _typing = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
     _bootstrap();
   }
 
   @override
   void dispose() {
     _poll?.cancel();
-    _typing.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -153,7 +147,6 @@ class _AgentChatScreenState extends State<AgentChatScreen>
       final selected = _pickMatch(matches);
       if (selected == null) {
         setState(() => _mode = _Mode.empty);
-        _syncTyping();
         return;
       }
       _match = selected;
@@ -164,7 +157,6 @@ class _AgentChatScreenState extends State<AgentChatScreen>
       if (!mounted) return;
       debugPrint('AgentChat 라이브 로드 실패 — 더미 폴백: $error');
       setState(() => _mode = _Mode.fallback);
-      _syncTyping();
     }
   }
 
@@ -186,7 +178,6 @@ class _AgentChatScreenState extends State<AgentChatScreen>
       _conv = conv;
       _mode = conv.agentLive ? _Mode.live : _Mode.completed;
     });
-    _syncTyping();
     if (conv.agentTurns.length > _lastTurnCount) _scrollToBottom();
     _lastTurnCount = conv.agentTurns.length;
   }
@@ -234,14 +225,6 @@ class _AgentChatScreenState extends State<AgentChatScreen>
     }
   }
 
-  void _syncTyping() {
-    if (_typingVisible) {
-      if (!_typing.isAnimating) _typing.repeat();
-    } else {
-      _typing.stop();
-    }
-  }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -272,6 +255,9 @@ class _AgentChatScreenState extends State<AgentChatScreen>
 
   /// 타이핑 인디케이터: 라이브 송출 중이거나 더미 데모일 때.
   bool get _typingVisible => _isLive || _isFallback;
+
+  /// 다음 발화가 내 AI 차례 — 인디케이터를 오른쪽(내 쪽)에 붙인다.
+  bool get _typingIsMe => !_isFallback && _conv?.effectiveNextSpeaker == 'me';
 
   int? get _score => _isFallback ? 88 : _match?.reportScore;
 
@@ -354,9 +340,9 @@ class _AgentChatScreenState extends State<AgentChatScreen>
               ],
               if (_typingVisible)
                 _TypingIndicator(
-                  controller: _typing,
-                  initial: _themInitial,
-                  label: '$_themName 응답 생성 중...',
+                  isMe: _typingIsMe,
+                  initial: _typingIsMe ? _meInitial : _themInitial,
+                  label: '${_typingIsMe ? _meName : _themName} 응답 생성 중...',
                 ),
             ],
           ),
@@ -806,75 +792,57 @@ class _SystemMessage extends StatelessWidget {
 
 class _TypingIndicator extends StatelessWidget {
   const _TypingIndicator({
-    required this.controller,
+    required this.isMe,
     required this.initial,
     required this.label,
   });
 
-  final AnimationController controller;
+  /// 내 AI 차례면 오른쪽 정렬 — 말풍선 배치와 같은 규칙.
+  final bool isMe;
   final String initial;
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.start,
-      children: [
-        _MiniAvatar(initial: initial),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: AnimatedBuilder(
-            animation: controller,
-            builder: (_, _) {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < 3; i++) ...[
-                    _Dot(phase: i / 3, t: controller.value),
-                    if (i < 2) const SizedBox(width: 4),
-                  ],
-                ],
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: AppTypography.caption.copyWith(
-            color: AppColors.ink500,
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  const _Dot({required this.phase, required this.t});
-
-  final double phase;
-  final double t;
-
-  @override
-  Widget build(BuildContext context) {
-    final adjusted = (t + phase) % 1.0;
-    final wave = 0.5 - 0.5 * (1 - 2 * adjusted).abs();
-    final opacity = 0.3 + wave * 0.7;
-    return Container(
-      width: 6,
-      height: 6,
+    final avatar = _MiniAvatar(initial: initial);
+    final bubble = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.ink500.withValues(alpha: opacity.clamp(0.0, 1.0)),
-        shape: BoxShape.circle,
+        color: isMe
+            ? AppColors.primary.withValues(alpha: 0.08)
+            : AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(14),
       ),
+      child: TypingDots(
+        color: isMe ? AppColors.primary : AppColors.ink500,
+      ),
+    );
+    final text = Text(
+      label,
+      style: AppTypography.caption.copyWith(
+        color: AppColors.ink500,
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    return Row(
+      mainAxisAlignment:
+          isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+      children: isMe
+          ? [
+              text,
+              const SizedBox(width: 8),
+              bubble,
+              const SizedBox(width: 6),
+              avatar,
+            ]
+          : [
+              avatar,
+              const SizedBox(width: 6),
+              bubble,
+              const SizedBox(width: 8),
+              text,
+            ],
     );
   }
 }

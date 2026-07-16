@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/typing_dots.dart';
 import '../../data/api/api_exception.dart';
 import '../../data/dummy/conversations.dart';
 import '../../data/repositories/match_repository.dart';
@@ -60,6 +61,12 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _appointmentSlot;
   List<AgentTurn> _agentTurns = [];
   List<DirectMessage> _messages = [];
+
+  /// 에이전트 대화 시차 송출 중 — 다음 턴이 곧 도착한다(라이브 관전).
+  bool _agentLive = false;
+
+  /// 다음에 공개될 턴의 화자('me'|'them') — 타이핑 인디케이터 위치를 정한다.
+  String? _agentNextSpeaker;
 
   bool _hasText = false;
   bool _sending = false;
@@ -126,6 +133,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _appointmentSlot = conv.appointmentSlot;
     _agentTurns = conv.agentTurns;
     _messages = conv.messages;
+    _agentLive = conv.agentLive;
+    _agentNextSpeaker = conv.effectiveNextSpeaker;
   }
 
   Future<void> _refresh() async {
@@ -134,7 +143,8 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final conv = await _matches.getConversation(id);
       if (!mounted) return;
-      final grew = conv.messages.length > _messages.length;
+      final grew = conv.messages.length > _messages.length ||
+          conv.agentTurns.length > _agentTurns.length;
       setState(() => _apply(conv));
       if (grew) _scrollToEnd();
     } catch (_) {
@@ -521,7 +531,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       AppSpacing.md,
                     ),
                     children: [
-                      if (_agentTurns.isNotEmpty) ...[
+                      if (_agentTurns.isNotEmpty || _agentLive) ...[
                         const _SectionDivider(
                           label: 'AI 에이전트가 먼저 나눈 대화',
                           accent: true,
@@ -529,6 +539,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         AppSpacing.vSm,
                         for (final t in _agentTurns) ...[
                           _Bubble(isMe: t.isMe, text: t.text, isAgent: true),
+                          AppSpacing.vSm,
+                        ],
+                        // 상대 에이전트가 다음 발화를 준비 중 — 상대 말풍선 자리에
+                        // 점(1→2→3)이 차오른다. 내 차례면 아래 입력창에 표시된다.
+                        if (_agentLive && _agentNextSpeaker == 'them') ...[
+                          const _TypingBubble(),
                           AppSpacing.vSm,
                         ],
                       ],
@@ -558,6 +574,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     hasText: _hasText && !_sending,
                     onSend: _send,
                   )
+                else if (_agentLive && _agentNextSpeaker == 'me')
+                  const _AgentTypingBar()
                 else
                   const _LockedBar(),
               ],
@@ -1044,6 +1062,87 @@ class _Bubble extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// 상대 에이전트가 입력 중 — 상대 말풍선 모양 안에서 점이 1→2→3으로 차오른다.
+class _TypingBubble extends StatelessWidget {
+  const _TypingBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(6),
+            bottomRight: Radius.circular(18),
+          ),
+          border: Border.all(color: AppColors.ink100, width: 1),
+        ),
+        child: const TypingDots(),
+      ),
+    );
+  }
+}
+
+/// 내 에이전트 차례 — 입력창 자리에서 점이 차오른다. 내 AI가 내 폰으로
+/// 답장을 치고 있는 듯한 연출이라, 입력창 모양은 유지하되 조작은 막는다.
+class _AgentTypingBar extends StatelessWidget {
+  const _AgentTypingBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.ink100, width: 1)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                alignment: Alignment.centerLeft,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const TypingDots(),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: const ShapeDecoration(
+                color: AppColors.ink100,
+                shape: CircleBorder(),
+              ),
+              child: const Icon(
+                Icons.arrow_upward_rounded,
+                size: 20,
+                color: AppColors.ink300,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

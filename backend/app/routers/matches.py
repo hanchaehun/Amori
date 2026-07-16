@@ -24,7 +24,7 @@ from app.schemas.common import (
     MatchResponse,
 )
 from app.services.booking import get_booked_matches, slot_label
-from app.services.reveal import reveal_complete, revealed_turns
+from app.services.reveal import next_hidden_speaker, reveal_complete, revealed_turns
 
 router = APIRouter()
 
@@ -349,13 +349,22 @@ async def get_conversation(
     shown = revealed_turns(all_turns, now)
     agent_live = bool(job) and not reveal_complete(all_turns, now)
     agent_turns: list[AgentTurnItem] = []
+    agent_next_speaker: str | None = None
     if job:
         flip = job.requested_by != uid
-        for t in shown:
-            speaker = t.get("speaker", "me")
+
+        def _viewpoint(speaker: str) -> str:
             if flip:
-                speaker = "them" if speaker == "me" else "me"
-            agent_turns.append(AgentTurnItem(speaker=speaker, text=t.get("text", "")))
+                return "them" if speaker == "me" else "me"
+            return speaker
+
+        for t in shown:
+            agent_turns.append(
+                AgentTurnItem(speaker=_viewpoint(t.get("speaker", "me")), text=t.get("text", ""))
+            )
+        hidden = next_hidden_speaker(all_turns, now)
+        if hidden is not None:
+            agent_next_speaker = _viewpoint(hidden)
 
     msgs_result = await db.execute(
         select(ChatMessage)
@@ -386,6 +395,7 @@ async def get_conversation(
         ),
         chat_enabled=match_obj.status == "scheduled",
         agent_live=agent_live,
+        agent_next_speaker=agent_next_speaker,
         agent_turns=agent_turns,
         messages=messages,
     )
