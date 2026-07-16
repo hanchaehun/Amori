@@ -28,6 +28,10 @@ class ApiClient {
   /// LLM 경유 쓰기(persona build 등)는 생성 시간이 길어 넉넉하게.
   static const _llmTimeout = Duration(seconds: 90);
 
+  /// Render 무료 티어 콜드스타트(~60초) — 유휴 후 첫 GET이 15초에 끊기면
+  /// 서버가 깨어나는 중일 수 있으니 한 번만 길게 재시도한다.
+  static const _coldStartTimeout = Duration(seconds: 90);
+
   /// 일반 조회/갱신 — 서버 도달 불가 시 화면이 폴백/에러를 빨리 보여줄 수 있게 짧게.
   final Duration _readTimeout;
 
@@ -70,11 +74,20 @@ class ApiClient {
       );
 
   Future<dynamic> getJson(String path, {Map<String, String>? query}) async {
-    final response = await _send(
-      _http.get(_uri(path, query), headers: await _headers()),
-      _readTimeout,
-    );
-    return _decode(response);
+    try {
+      final response = await _send(
+        _http.get(_uri(path, query), headers: await _headers()),
+        _readTimeout,
+      );
+      return _decode(response);
+    } on ApiException catch (error) {
+      if (error.errorCode != 'TIMEOUT') rethrow;
+      final response = await _send(
+        _http.get(_uri(path, query), headers: await _headers()),
+        _coldStartTimeout,
+      );
+      return _decode(response);
+    }
   }
 
   Future<dynamic> postJson(String path, Object body) async {

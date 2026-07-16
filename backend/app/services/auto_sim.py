@@ -73,6 +73,9 @@ async def _pick_target(
         my_gender=me.gender if me else None,
         my_interest_gender=me.interest_gender if me else None,
         my_region=me.region if me else None,
+        my_birth_date=me.birth_date if me else None,
+        my_age_older=me.match_age_older if me else None,
+        my_age_younger=me.match_age_younger if me else None,
     )
     if not candidates:
         return None

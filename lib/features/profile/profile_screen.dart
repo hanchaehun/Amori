@@ -15,6 +15,7 @@ import '../../core/widgets/settings_row.dart';
 import '../../data/backend/amori_backend.dart';
 import '../../data/backend/profile_photo_uploader.dart';
 import '../../data/repositories/user_repository.dart';
+import 'match_pref_sheet.dart';
 import 'mbti_sheet.dart';
 import 'region_sheet.dart';
 
@@ -101,6 +102,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('지역을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _onMatchPref(BuildContext context) async {
+    HapticFeedback.lightImpact();
+    final pref = await showMatchPrefSheet(
+      context,
+      currentOlder: _profile?.matchAgeOlder,
+      currentYounger: _profile?.matchAgeYounger,
+      myAge: _profile?.age,
+    );
+    if (pref == null) return;
+    try {
+      await UserRepository().saveProfile(
+        matchAgeOlder: pref.older,
+        matchAgeYounger: pref.younger,
+      );
+      final updated = (_profile ?? const MyProfile()).copyWith(
+        matchAgeOlder: pref.older,
+        matchAgeYounger: pref.younger,
+      );
+      ProfileStore.instance.set(updated);
+      if (mounted) setState(() => _profile = updated);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('매칭 선호를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')),
         );
       }
     }
@@ -275,9 +305,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SliverToBoxAdapter(
             child: _SettingsList(
               regionDetail: _profile?.region ?? '미설정',
+              matchPrefDetail:
+                  '위 ${_profile?.matchAgeOlder ?? kDefaultAgeGap} · '
+                  '아래 ${_profile?.matchAgeYounger ?? kDefaultAgeGap}',
               mbtiDetail: _profile?.mbti ?? '미설정',
               bioDetail: (_profile?.bio?.isNotEmpty ?? false) ? '작성됨' : '미설정',
               onRegion: () => _onRegion(context),
+              onMatchPref: () => _onMatchPref(context),
               onMbti: () => _onMbti(context),
               onBio: () => _onBio(context),
               onComingSoon: (label) => _comingSoon(context, label),
@@ -553,9 +587,11 @@ class _AgentLink extends StatelessWidget {
 class _SettingsList extends StatelessWidget {
   const _SettingsList({
     required this.regionDetail,
+    required this.matchPrefDetail,
     required this.mbtiDetail,
     required this.bioDetail,
     required this.onRegion,
+    required this.onMatchPref,
     required this.onMbti,
     required this.onBio,
     required this.onComingSoon,
@@ -564,9 +600,11 @@ class _SettingsList extends StatelessWidget {
   });
 
   final String regionDetail;
+  final String matchPrefDetail;
   final String mbtiDetail;
   final String bioDetail;
   final VoidCallback onRegion;
+  final VoidCallback onMatchPref;
   final VoidCallback onMbti;
   final VoidCallback onBio;
   final ValueChanged<String> onComingSoon;
@@ -603,7 +641,8 @@ class _SettingsList extends StatelessWidget {
               SettingsRow(
                 icon: Icons.favorite_rounded,
                 label: '매칭 선호 설정',
-                onTap: () => onComingSoon('매칭 선호 설정'),
+                detail: matchPrefDetail,
+                onTap: onMatchPref,
               ),
               SettingsRow(
                 icon: Icons.link_rounded,

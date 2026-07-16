@@ -50,14 +50,23 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  Future<void> _pickBirthDate() async {
+  /// 만 19세(성인)가 되는 마지막 생일 — 이보다 늦게 태어났으면 미성년.
+  static DateTime _adultBirthLimit() {
     final now = DateTime.now();
-    final initial = _parseBirth(_birthController.text) ?? DateTime(2000, 1, 1);
+    return DateTime(now.year - 19, now.month, now.day);
+  }
+
+  Future<void> _pickBirthDate() async {
+    final limit = _adultBirthLimit();
+    final parsed = _parseBirth(_birthController.text);
+    final initial = (parsed != null && !parsed.isAfter(limit))
+        ? parsed
+        : DateTime(2000, 1, 1);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
       firstDate: DateTime(1940),
-      lastDate: now,
+      lastDate: limit,
     );
     if (picked != null) {
       _birthController.text =
@@ -77,6 +86,13 @@ class _SignupScreenState extends State<SignupScreen> {
       final joined = missing.join(', ');
       final particle = _objectParticle(missing.last);
       _showError('$joined$particle 입력하세요.');
+      return;
+    }
+
+    // 성인 확인 — 피커가 이미 막지만 제출 시 한 번 더 (데이팅 서비스 법적 하한).
+    final birth = _parseBirth(_birthController.text);
+    if (birth == null || birth.isAfter(_adultBirthLimit())) {
+      _showError('만 19세 이상만 가입할 수 있어요.');
       return;
     }
 

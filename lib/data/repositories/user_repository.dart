@@ -46,6 +46,8 @@ class MyProfile {
     this.gender,
     this.interestGender,
     this.region,
+    this.matchAgeOlder,
+    this.matchAgeYounger,
     this.mbti,
     this.bio,
     this.photoUrl,
@@ -56,6 +58,9 @@ class MyProfile {
   final String? gender;
   final String? interestGender;
   final String? region;
+  // 매칭 허용 나이 — 나보다 위로/아래로 몇 살까지. null이면 서버 기본 5.
+  final int? matchAgeOlder;
+  final int? matchAgeYounger;
   final String? mbti;
   final String? bio;
   final String? photoUrl;
@@ -79,6 +84,8 @@ class MyProfile {
     gender: json['gender'] as String?,
     interestGender: json['interest_gender'] as String?,
     region: json['region'] as String?,
+    matchAgeOlder: json['match_age_older'] as int?,
+    matchAgeYounger: json['match_age_younger'] as int?,
     mbti: json['mbti'] as String?,
     bio: json['bio'] as String?,
     photoUrl: json['photo_url'] as String?,
@@ -90,17 +97,27 @@ class MyProfile {
     'gender': gender,
     'interest_gender': interestGender,
     'region': region,
+    'match_age_older': matchAgeOlder,
+    'match_age_younger': matchAgeYounger,
     'mbti': mbti,
     'bio': bio,
     'photo_url': photoUrl,
   };
 
-  MyProfile copyWith({String? region, String? mbti, String? bio}) => MyProfile(
+  MyProfile copyWith({
+    String? region,
+    int? matchAgeOlder,
+    int? matchAgeYounger,
+    String? mbti,
+    String? bio,
+  }) => MyProfile(
     displayName: displayName,
     birthDate: birthDate,
     gender: gender,
     interestGender: interestGender,
     region: region ?? this.region,
+    matchAgeOlder: matchAgeOlder ?? this.matchAgeOlder,
+    matchAgeYounger: matchAgeYounger ?? this.matchAgeYounger,
     mbti: mbti ?? this.mbti,
     bio: bio ?? this.bio,
     photoUrl: photoUrl,
@@ -119,6 +136,8 @@ class UserRepository {
     String? gender,
     String? interestGender,
     String? region,
+    int? matchAgeOlder,
+    int? matchAgeYounger,
     String? mbti,
     String? bio,
     String? photoUrl,
@@ -131,6 +150,8 @@ class UserRepository {
       'gender': ?gender,
       'interest_gender': ?interestGender,
       'region': ?region,
+      'match_age_older': ?matchAgeOlder,
+      'match_age_younger': ?matchAgeYounger,
       'mbti': ?mbti,
       'bio': ?bio,
       'photo_url': ?photoUrl,

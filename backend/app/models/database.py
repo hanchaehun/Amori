@@ -55,6 +55,10 @@ class User(Base):
     interest_gender: Mapped[str | None] = mapped_column(String(20))
     # 활동 지역(시/도 단위, 예: "서울") — 매칭 랭킹에서 같은 지역 가점.
     region: Mapped[str | None] = mapped_column(String(30))
+    # 매칭 허용 나이 차이(만 나이) — 나보다 위로/아래로 몇 살까지 허용하는지.
+    # NULL이면 기본값 5 (ranker.DEFAULT_AGE_GAP). 하한은 만 19세(성인)에서 잘린다.
+    match_age_older: Mapped[int | None] = mapped_column(Integer)
+    match_age_younger: Mapped[int | None] = mapped_column(Integer)
     # MBTI 16유형 — 프로필 표시 + big_five 약한 prior 전용. 매칭 점수·시뮬 규칙
     # 사용 금지 (docs/persona_science_rationale.md §9 금지선).
     mbti: Mapped[str | None] = mapped_column(String(4))

@@ -37,6 +37,8 @@ class GradientOrb extends StatelessWidget {
   }
 }
 
+/// 앱 아이콘과 같은 로고 마크 — 배경 없이 말풍선·하트만 남긴 투명 PNG
+/// (런처 아이콘 원본에서 추출, assets/images/logo_mark.png).
 class AmoriLogoMark extends StatelessWidget {
   const AmoriLogoMark({super.key, this.size = 56});
 
@@ -44,46 +46,11 @@ class AmoriLogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final amori = context.amori;
-    return Container(
+    return Image.asset(
+      'assets/images/logo_mark.png',
       width: size,
       height: size,
-      decoration: ShapeDecoration(
-        gradient: amori.primaryGradient,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(size * 0.32),
-        ),
-        shadows: amori.glowShadow,
-      ),
-      alignment: Alignment.center,
-      child: SizedBox(
-        width: size * 0.55,
-        height: size * 0.32,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned(
-              left: 0,
-              child: _ring(size * 0.32),
-            ),
-            Positioned(
-              right: 0,
-              child: _ring(size * 0.32),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _ring(double s) {
-    return Container(
-      width: s,
-      height: s,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.2),
-      ),
+      fit: BoxFit.contain,
     );
   }
 }

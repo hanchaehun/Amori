@@ -53,6 +53,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.3
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -60,6 +61,18 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+# 앱 런처 아이콘 — 원본은 assets/icon/icon.png. 변경 시 루트에서
+# `dart run flutter_launcher_icons` 재실행 후, 이 도구가 ios pbxproj의
+# GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS를 잘못 덮어쓰는 버그가 있어
+# `git checkout -- ios/Runner.xcodeproj/project.pbxproj`로 되돌릴 것.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#1A2044"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -72,6 +85,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/images/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

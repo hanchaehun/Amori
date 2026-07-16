@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.firebase import get_current_user
 from app.dependencies import get_db
 from app.llm.psych_mapping import valid_mbti
+from app.matching.ranker import ADULT_AGE, age_years
 from app.models.database import User
 from app.services.booking import get_booked_matches
 
@@ -41,6 +42,10 @@ class UserProfileUpsert(BaseModel):
     gender: str | None = Field(default=None, max_length=20)
     interest_gender: str | None = Field(default=None, max_length=20)
     region: str | None = Field(default=None, max_length=30)  # 활동 지역(시/도)
+    # 매칭 허용 나이 — 나보다 위로/아래로 몇 살까지. 미설정(None)이면 매칭에서 기본 5.
+    # 하한은 매칭 쿼리가 만 19세(성인)에서 자른다.
+    match_age_older: int | None = Field(default=None, ge=0, le=30)
+    match_age_younger: int | None = Field(default=None, ge=0, le=30)
     # MBTI 16유형 — 프로필 표시 + big_five prior 전용. 매칭·시뮬 규칙 사용 금지
     # (rationale §9 금지선). 빈 문자열 = 삭제.
     mbti: str | None = None
@@ -58,6 +63,8 @@ class UserProfileResponse(BaseModel):
     gender: str | None
     interest_gender: str | None
     region: str | None = None
+    match_age_older: int | None = None
+    match_age_younger: int | None = None
     mbti: str | None = None
     bio: str | None = None
     photo_url: str | None
@@ -86,6 +93,16 @@ async def upsert_my_profile(
     if body.display_name is not None:
         user_obj.display_name = body.display_name
     if body.birth_date is not None:
+        # 데이팅 서비스 법적 하한 — 미성년(만 19세 미만) 프로필 저장 거부.
+        # 앱 피커도 막지만 API 직접 호출 방어선 (본인인증 실연동 전 임시).
+        if age_years(body.birth_date) < ADULT_AGE:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "UNDERAGE",
+                    "message": "만 19세 이상만 이용할 수 있습니다.",
+                },
+            )
         user_obj.birth_date = body.birth_date
     if body.gender is not None:
         user_obj.gender = body.gender
@@ -93,6 +110,10 @@ async def upsert_my_profile(
         user_obj.interest_gender = body.interest_gender
     if body.region is not None:
         user_obj.region = body.region
+    if body.match_age_older is not None:
+        user_obj.match_age_older = body.match_age_older
+    if body.match_age_younger is not None:
+        user_obj.match_age_younger = body.match_age_younger
     if body.mbti is not None:
         # 16유형 검증 — 빈 문자열은 삭제, 무효 값은 422
         if body.mbti == "":
@@ -138,6 +159,8 @@ async def upsert_my_profile(
         gender=user_obj.gender,
         interest_gender=user_obj.interest_gender,
         region=user_obj.region,
+        match_age_older=user_obj.match_age_older,
+        match_age_younger=user_obj.match_age_younger,
         mbti=user_obj.mbti,
         bio=user_obj.bio,
         photo_url=user_obj.photo_url,
@@ -191,6 +214,8 @@ async def get_my_profile(
         gender=user_obj.gender,
         interest_gender=user_obj.interest_gender,
         region=user_obj.region,
+        match_age_older=user_obj.match_age_older,
+        match_age_younger=user_obj.match_age_younger,
         mbti=user_obj.mbti,
         bio=user_obj.bio,
         photo_url=user_obj.photo_url,
