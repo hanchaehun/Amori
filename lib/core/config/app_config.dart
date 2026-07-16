@@ -13,6 +13,11 @@ class AppConfig {
   static String get apiBaseUrl {
     final fromEnv = dotenv.env['API_BASE_URL'];
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
+    // 웹 릴리스(QA 배포): 호스팅이 assets/.env(닷파일)를 서빙하지 못해도
+    // 실서버 BFF로 동작해야 한다 — 배포 백엔드 URL로 폴백.
+    if (kIsWeb && kReleaseMode) {
+      return 'https://amori-backend-3ldw.onrender.com';
+    }
     // Android 에뮬레이터는 호스트 머신이 10.0.2.2
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000';
     return 'http://localhost:8000';

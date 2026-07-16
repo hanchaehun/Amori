@@ -5,6 +5,10 @@
 > "왜 이렇게 했더라"는 그 문서에서 찾는다. 기술 설계는 `docs/persona_fidelity_design.md`.
 > **보류 결정(7/15)**: 대화형 온보딩 전환은 팀 합의 대기, 카톡 import는 진행하지 않음.
 > 이 문서는 그 둘을 제외한 실행 설계다.
+>
+> **현재 상태(2026-07-16)**: P0 전부 구현·배포 완료(백엔드 0.1.6 서빙, DB 클린 슬레이트).
+> Android는 릴리스 APK로 팀 내부 테스트 중. **남은 큰 일 = iOS QA/배포**(아래 로드맵 참조).
+> 다음 구현 후보 = P1(데일리 10-x 뱅크, 변형 표기 빈도 측정).
 
 ## 진단 요약 — 왜 지금은 "나 같지" 않은가
 
@@ -201,8 +205,9 @@
 | 6 | P0-E MBTI | ✅ 7/15 (users.mbti, 프로필 시트, big_five prior 합성, 금지선 주석) |
 | 7 | P1 전체 | ⏳ scenarios.dart 10-x, 시뮬 few-shot 선별, 변형 표기 빈도 측정 |
 
-**⚠️ P0 전체 실 LLM E2E 미실시** — modoo 실호출로 온보딩(8-3 포함)→build(가변 trait+big_five)
-→preview→PATCH→시뮬(_behavior_block) 왕복 검증 필요. 코드 검증은 pytest 58개 + flutter analyze 통과.
+**✅ P0 전체 실 LLM E2E 완료(7/15~7/16)** — modoo 실호출로 온보딩(8-3 포함)→build(가변 trait
++big_five)→preview→PATCH→update 왕복 30체크 전부 PASS(오타 보존·user_edited 보호·애착 힌트 합성
+확증), 2계정 시뮬(_behavior_block)은 폰 실기기 테스트에서 검증. 코드 검증은 pytest 58 + flutter analyze 통과.
 
 ## 보류·중단 결정 기록
 
@@ -226,7 +231,8 @@
   또는 삭제 ④잠금 리포트가 점수 조회용 listMatches를 별도 호출 — 매칭 탭에서 라우터
   extra로 전달하면 절약(소소) ⑤photo_url은 https 검증만 — 도메인 화이트리스트
   (firebasestorage)로 좁히는 건 사진 업로드 실사용 확인 후.
-- 가입 계정 초기화(reset_accounts.py 준비됨 — 팀원 실가입 직전 실행, 손지민 조율).
+- ~~가입 계정 초기화(reset_accounts.py — 팀원 실가입 직전 실행)~~ → **완료(7/16)**: DB wipe(0행)
+  + Firebase Auth 계정 콘솔 삭제 + storage.rules 배포까지 손지민이 마무리. 클린 슬레이트.
 
 ## 운영 메모
 
