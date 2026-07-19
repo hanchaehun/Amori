@@ -25,10 +25,10 @@ class AppConfig {
 
   /// 지인 필터(주소록 연동) 노출 게이트.
   ///
-  /// 가입 폼 자기신고 번호(users.phone_number) 기반으로 활성(2026-07-19 결정).
-  /// 서버 CONTACT_FILTER_ENABLED와 쌍 — 서버가 꺼져 있으면 화면이 잠금
-  /// 안내를 띄우고 쓰기를 막는다. 본인인증(PASS) 도입 시 번호 원천만
-  /// 인증값으로 바뀌고 이 게이트는 그대로다.
+  /// 등록(수집)은 지금부터 받되, 매칭 실적용은 서버 CONTACT_FILTER_ENFORCED가
+  /// 본인인증(PASS) 도입과 함께 켜질 때부터다(2026-07-19 결정 — 자기신고
+  /// 번호는 미검증이라 매칭엔 안 쓴다). 그 전까지 화면은 "본인인증 도입 후
+  /// 적용" 안내 배너를 띄운다.
   static const bool contactFilterEnabled = true;
 
   /// 로컬 개발용 인증 우회 uid — 설정 시 Firebase 로그인 없이

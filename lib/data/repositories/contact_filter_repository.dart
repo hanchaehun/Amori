@@ -4,12 +4,17 @@ import '../api/api_client.dart';
 class BlockedContacts {
   const BlockedContacts({
     required this.enabled,
+    required this.enforced,
     required this.syncedCount,
     required this.manual,
   });
 
-  /// 서버 플래그 — 본인인증 도입 전엔 false (쓰기 API도 403으로 잠김).
+  /// 수집 가능 여부 — false면 쓰기 API가 403으로 잠긴다.
   final bool enabled;
+
+  /// 매칭 실적용 여부 — 본인인증 도입 시 true. false면 등록만 받아두고
+  /// 매칭 제외는 아직 적용되지 않는다 (화면이 안내 배너를 띄운다).
+  final bool enforced;
 
   /// 주소록 동기화로 등록된 해시 수.
   final int syncedCount;
@@ -20,6 +25,7 @@ class BlockedContacts {
   factory BlockedContacts.fromJson(Map<String, dynamic> json) =>
       BlockedContacts(
         enabled: json['enabled'] as bool? ?? false,
+        enforced: json['enforced'] as bool? ?? false,
         syncedCount: json['synced_count'] as int? ?? 0,
         manual: [
           for (final item in (json['manual'] as List? ?? const []))
@@ -75,6 +81,9 @@ class ContactFilterRepository {
     });
     return BlockedContacts.fromJson(json as Map<String, dynamic>);
   }
+
+  /// 동기화 취소 — 동기화분 전량 삭제 (빈 목록 교체). 수동 항목은 유지된다.
+  Future<BlockedContacts> unsyncContacts() => syncContacts(const []);
 
   /// 수동 등록 — 주소록에 없는 지인의 전화번호/이메일 해시.
   Future<BlockedContactItem> addManual({

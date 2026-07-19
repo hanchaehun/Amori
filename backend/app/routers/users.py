@@ -213,7 +213,10 @@ class BlockedContactItem(BaseModel):
 
 
 class BlockedContactsResponse(BaseModel):
-    enabled: bool  # 서버 플래그 — 본인인증 도입 시 켠다 (클라이언트 노출 게이트)
+    enabled: bool  # 수집 가능 여부 (끄면 쓰기 API 403 — 클라이언트 잠금 게이트)
+    # 매칭 실적용 여부 — 본인인증 도입 시 켠다. false면 앱이
+    # "본인인증 도입 후 매칭에 적용" 안내를 띄우되 등록은 받는다.
+    enforced: bool = False
     synced_count: int  # 주소록 동기화로 등록된 해시 수
     manual: list[BlockedContactItem] = []
 
@@ -267,6 +270,7 @@ async def list_blocked_contacts(
     ).scalars().all()
     return BlockedContactsResponse(
         enabled=settings.contact_filter_enabled,
+        enforced=settings.contact_filter_enforced,
         synced_count=sum(1 for r in rows if r.source == "contacts"),
         manual=[
             BlockedContactItem(id=str(r.id), kind=r.kind, label=r.label)

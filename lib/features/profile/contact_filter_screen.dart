@@ -98,6 +98,53 @@ class _ContactFilterScreenState extends State<ContactFilterScreen> {
     }
   }
 
+  Future<void> _unsync() async {
+    final count = _data?.syncedCount ?? 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.rMd),
+        title: Text('동기화 취소', style: AppTypography.titleMedium),
+        content: Text(
+          '동기화한 연락처 $count개를 목록에서 삭제할까요?\n직접 추가한 항목은 유지돼요.',
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.ink700,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              '유지',
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.ink500),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              '삭제',
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final result = await _repo.unsyncContacts();
+      if (!mounted) return;
+      setState(() => _data = result);
+      _toast('주소록 동기화를 취소했어요');
+    } on ApiException catch (e) {
+      if (mounted) _toast(e.message);
+    }
+  }
+
   Future<void> _addManual({required bool isPhone}) async {
     final result = await showDialog<_ManualInput>(
       context: context,
@@ -194,31 +241,17 @@ class _ContactFilterScreenState extends State<ContactFilterScreen> {
                       ),
                       if (serverDisabled) ...[
                         AppSpacing.vMd,
-                        Container(
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceMuted,
-                            borderRadius: AppRadius.rMd,
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.lock_outline_rounded,
-                                size: 16,
-                                color: AppColors.ink500,
-                              ),
-                              AppSpacing.hSm,
-                              Expanded(
-                                child: Text(
-                                  '본인인증 도입 후 이용할 수 있어요',
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppColors.ink500,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                        const _NoticeBanner(
+                          icon: Icons.lock_outline_rounded,
+                          text: '본인인증 도입 후 이용할 수 있어요',
+                        ),
+                      ] else if (data != null && !data.enforced) ...[
+                        // 수집은 지금부터, 매칭 실적용은 본인인증 도입부터
+                        // (자기신고 번호는 미검증 — 2026-07-19 결정)
+                        AppSpacing.vMd,
+                        const _NoticeBanner(
+                          icon: Icons.schedule_rounded,
+                          text: '지금 등록해 두면 본인인증 도입 후 매칭에 자동으로 적용돼요',
                         ),
                       ],
                       AppSpacing.vMd,
@@ -227,6 +260,7 @@ class _ContactFilterScreenState extends State<ContactFilterScreen> {
                         syncing: _syncing,
                         enabled: !serverDisabled,
                         onSync: _sync,
+                        onUnsync: _unsync,
                       ),
                       AppSpacing.vLg,
                       Text(
@@ -274,18 +308,55 @@ class _ContactFilterScreenState extends State<ContactFilterScreen> {
   }
 }
 
+/// 잠금/안내 배너 — 회색 카드에 아이콘+한 줄 문구.
+class _NoticeBanner extends StatelessWidget {
+  const _NoticeBanner({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: AppRadius.rMd,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.ink500),
+          AppSpacing.hSm,
+          Expanded(
+            child: Text(
+              text,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.ink500,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SyncCard extends StatelessWidget {
   const _SyncCard({
     required this.syncedCount,
     required this.syncing,
     required this.enabled,
     required this.onSync,
+    required this.onUnsync,
   });
 
   final int syncedCount;
   final bool syncing;
   final bool enabled;
   final VoidCallback onSync;
+  final VoidCallback onUnsync;
 
   @override
   Widget build(BuildContext context) {
@@ -296,69 +367,98 @@ class _SyncCard extends StatelessWidget {
         borderRadius: AppRadius.rMd,
         border: Border.all(color: AppColors.ink100, width: 1.5),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.contacts_rounded,
-              size: 20,
-              color: AppColors.ink700,
-            ),
-          ),
-          AppSpacing.hMd,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '주소록 동기화',
-                  style: AppTypography.titleMedium.copyWith(fontSize: 15),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  syncedCount > 0 ? '연락처 $syncedCount개 등록됨' : '아직 동기화하지 않았어요',
+                child: const Icon(
+                  Icons.contacts_rounded,
+                  size: 20,
+                  color: AppColors.ink700,
+                ),
+              ),
+              AppSpacing.hMd,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '주소록 동기화',
+                      style: AppTypography.titleMedium.copyWith(fontSize: 15),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      syncedCount > 0
+                          ? '연락처 $syncedCount개 등록됨'
+                          : '아직 동기화하지 않았어요',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.ink500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: enabled && !syncing ? onSync : null,
+                style: TextButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  disabledBackgroundColor: AppColors.ink100,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: syncing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        syncedCount > 0 ? '다시 동기화' : '동기화하기',
+                        style: AppTypography.caption.copyWith(
+                          color: enabled ? Colors.white : AppColors.ink300,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+          // 동기화 취소 — 동기화분만 삭제 (수동 추가 항목은 유지)
+          if (syncedCount > 0)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: enabled && !syncing ? onUnsync : null,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 32),
+                ),
+                child: Text(
+                  '동기화 취소',
                   style: AppTypography.caption.copyWith(
                     color: AppColors.ink500,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: enabled && !syncing ? onSync : null,
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              disabledBackgroundColor: AppColors.ink100,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
               ),
             ),
-            child: syncing
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(
-                    syncedCount > 0 ? '다시 동기화' : '동기화하기',
-                    style: AppTypography.caption.copyWith(
-                      color: enabled ? Colors.white : AppColors.ink300,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-          ),
         ],
       ),
     );

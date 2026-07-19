@@ -88,11 +88,11 @@ async def find_candidates(
     (성별 필터와 같은 상호 원칙). 허용 범위 미설정은 기본 5살, 생년월일 미설정은
     와일드카드 통과. 미성년(만 19세 미만) 후보는 설정과 무관하게 제외한다.
 
-    지인 필터 (제품 규칙, 2026-07-19 — settings.contact_filter_enabled로 잠금):
+    지인 필터 (제품 규칙, 2026-07-19 — settings.contact_filter_enforced로 잠금):
     내 차단 목록(blocked_contacts 해시)에 후보의 phone/email 해시가 있거나,
     후보의 차단 목록에 내 해시(my_contact_hashes)가 있으면 그 쌍은 제외한다
-    (상호 원칙 — 어느 한쪽만 등록해도 서로 안 보인다). 본인인증 도입으로
-    users.phone_hash가 채워지기 전엔 플래그가 꺼져 있다.
+    (상호 원칙 — 어느 한쪽만 등록해도 서로 안 보인다). 수집(enabled)과 별개로,
+    자기신고 번호는 미검증이라 본인인증(PASS) 도입 전엔 매칭에 적용하지 않는다.
     """
     distance = Persona.embedding.cosine_distance(query_embedding).label("distance")
     query = (
@@ -151,7 +151,7 @@ async def find_candidates(
                 ),
             )
         )
-    if settings.contact_filter_enabled:
+    if settings.contact_filter_enforced:
         # 내 차단 목록에 있는 후보 제외 — 후보의 phone/email 해시 대조
         query = query.where(
             ~exists().where(

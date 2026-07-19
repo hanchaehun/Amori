@@ -46,10 +46,12 @@ class Settings(BaseSettings):
     reveal_max_gap_seconds: float = 180.0  # 턴 간 최대 간격(가끔 긴 공백)
 
     # 지인 필터 — 주소록/수동 등록 지인과 매칭 제외 (상호 원칙).
-    # 가입 폼 자기신고 번호(users.phone_number→phone_hash) 기반으로 활성
-    # (2026-07-19 결정). 본인인증(PASS) 도입 시 인증 번호로 대체된다.
-    # 끄면 blocked-contacts 쓰기 API가 403, 랭커 필터도 미적용.
+    # enabled = 수집(주소록 동기화·수동 등록 API + 앱 화면). 끄면 쓰기 API 403.
+    # enforced = 랭커 매칭 제외 실적용. 자기신고 번호는 미검증이라 본인인증(PASS)
+    # 도입 전엔 적용하지 않는다(2026-07-19 사용자 결정) — 지금 등록해 둔 목록이
+    # 본인인증 도입 시점부터 자동으로 효력을 갖는다.
     contact_filter_enabled: bool = True
+    contact_filter_enforced: bool = False
     # 주소록 동기화 1회당 해시 상한 (남용 방어)
     contact_sync_max_hashes: int = 5000
 
