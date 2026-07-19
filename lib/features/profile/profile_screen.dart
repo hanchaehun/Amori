@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/router/app_routes.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
@@ -316,6 +317,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onMatchPref: () => _onMatchPref(context),
                 onMbti: () => _onMbti(context),
                 onBio: () => _onBio(context),
+                // 주소록 지인 필터가 열리기 전(본인인증 도입 전)엔 준비 중 안내만
+                onLinkedApps: AppConfig.contactFilterEnabled
+                    ? () => context.push(AppRoutes.linkedApps)
+                    : () => _comingSoon(
+                        context, '연동 앱 (주소록 · Spotify · Strava)'),
                 onComingSoon: (label) => _comingSoon(context, label),
                 onLogout: () => _onLogout(context),
                 onDeleteAccount: () => _onDeleteAccount(context),
@@ -597,6 +603,7 @@ class _SettingsList extends StatelessWidget {
     required this.onMatchPref,
     required this.onMbti,
     required this.onBio,
+    required this.onLinkedApps,
     required this.onComingSoon,
     required this.onLogout,
     required this.onDeleteAccount,
@@ -610,6 +617,7 @@ class _SettingsList extends StatelessWidget {
   final VoidCallback onMatchPref;
   final VoidCallback onMbti;
   final VoidCallback onBio;
+  final VoidCallback onLinkedApps;
   final ValueChanged<String> onComingSoon;
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
@@ -650,8 +658,7 @@ class _SettingsList extends StatelessWidget {
               SettingsRow(
                 icon: Icons.link_rounded,
                 label: '연동 앱',
-                onTap: () =>
-                    onComingSoon('연동 앱 (Spotify · Strava · Instagram)'),
+                onTap: onLinkedApps,
                 last: true,
               ),
             ],

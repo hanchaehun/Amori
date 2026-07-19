@@ -11,6 +11,7 @@ from app.dependencies import get_db, get_llm_provider
 from app.llm.base import LLMProvider
 from app.models.database import Match, Persona, Report, SimulationJob
 from app.schemas.report import ReportResponse
+from app.services.farewell import append_farewell, persona_formality
 from app.services.llm_log import log_llm_call
 
 router = APIRouter()
@@ -162,6 +163,19 @@ async def get_report(
     ):
         match_obj.appointment_ready = False
         match_obj.accepted_by = []
+        # 실패 확정 — 형식적인 마무리 인사를 덧붙인다 (auto_sim 경로와 동일).
+        # 턴의 me/them은 잡 요청자 기준이라 말투 매핑도 요청자 기준으로 뒤집는다.
+        me_p, them_p = (
+            (my_persona, their_persona)
+            if sim_job.requested_by == user["uid"]
+            else (their_persona, my_persona)
+        )
+        sim_job.turns = append_farewell(
+            sim_job.turns,
+            settings,
+            persona_formality(me_p),
+            persona_formality(them_p),
+        )
     await db.commit()
 
     await log_llm_call(

@@ -106,6 +106,14 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<dynamic> deleteJson(String path) async {
+    final response = await _send(
+      _http.delete(_uri(path), headers: await _headers()),
+      _readTimeout,
+    );
+    return _decode(response);
+  }
+
   /// 부분 수정 — persona PATCH는 임베딩 재계산(LLM)까지 갈 수 있어 넉넉하게.
   Future<dynamic> patchJson(String path, Object body) async {
     final response = await _send(

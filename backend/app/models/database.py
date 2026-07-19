@@ -1,7 +1,7 @@
 """SQLAlchemy 모델 — Postgres 단일 데이터 원천 (리팩토링 결정 3).
 
-8개 테이블: users, personas, matches, simulation_jobs, reports,
-meet_requests, feedback, llm_call_logs.
+9개 테이블: users, personas, matches, simulation_jobs, reports,
+meet_requests, feedback, llm_call_logs, blocked_contacts.
 
 페르소나 임베딩은 1024차원 pgvector 컬럼이며 HNSW 코사인 인덱스를 사용한다.
 ``Base.metadata`` 의 ``before_create`` 리스너가 vector 익스텐션을 먼저 설치한다.
@@ -22,6 +22,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     event,
     func,
 )
@@ -65,6 +66,14 @@ class User(Base):
     # 한줄 소개 — 상대 프로필 카드(리포트 내 프로필 보기)에 노출.
     bio: Mapped[str | None] = mapped_column(String(200))
     photo_url: Mapped[str | None] = mapped_column(Text)
+    # 가입 시 자기신고 휴대전화 번호 (정규화된 숫자만, 예: 01012345678) —
+    # 2026-07-19 결정: 지인 필터 실효화를 위해 가입 폼에서 받는다.
+    # 본인인증(PASS) 도입 시 인증된 번호로 덮어쓴다.
+    phone_number: Mapped[str | None] = mapped_column(String(20))
+    # 지인 필터용 식별자 해시 (SHA-256 hex, services/contact_hash.py 규칙).
+    # phone_hash는 phone_number 저장 시, email_hash는 프로필 저장 시 유지된다.
+    phone_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    email_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     fcm_token: Mapped[str | None] = mapped_column(Text)
     # 소개팅 가능 일정 [{"date": "YYYY-MM-DD", "time": "점심"|"저녁"}, ...]
     # 에이전트는 시뮬레이션에서 이 시간 중에서만 약속을 제안·수락한다.
@@ -76,6 +85,38 @@ class User(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class BlockedContact(Base):
+    """지인 필터 — 이 사용자와 매칭되면 안 되는 지인의 식별자 해시.
+
+    원문(전화번호·이메일)은 클라이언트에서 정규화+SHA-256 해시 후 올라온다 —
+    서버는 제3자 연락처 원문을 저장하지 않는다(services/contact_hash.py 규칙 공유).
+    source='contacts'는 주소록 동기화 산출물(sync 때마다 전량 교체),
+    'manual'은 사용자가 직접 추가한 항목(전화번호가 주소록에 없는 지인 대비).
+    매칭 제외는 상호 원칙 — 어느 한쪽의 목록에만 있어도 그 쌍은 제외된다.
+    본인인증(phone_hash 확보) 전엔 비활성 (settings.contact_filter_enabled).
+    """
+
+    __tablename__ = "blocked_contacts"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    contact_hash: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(10))  # phone | email
+    source: Mapped[str] = mapped_column(String(10))  # contacts | manual
+    # 수동 항목 표시용 라벨(예: "홍길동", "010-****-1234") — 클라이언트가 만든
+    # 마스킹/이름 문자열만 받는다. 원문 식별자를 넣지 않는 것이 계약.
+    label: Mapped[str | None] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "contact_hash", name="uq_blocked_contacts_user_hash"),
     )
 
 

@@ -27,6 +27,7 @@ from app.llm.base import LLMProvider
 from app.middleware.rate_limit import check_simulation_quota
 from app.models.database import Match, Persona, Report, SimulationJob
 from app.matching import find_candidates
+from app.services.farewell import append_farewell, persona_formality
 from app.services.llm_log import log_llm_call
 from app.services.style_gate import gate_turn
 
@@ -57,9 +58,13 @@ def _persona_dict(p: Persona, *, voice: bool) -> dict:
 async def _pick_target(
     db: AsyncSession, uid: str, my_persona: Persona
 ) -> str | None:
-    """매칭 후보 중 아직 시뮬레이션이 없던 상대 우선, 없으면 최고 점수.
+    """매칭 후보 중 아직 시뮬레이션이 없던 상대 우선.
 
     후보군 자체가 관심 성별 상호 필터를 통과한 쌍으로 제한된다.
+    리포트가 이미 있는 매치는 스킵한다 — 리포트는 매치당 1회 캐시라
+    재시뮬해도 점수가 안 바뀌어 LLM 비용만 태운다 (2026-07-19 결정,
+    후보 1명 × 74점 게이트 탈락 상대와 8회 재시뮬한 사례). 시뮬은 있는데
+    리포트 생성이 실패한 매치만 재시뮬 폴백으로 남긴다.
     """
     from app.models.database import User
 
@@ -76,10 +81,21 @@ async def _pick_target(
         my_birth_date=me.birth_date if me else None,
         my_age_older=me.match_age_older if me else None,
         my_age_younger=me.match_age_younger if me else None,
+        my_contact_hashes=(
+            [h for h in (me.phone_hash, me.email_hash) if h] if me else None
+        ),
     )
     if not candidates:
         return None
+    fallback: str | None = None
     for c in candidates:
+        report_result = await db.execute(
+            select(func.count(Report.id))
+            .join(Match, Match.id == Report.match_id)
+            .where(Match.participant_ids.contains([uid, c.user_id]))
+        )
+        if report_result.scalar_one() > 0:
+            continue
         result = await db.execute(
             select(func.count(SimulationJob.id))
             .join(Match, Match.id == SimulationJob.match_id)
@@ -90,7 +106,8 @@ async def _pick_target(
         )
         if result.scalar_one() == 0:
             return c.user_id
-    return candidates[0].user_id
+        fallback = fallback or c.user_id
+    return fallback
 
 
 async def run_auto_simulation(
@@ -174,7 +191,9 @@ async def run_auto_simulation(
         return None
 
     # 리포트까지 생성해야 inbox 카드가 점수·75점 게이트 분류를 바로 갖는다.
-    report_score = await _ensure_report(db, llm, match_obj, my_persona, their_persona, turns, uid)
+    report_score = await _ensure_report(
+        db, llm, match_obj, my_persona, their_persona, job, uid
+    )
 
     logger.info(
         "auto-sim done: %s ↔ %s, %d턴, 점수=%s",
@@ -194,10 +213,11 @@ async def _ensure_report(
     match_obj: Match,
     my_persona: Persona,
     their_persona: Persona,
-    turns: list[dict],
+    job: SimulationJob,
     uid: str,
 ) -> int | None:
     """리포트가 없으면 생성 — routers/report.py 의 게이트 규칙과 동일."""
+    turns = job.turns or []
     result = await db.execute(
         select(Report).where(Report.match_id == match_obj.id)
     )
@@ -239,6 +259,14 @@ async def _ensure_report(
         and match_obj.status == "simulated"
     ):
         match_obj.accepted_by = []
+        # 실패 확정 — 대화 끝에 형식적인 마무리 인사를 덧붙인다.
+        # '닿지 않은 인연'에서 열람할 때 잘 끝난 대화처럼 보이지 않도록.
+        job.turns = append_farewell(
+            job.turns,
+            settings,
+            persona_formality(my_persona),
+            persona_formality(their_persona),
+        )
     await db.commit()
 
     await log_llm_call(

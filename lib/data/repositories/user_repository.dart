@@ -140,6 +140,7 @@ class UserRepository {
     int? matchAgeYounger,
     String? mbti,
     String? bio,
+    String? phoneNumber, // 정규화된 숫자만 — 지인 필터 원천
     String? photoUrl,
     String? fcmToken,
     List<AvailableSlot>? availableSlots,
@@ -154,6 +155,7 @@ class UserRepository {
       'match_age_younger': ?matchAgeYounger,
       'mbti': ?mbti,
       'bio': ?bio,
+      'phone_number': ?phoneNumber,
       'photo_url': ?photoUrl,
       'fcm_token': ?fcmToken,
       if (availableSlots != null)

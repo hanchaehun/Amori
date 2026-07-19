@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/router/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
@@ -30,7 +32,7 @@ class FailedMatchesScreen extends StatelessWidget {
               AppSpacing.md,
             ),
             child: Text(
-              'AI 소개팅에서 케미 점수가 75점에 닿지 못한 인연이에요.\n3일이 지나면 자연스럽게 사라져요.',
+              'AI 소개팅에서 케미 점수가 75점에 닿지 못한 인연이에요.\n카드를 누르면 대화를 볼 수 있고, 3일이 지나면 자연스럽게 사라져요.',
               style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.ink500,
                 fontSize: 13,
@@ -95,106 +97,120 @@ class _FailedCard extends StatelessWidget {
   const _FailedCard({required this.item});
   final FailedMatch item;
 
+  void _onTap(BuildContext context) {
+    HapticFeedback.lightImpact();
+    // 대화는 읽기 전용으로 다시 볼 수 있다 — failed=1이면 잠금 문구가 바뀐다.
+    context.push('${AppRoutes.chat}?id=${item.id}&failed=1');
+  }
+
   @override
   Widget build(BuildContext context) {
     final daysLeft = item.daysLeft;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: AppRadius.rMd,
-        border: Border.all(color: AppColors.ink100, width: 1.5),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.ink100),
-            ),
-            child: Text(
-              item.initial,
-              style: AppTypography.titleMedium.copyWith(
-                color: AppColors.ink300,
-                fontWeight: FontWeight.w900,
+    return GestureDetector(
+      onTap: () => _onTap(context),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: AppRadius.rMd,
+          border: Border.all(color: AppColors.ink100, width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.ink100),
+              ),
+              child: Text(
+                item.initial,
+                style: AppTypography.titleMedium.copyWith(
+                  color: AppColors.ink300,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
-          ),
-          AppSpacing.hMd,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        item.name,
-                        style: AppTypography.titleMedium.copyWith(
-                          fontSize: 15,
-                          color: AppColors.ink700,
+            AppSpacing.hMd,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.name,
+                          style: AppTypography.titleMedium.copyWith(
+                            fontSize: 15,
+                            color: AppColors.ink700,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.ink100,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        '${item.score}점',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.ink500,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.ink100,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          '${item.score}점',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.ink500,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.reason,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.ink500,
-                    fontSize: 13,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.hourglass_bottom_rounded,
-                      size: 13,
-                      color: AppColors.ink300,
+                  const SizedBox(height: 4),
+                  Text(
+                    item.reason,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.ink500,
+                      fontSize: 13,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      daysLeft <= 0 ? '오늘 사라져요' : '$daysLeft일 후 사라져요',
-                      style: AppTypography.caption.copyWith(
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.hourglass_bottom_rounded,
+                        size: 13,
                         color: AppColors.ink300,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 4),
+                      Text(
+                        daysLeft <= 0 ? '오늘 사라져요' : '$daysLeft일 후 사라져요',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.ink300,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.ink300,
+            ),
+          ],
+        ),
       ),
     );
   }

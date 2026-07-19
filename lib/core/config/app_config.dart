@@ -23,6 +23,14 @@ class AppConfig {
     return 'http://localhost:8000';
   }
 
+  /// 지인 필터(주소록 연동) 노출 게이트.
+  ///
+  /// 가입 폼 자기신고 번호(users.phone_number) 기반으로 활성(2026-07-19 결정).
+  /// 서버 CONTACT_FILTER_ENABLED와 쌍 — 서버가 꺼져 있으면 화면이 잠금
+  /// 안내를 띄우고 쓰기를 막는다. 본인인증(PASS) 도입 시 번호 원천만
+  /// 인증값으로 바뀌고 이 게이트는 그대로다.
+  static const bool contactFilterEnabled = true;
+
   /// 로컬 개발용 인증 우회 uid — 설정 시 Firebase 로그인 없이
   /// `Bearer dev:<uid>`로 BFF에 인증한다 (백엔드 DEBUG=true 전용).
   /// 릴리스 빌드에서는 항상 null.

@@ -29,6 +29,10 @@ class AppRoutes {
   static const String meetRequestReceive = '/meet/receive';
   static const String inbox = '/inbox';
   static const String failedMatches = '/inbox/failed';
+  // 연동 앱 허브 + 주소록 지인 필터 — AppConfig.contactFilterEnabled(본인인증
+  // 도입 게이트)가 꺼져 있으면 프로필에서 진입점이 열리지 않는다.
+  static const String linkedApps = '/profile/linked-apps';
+  static const String contactFilter = '/profile/linked-apps/contacts';
   static const String chat = '/chat';
   static const String feedback = '/feedback';
 

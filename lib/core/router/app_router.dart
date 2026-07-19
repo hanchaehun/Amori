@@ -30,6 +30,8 @@ import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
 import '../../features/persona/persona_preview_screen.dart';
 import '../../features/persona/scenario_player_screen.dart';
+import '../../features/profile/contact_filter_screen.dart';
+import '../../features/profile/linked_apps_screen.dart';
 import '../../features/profile/notification_settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/profile/push_preview_screen.dart';
@@ -179,6 +181,8 @@ class AppRouter {
           state,
           ChatScreen(
             conversationId: state.uri.queryParameters['id'],
+            // '닿지 않은 인연'에서 진입한 읽기 전용 열람 — 잠금 문구가 바뀐다
+            failed: state.uri.queryParameters['failed'] == '1',
             peer: state.extra is Conversation
                 ? state.extra as Conversation
                 : null,
@@ -193,6 +197,16 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.inbox,
         pageBuilder: (context, state) => _fadePage(state, const InboxScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.linkedApps,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const LinkedAppsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.contactFilter,
+        pageBuilder: (context, state) =>
+            _slidePage(state, const ContactFilterScreen()),
       ),
       GoRoute(
         path: AppRoutes.failedMatches,

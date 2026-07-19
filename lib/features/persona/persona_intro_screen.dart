@@ -48,6 +48,7 @@ class _PersonaIntroScreenState extends State<PersonaIntroScreen>
         birthDate: pending['birth_date'] as String?,
         gender: pending['gender'] as String?,
         interestGender: pending['interest_gender'] as String?,
+        phoneNumber: pending['phone_number'] as String?,
       );
       await PendingProfileStore.clear();
     } catch (_) {

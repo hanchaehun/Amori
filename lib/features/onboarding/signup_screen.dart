@@ -6,6 +6,7 @@ import '../../core/router/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/utils/contact_hash.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
@@ -33,6 +34,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _nameController = TextEditingController();
   // 기본값을 미리 채우지 않는다 — 안 바꾸고 가입하면 가짜 나이가 서버에 남는다.
   final _birthController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -45,6 +47,7 @@ class _SignupScreenState extends State<SignupScreen> {
   void dispose() {
     _nameController.dispose();
     _birthController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -78,6 +81,7 @@ class _SignupScreenState extends State<SignupScreen> {
     final missing = <String>[
       if (_nameController.text.trim().isEmpty) '이름',
       if (_birthController.text.trim().isEmpty) '생년월일',
+      if (_phoneController.text.trim().isEmpty) '휴대전화 번호',
       if (_emailController.text.trim().isEmpty) '이메일',
       if (_passwordController.text.isEmpty) '비밀번호',
     ];
@@ -93,6 +97,13 @@ class _SignupScreenState extends State<SignupScreen> {
     final birth = _parseBirth(_birthController.text);
     if (birth == null || birth.isAfter(_adultBirthLimit())) {
       _showError('만 19세 이상만 가입할 수 있어요.');
+      return;
+    }
+
+    // 지인 필터의 원천 — 서버(users PUT)와 같은 규칙으로 미리 검증한다.
+    final phone = ContactHash.normalizePhone(_phoneController.text.trim());
+    if (phone == null || !phone.startsWith('01') || phone.length < 10) {
+      _showError('올바른 휴대전화 번호가 아니에요. (예: 010-1234-5678)');
       return;
     }
 
@@ -122,6 +133,7 @@ class _SignupScreenState extends State<SignupScreen> {
         birthDate: _toIsoDate(_birthController.text.trim()),
         gender: (_gender ?? _Gender.other).name,
         interestGender: (_interestGender ?? _InterestGender.both).name,
+        phoneNumber: phone,
       );
       // 방금 입력받은 값이 곧 프로필 — 화면 표시용 캐시는 즉시 채운다.
       ProfileStore.instance.set(MyProfile(
@@ -264,6 +276,21 @@ class _SignupScreenState extends State<SignupScreen> {
                     SegmentedOption(value: _InterestGender.male, label: '남성'),
                     SegmentedOption(value: _InterestGender.both, label: '모두'),
                   ],
+                ),
+                AppSpacing.vLg,
+                PrimaryTextField(
+                  label: '휴대전화 번호',
+                  hint: '010-1234-5678',
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                ),
+                AppSpacing.vXs,
+                Text(
+                  '아는 사람과 매칭되지 않게 하는 지인 필터에 사용돼요.',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.ink500,
+                  ),
                 ),
                 AppSpacing.vLg,
                 PrimaryTextField(

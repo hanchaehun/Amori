@@ -27,9 +27,18 @@ class _Starter {
 /// 만남 예정 상태에선 약속 배너에서 취소할 수 있고, 취소하면 상대 방에
 /// 시스템 안내문구가 남으며 잡혀 있던 시간이 다시 가능한 일정으로 풀린다.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, this.conversationId, this.peer});
+  const ChatScreen({
+    super.key,
+    this.conversationId,
+    this.failed = false,
+    this.peer,
+  });
 
   final String? conversationId;
+
+  /// '닿지 않은 인연'(게이트 미달)에서 열람 진입 — 잠금 안내 문구가 바뀌고
+  /// 대화가 더 자라지 않으므로 폴링도 하지 않는다.
+  final bool failed;
 
   /// 목록 카드에서 넘어온 상대 정보 — 로딩 중 헤더 표시용. 없어도 동작한다.
   final Conversation? peer;
@@ -103,8 +112,14 @@ class _ChatScreenState extends State<ChatScreen> {
           _apply(conv);
         });
         _scrollToEnd();
-        // 상대 메시지·취소 안내를 주기적으로 받아온다 (SSE 없는 단순 폴링)
-        _poll = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+        // 상대 메시지·취소 안내를 주기적으로 받아온다 (SSE 없는 단순 폴링).
+        // 실패 매치 열람은 대화가 끝난 뒤라 폴링이 필요 없다.
+        if (!widget.failed) {
+          _poll = Timer.periodic(
+            const Duration(seconds: 5),
+            (_) => _refresh(),
+          );
+        }
         return;
       } catch (e) {
         debugPrint('chat: GET /conversation 실패 — 더미 폴백으로 전환: $e');
@@ -577,7 +592,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 else if (_agentLive && _agentNextSpeaker == 'me')
                   const _AgentTypingBar()
                 else
-                  const _LockedBar(),
+                  _LockedBar(
+                    text: widget.failed
+                        ? '케미 점수가 기준에 닿지 않아 이어지지 않은 대화예요'
+                        : '서로 만남을 수락하면 직접 대화할 수 있어요',
+                  ),
               ],
             ),
     );
@@ -1148,9 +1167,11 @@ class _AgentTypingBar extends StatelessWidget {
   }
 }
 
-/// '진행 중' 잠금 안내 — 에이전트 단계라 직접 채팅이 닫혀 있다.
+/// 잠금 안내 — 에이전트 단계라 직접 채팅이 닫혀 있거나, 실패 매치 열람이다.
 class _LockedBar extends StatelessWidget {
-  const _LockedBar();
+  const _LockedBar({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
@@ -1182,7 +1203,7 @@ class _LockedBar extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                '서로 만남을 수락하면 직접 대화할 수 있어요',
+                text,
                 style: AppTypography.caption.copyWith(
                   color: AppColors.ink500,
                   fontSize: 12,

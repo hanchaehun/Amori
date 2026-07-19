@@ -22,6 +22,7 @@ class PendingProfileStore {
     String? birthDate, // yyyy-MM-dd
     String? gender,
     String? interestGender,
+    String? phoneNumber, // 정규화된 숫자만 (지인 필터 원천)
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -31,6 +32,7 @@ class PendingProfileStore {
         'birth_date': birthDate,
         'gender': gender,
         'interest_gender': interestGender,
+        'phone_number': phoneNumber,
       }),
     );
   }

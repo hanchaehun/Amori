@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 알림 (Android 13+) — 프로필 완성 넛지 로컬 알림 + FCM 푸시 공용 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 지인 필터 — 주소록 해시 대조(원문 미전송). 본인인증 도입 후 활성 화면에서만 요청 -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <application
         android:label="amori"
         android:name="${applicationName}"

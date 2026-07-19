@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import random
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,23 +29,39 @@ from app.db.session import async_session_factory, engine  # noqa: E402
 from app.llm.embedding import GeminiEmbedder  # noqa: E402
 from app.llm.prompts.persona import persona_embedding_text  # noqa: E402
 from app.models.database import Base, Persona, User  # noqa: E402
+from app.services import contact_hash  # noqa: E402
 
 TEST_PREFIX = "seed_dev_test_"
 
+# 성별당 연 나이 스프레드 — 20대 초반(20~23)·중반(24~26)·후반(27~29)을 고르게
+# 커버한다 (2026-07-19 사용자 지시: 여성 시드가 90년대생에 몰려 20대 초반 실유저의
+# 후보풀이 고갈됐던 문제 재발 방지). 나이 하드필터도 연 나이 기준(ranker.korean_age).
+AGE_SPREAD = [20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+
 
 def build_profiles(rng: random.Random) -> list[dict]:
-    """compose_profiles 20명을 받아 이름·uid만 테스트 규칙으로 바꾼다."""
+    """compose_profiles 20명을 받아 이름·uid·나이를 테스트 규칙으로 바꾼다."""
     profiles = compose_profiles(20, rng)
+    this_year = date.today().year
     f = m = 0
     for p in profiles:
         if p["gender"] == "female":
             f += 1
             p["uid"] = f"{TEST_PREFIX}f{f:02d}"
             p["display_name"] = f"테스트녀{f}"
+            korean_age = AGE_SPREAD[(f - 1) % len(AGE_SPREAD)]
+            # 지인 필터용 테스트 번호 — 실번호와 충돌하지 않는 예약대(999) 사용
+            p["phone_number"] = f"01099900{f:02d}"
         else:
             m += 1
             p["uid"] = f"{TEST_PREFIX}m{m:02d}"
             p["display_name"] = f"테스트남{m}"
+            korean_age = AGE_SPREAD[(m - 1) % len(AGE_SPREAD)]
+            p["phone_number"] = f"01099910{m:02d}"
+        # 연 나이 = 올해 - 출생 연도. 월일은 다양성만 주면 된다 (연 나이엔 무관).
+        p["birth_date"] = date(
+            this_year - korean_age, rng.randint(1, 12), rng.randint(1, 28)
+        )
         # 데모 목적상 전원 이성 관심으로 고정 — 실 유저 누구와도 상호 필터가 열린다
         p["interest_gender"] = "male" if p["gender"] == "female" else "female"
     return profiles
@@ -89,9 +106,13 @@ async def main() -> int:
             embedding = await embed_with_retry(
                 embedder, persona_embedding_text(p["persona"])
             )
+            email = f"{p['uid']}@dev.local"
             db.add(User(
                 id=p["uid"],
-                email=f"{p['uid']}@dev.local",
+                email=email,
+                email_hash=contact_hash.email_hash(email),
+                phone_number=p["phone_number"],
+                phone_hash=contact_hash.sha256_hex(p["phone_number"]),
                 display_name=p["display_name"],
                 birth_date=p["birth_date"],
                 gender=p["gender"],

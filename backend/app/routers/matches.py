@@ -219,6 +219,9 @@ async def find_matches(
         my_birth_date=me.birth_date if me else None,
         my_age_older=me.match_age_older if me else None,
         my_age_younger=me.match_age_younger if me else None,
+        my_contact_hashes=(
+            [h for h in (me.phone_hash, me.email_hash) if h] if me else None
+        ),
     )
 
     # 후보마다 Match 행을 find-or-create — 응답의 match_id가 곧 DB UUID라
