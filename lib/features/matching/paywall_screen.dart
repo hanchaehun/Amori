@@ -77,7 +77,7 @@ class PaywallScreen extends StatelessWidget {
           ),
           _LegalFooter(
             onTerms: () => _onLegal(context, AppRoutes.terms),
-            onRefund: () => _onLegal(context, AppRoutes.privacy),
+            onRefund: () => _onLegal(context, AppRoutes.terms),
           ),
         ],
       ),

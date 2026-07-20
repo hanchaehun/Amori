@@ -198,7 +198,17 @@ class PersonaRepository {
     final json = await _api.getJson('/persona/me') as Map<String, dynamic>;
     final speech = json['speech_style'] as Map<String, dynamic>? ?? const {};
     final psych = json['psych_profile'] as Map<String, dynamic>? ?? const {};
-    final voiceStatsJson = json['voice_stats'] as Map<String, dynamic>?;
+    // 말투 측정 카드는 선택적 장식 — 서버가 예상 밖 타입을 보내도(형변환 실패)
+    // 미리보기 화면 전체가 에러로 떨어지지 않게 파싱 실패를 흡수한다.
+    VoiceStatsView? voiceStats;
+    final voiceStatsRaw = json['voice_stats'];
+    if (voiceStatsRaw is Map<String, dynamic>) {
+      try {
+        voiceStats = VoiceStatsView.fromJson(voiceStatsRaw);
+      } catch (_) {
+        voiceStats = null;
+      }
+    }
     return PersonaDetail(
       traits: (json['traits'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -209,9 +219,7 @@ class PersonaRepository {
       voiceConfidence: (json['voice_confidence'] as num?)?.toDouble(),
       attachmentHint: psych['attachment_hint'] as String? ?? '',
       psychVisible: psych['user_visible'] as bool? ?? true,
-      voiceStats: voiceStatsJson == null
-          ? null
-          : VoiceStatsView.fromJson(voiceStatsJson),
+      voiceStats: voiceStats,
     );
   }
 

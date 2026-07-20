@@ -36,7 +36,8 @@ class _RequestStatusScreenState extends State<RequestStatusScreen> {
     );
     if (shouldCancel == true && mounted) {
       context.go(AppRoutes.home);
-      AmoriSnackbar.show(context, '신청을 취소했어요.');
+      // 화면 이동 후이므로 전역 스낵바로 안내한다.
+      AmoriSnackbar.showGlobal('신청을 취소했어요.');
     }
   }
 

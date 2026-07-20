@@ -122,12 +122,27 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<dynamic> deleteJson(String path) async {
-    final response = await _send(
-      _http.delete(_uri(path), headers: await _headers()),
-      _readTimeout,
-    );
-    return _decode(response);
+  /// [authorization]가 주어지면 그 헤더로 인증한다 — 회원 탈퇴에서 Firebase
+  /// 계정을 먼저 삭제한 뒤(그 시점엔 currentUser가 null이라 토큰 재발급 불가)
+  /// 미리 확보한 토큰으로 서버를 지우기 위함. DELETE는 멱등이라 콜드스타트 재시도.
+  Future<dynamic> deleteJson(String path, {String? authorization}) async {
+    Future<Map<String, String>> headers() async => authorization == null
+        ? await _headers()
+        : {'Authorization': authorization, 'Content-Type': 'application/json'};
+    try {
+      final response = await _send(
+        _http.delete(_uri(path), headers: await headers()),
+        _readTimeout,
+      );
+      return _decode(response);
+    } on ApiException catch (error) {
+      if (error.errorCode != 'TIMEOUT') rethrow;
+      final response = await _send(
+        _http.delete(_uri(path), headers: await headers()),
+        _coldStartTimeout,
+      );
+      return _decode(response);
+    }
   }
 
   /// SSE(`text/event-stream`) POST — 이벤트의 data(JSON)를 순차 방출한다.

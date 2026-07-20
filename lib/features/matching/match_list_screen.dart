@@ -8,6 +8,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_avatar.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
@@ -80,12 +81,18 @@ class _MatchListScreenState extends State<MatchListScreen> {
         _error = false;
       });
     } catch (_) {
-      // 네트워크/서버 오류는 "매칭 0건"으로 위장하지 않고 에러 상태로 노출한다.
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = true;
-      });
+      // 이미 목록이 있으면(당겨서 새로고침 중) 통째로 지우지 않고 스낵바로 알린다.
+      // 첫 로드 실패는 "매칭 0건"으로 위장하지 않고 에러 상태로 노출한다.
+      if (_matches.isNotEmpty) {
+        setState(() => _loading = false);
+        AmoriSnackbar.error(context, '새로고침에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      } else {
+        setState(() {
+          _loading = false;
+          _error = true;
+        });
+      }
     }
   }
 

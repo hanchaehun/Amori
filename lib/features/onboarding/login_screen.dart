@@ -153,6 +153,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message) {
+    // async-gap(Firebase 왕복) 뒤 호출될 수 있어 mounted 가드 — 사용자가 그 사이
+    // 화면을 벗어났으면 defunct context 접근을 피한다.
+    if (!mounted) return;
     HapticFeedback.heavyImpact();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

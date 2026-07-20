@@ -17,6 +17,7 @@ import '../../core/widgets/exit_guard.dart';
 import '../../core/state/profile_store.dart';
 import '../../core/widgets/settings_row.dart';
 import '../../data/backend/amori_backend.dart';
+import '../../data/backend/backend_exception.dart';
 import '../../data/backend/profile_photo_uploader.dart';
 import '../../data/repositories/user_repository.dart';
 import 'match_pref_sheet.dart';
@@ -276,11 +277,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Center(child: AmoriLoader()),
       ),
     );
+    final backend = AmoriBackend();
     try {
-      await UserRepository().deleteAccount(); // 서버 도메인 데이터 삭제
-      await AmoriBackend().deleteAccount(); // Firebase 계정 + 세션 정리
+      // 순서 중요(좀비 계정 방지): ①토큰 확보 → ②Firebase 계정 삭제(재인증
+      // 필요 시 여기서 중단, 서버 미삭제) → ③확보한 토큰으로 서버 데이터 삭제.
+      final token = await backend.captureBearerToken();
+      await backend.deleteFirebaseAccount();
+      await UserRepository().deleteAccount(authToken: token);
+      backend.clearSession();
       rootNav.pop(); // 로더 닫기
       router.go(AppRoutes.splash);
+    } on BackendException catch (e) {
+      rootNav.pop(); // 로더 닫기 (서버 데이터는 아직 삭제되지 않음)
+      if (context.mounted) AmoriSnackbar.error(context, e.message);
     } catch (_) {
       rootNav.pop(); // 로더 닫기
       if (context.mounted) {

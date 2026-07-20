@@ -34,6 +34,7 @@ class BackAppBar extends StatelessWidget implements PreferredSizeWidget {
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: onBack ?? () => Navigator.of(context).maybePop(),
               splashRadius: 22,
+              tooltip: '뒤로',
               color: AppColors.ink900,
             )
           : const SizedBox.shrink(),

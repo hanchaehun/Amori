@@ -404,15 +404,29 @@ class _SummaryTab extends StatelessWidget {
         AppSpacing.md,
       ),
       children: [
-        Text(
-          'AI가 발견한 공통점',
-          style: AppTypography.titleMedium.copyWith(fontSize: 17),
-        ),
-        AppSpacing.vMd,
-        for (final f in findings) ...[
-          _FindingCard(finding: f),
-          AppSpacing.vSm,
+        // 발견이 있을 때만 헤더를 그린다 — 빈 배열 리포트에서 외로운 헤더 방지.
+        if (findings.isNotEmpty) ...[
+          Text(
+            'AI가 발견한 공통점',
+            style: AppTypography.titleMedium.copyWith(fontSize: 17),
+          ),
+          AppSpacing.vMd,
+          for (final f in findings) ...[
+            _FindingCard(finding: f),
+            AppSpacing.vSm,
+          ],
         ],
+        if (findings.isEmpty && warnings.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+            child: Center(
+              child: Text(
+                '아직 요약이 준비 중이에요',
+                style: AppTypography.bodyMedium
+                    .copyWith(color: AppColors.ink500),
+              ),
+            ),
+          ),
         // 주의할 점은 실제 리포트에 있을 때만 — 없으면 지어내지 않는다.
         if (warnings.isNotEmpty) ...[
           AppSpacing.vMd,
@@ -698,6 +712,18 @@ class _GuideTab extends StatelessWidget {
           AppSpacing.vLg,
         ],
         if (tip.isNotEmpty) _TipCard(title: '한 가지 팁', body: tip),
+        // 세 섹션이 모두 비면 공백 ListView 대신 안내를 보여준다.
+        if (places.isEmpty && starters.isEmpty && tip.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+            child: Center(
+              child: Text(
+                '첫 만남 가이드가 아직 준비 중이에요',
+                style: AppTypography.bodyMedium
+                    .copyWith(color: AppColors.ink500),
+              ),
+            ),
+          ),
       ],
     );
   }
