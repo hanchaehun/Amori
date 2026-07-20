@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -41,12 +42,20 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _obscurePassword = true;
   bool _submitting = false;
 
+  // 약관·개인정보 링크 탭 — paywall·settings와 동일하게 실제 화면으로 연결.
+  late final _termsTap = TapGestureRecognizer()
+    ..onTap = () => context.push(AppRoutes.terms);
+  late final _privacyTap = TapGestureRecognizer()
+    ..onTap = () => context.push(AppRoutes.privacy);
+
   @override
   void dispose() {
     _nameController.dispose();
     _birthController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _termsTap.dispose();
+    _privacyTap.dispose();
     super.dispose();
   }
 
@@ -323,17 +332,21 @@ class _SignupScreenState extends State<SignupScreen> {
                     const TextSpan(text: '가입하면 '),
                     TextSpan(
                       text: '이용약관',
+                      recognizer: _termsTap,
                       style: AppTypography.caption.copyWith(
                         color: AppColors.ink900,
                         fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
                       ),
                     ),
                     const TextSpan(text: ' 및 '),
                     TextSpan(
                       text: '개인정보처리방침',
+                      recognizer: _privacyTap,
                       style: AppTypography.caption.copyWith(
                         color: AppColors.ink900,
                         fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
                       ),
                     ),
                     const TextSpan(text: '에 동의합니다.'),

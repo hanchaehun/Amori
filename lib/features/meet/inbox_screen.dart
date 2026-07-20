@@ -9,6 +9,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/amori_avatar.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/exit_guard.dart';
@@ -30,6 +31,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   final MatchRepository _matches = MatchRepository();
   bool _loading = true;
+  bool _error = false;
 
   /// 백엔드 목록을 받아왔는가. false면 더미 폴백 상태 — 수락도 로컬에서만 처리한다.
   bool _fromBackend = false;
@@ -57,6 +59,7 @@ class _InboxScreenState extends State<InboxScreen> {
       setState(() {
         _fromBackend = true;
         _loading = false;
+        _error = false;
         _active = convs
             .where(
               (c) =>
@@ -73,15 +76,16 @@ class _InboxScreenState extends State<InboxScreen> {
         _failed = failed;
       });
     } catch (e) {
-      debugPrint('inbox: GET /matches 실패 — 빈 상태로 표시: $e');
+      debugPrint('inbox: GET /matches 실패 — 에러 상태로 표시: $e');
       if (!mounted) return;
       setState(() {
         _fromBackend = false;
         _loading = false;
-        _active = [];
-        _scheduled = [];
-        _completed = [];
-        _failed = [];
+        // 네트워크 실패를 "인연 없음"으로 위장하지 않고 에러 상태로 노출한다.
+        // 단, 이미 목록이 있으면 유지(당겨서 새로고침 실패 시 통째로 지우지 않음).
+        if (_active.isEmpty && _scheduled.isEmpty && _completed.isEmpty) {
+          _error = true;
+        }
       });
     }
   }
@@ -263,7 +267,22 @@ class _InboxScreenState extends State<InboxScreen> {
                       ? const Center(child: CircularProgressIndicator())
                       : RefreshIndicator(
                           onRefresh: _load,
-                          child: _conversations.isEmpty
+                          child: (_error && _conversations.isEmpty)
+                              ? LayoutBuilder(
+                                  builder: (context, constraints) =>
+                                      SingleChildScrollView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        child: SizedBox(
+                                          height: constraints.maxHeight,
+                                          child: AmoriErrorState(
+                                            title: '연결 목록을 불러오지 못했어요',
+                                            onRetry: _load,
+                                          ),
+                                        ),
+                                      ),
+                                )
+                              : _conversations.isEmpty
                               ? LayoutBuilder(
                                   builder: (context, constraints) =>
                                       SingleChildScrollView(
