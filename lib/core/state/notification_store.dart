@@ -21,11 +21,17 @@ class AppNotification {
   final String route;
 }
 
+/// 알림 설정 화면의 4개 토글 — 저장 키/상태를 식별하는 값.
+enum NotificationSetting { all, vibration, simulationDone, conversation }
+
 /// 홈 알림 배지 — 프로필 완성 넛지 + 오늘의 질문을 기기에서 계산한다.
 ///
 /// 서버 알림함이 아니라 "지금 하면 좋은 일" 목록이라 저장소가 필요 없다.
 /// 읽음 처리는 항목 id 시그니처 단위: 같은 구성을 이미 봤으면 배지를 숨기고,
 /// 새 항목이 생기면(예: 다음날 데일리) 다시 표시한다.
+///
+/// 알림 설정 화면의 토글(전체/진동/시뮬완료/대화)은 여기에 함께 얹어
+/// SharedPreferences에 저장하고 화면 재진입 시 복원한다.
 class NotificationStore extends ChangeNotifier {
   NotificationStore._();
 
@@ -33,8 +39,26 @@ class NotificationStore extends ChangeNotifier {
 
   static const _seenKey = 'notifications.seen_signature';
 
+  // 알림 설정 토글 저장 키 — 기기에 남겨 재진입 시 복원한다.
+  static const _allKey = 'notifications.settings.all';
+  static const _vibrationKey = 'notifications.settings.vibration';
+  static const _simulationDoneKey = 'notifications.settings.simulation_done';
+  static const _conversationKey = 'notifications.settings.conversation';
+
   List<AppNotification> _items = const [];
   bool _seen = true;
+
+  // 알림 설정 토글 — 기본값은 모두 켜짐. hydrateSettings()가 저장값으로 덮어쓴다.
+  bool _settingsHydrated = false;
+  bool _allEnabled = true;
+  bool _vibrationEnabled = true;
+  bool _simulationDoneEnabled = true;
+  bool _conversationEnabled = true;
+
+  bool get allEnabled => _allEnabled;
+  bool get vibrationEnabled => _vibrationEnabled;
+  bool get simulationDoneEnabled => _simulationDoneEnabled;
+  bool get conversationEnabled => _conversationEnabled;
 
   List<AppNotification> get items => _items;
 
@@ -95,4 +119,47 @@ class NotificationStore extends ChangeNotifier {
     _seen = true;
     notifyListeners();
   }
+
+  /// 저장된 알림 설정을 복원한다 (알림 설정 화면 진입 시 호출). 최초 1회만 읽는다.
+  Future<void> hydrateSettings() async {
+    if (_settingsHydrated) return;
+    final prefs = await SharedPreferences.getInstance();
+    _allEnabled = prefs.getBool(_allKey) ?? true;
+    _vibrationEnabled = prefs.getBool(_vibrationKey) ?? true;
+    _simulationDoneEnabled = prefs.getBool(_simulationDoneKey) ?? true;
+    _conversationEnabled = prefs.getBool(_conversationKey) ?? true;
+    _settingsHydrated = true;
+    notifyListeners();
+  }
+
+  /// 토글 변경을 메모리에 즉시 반영하고 디스크에 저장한다.
+  /// 저장 성공 여부를 돌려준다 — 화면이 실패를 사용자에게 알릴 수 있게.
+  Future<bool> setSetting(NotificationSetting setting, bool value) async {
+    switch (setting) {
+      case NotificationSetting.all:
+        _allEnabled = value;
+      case NotificationSetting.vibration:
+        _vibrationEnabled = value;
+      case NotificationSetting.simulationDone:
+        _simulationDoneEnabled = value;
+      case NotificationSetting.conversation:
+        _conversationEnabled = value;
+    }
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyFor(setting), value);
+      return true;
+    } catch (_) {
+      // 디스크 저장 실패 — 화면이 스낵바로 알린다. 메모리 값은 유지해 크래시 없이 동작.
+      return false;
+    }
+  }
+
+  static String _keyFor(NotificationSetting setting) => switch (setting) {
+        NotificationSetting.all => _allKey,
+        NotificationSetting.vibration => _vibrationKey,
+        NotificationSetting.simulationDone => _simulationDoneKey,
+        NotificationSetting.conversation => _conversationKey,
+      };
 }

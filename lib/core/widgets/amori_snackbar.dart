@@ -12,15 +12,12 @@ enum AmoriSnackType { info, success, error }
 class AmoriSnackbar {
   AmoriSnackbar._();
 
-  static void show(
-    BuildContext context,
-    String message, {
-    AmoriSnackType type = AmoriSnackType.info,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
+  /// 화면 이동 후에도(컨텍스트가 사라진 뒤에도) 스낵바를 띄우기 위한 전역 키.
+  /// app.dart의 MaterialApp.scaffoldMessengerKey에 연결한다.
+  static final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
+  static SnackBar _snack(String message, AmoriSnackType type, Duration duration) {
     final (Color bg, IconData icon) = switch (type) {
       AmoriSnackType.success => (AppColors.ink900, Icons.check_circle_rounded),
       AmoriSnackType.error => (AppColors.danger, Icons.error_rounded),
@@ -31,34 +28,55 @@ class AmoriSnackbar {
       AmoriSnackType.error => Colors.white,
       AmoriSnackType.info => AppColors.secondary,
     };
+    return SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: bg,
+      elevation: 6,
+      duration: duration,
+      margin: const EdgeInsets.all(AppSpacing.md),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.rMd),
+      content: Row(
+        children: [
+          Icon(icon, color: accent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.bodySmall.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
+  static void show(
+    BuildContext context,
+    String message, {
+    AmoriSnackType type = AmoriSnackType.info,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
     messenger
       ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: bg,
-          elevation: 6,
-          duration: duration,
-          margin: const EdgeInsets.all(AppSpacing.md),
-          shape: const RoundedRectangleBorder(borderRadius: AppRadius.rMd),
-          content: Row(
-            children: [
-              Icon(icon, color: accent, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: AppTypography.bodySmall.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      ..showSnackBar(_snack(message, type, duration));
+  }
+
+  /// BuildContext 없이(화면 이동 후 등) 전역 키로 스낵바를 띄운다.
+  static void showGlobal(
+    String message, {
+    AmoriSnackType type = AmoriSnackType.info,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    final messenger = messengerKey.currentState;
+    if (messenger == null) return;
+    messenger
+      ..clearSnackBars()
+      ..showSnackBar(_snack(message, type, duration));
   }
 
   static void success(BuildContext context, String message) =>

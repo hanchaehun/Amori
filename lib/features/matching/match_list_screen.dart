@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_avatar.dart';
 import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
@@ -252,30 +253,7 @@ class _MatchCardState extends State<_MatchCard> {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      shape: BoxShape.circle,
-                      image: (m.photoUrl?.isNotEmpty ?? false)
-                          ? DecorationImage(
-                              image: NetworkImage(m.photoUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: (m.photoUrl?.isNotEmpty ?? false)
-                        ? null
-                        : Text(
-                            m.initial,
-                            style: AppTypography.titleMedium.copyWith(
-                              color: AppColors.ink700,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                  ),
+                  AmoriAvatar(initial: m.initial, photoUrl: m.photoUrl),
                   AppSpacing.hMd,
                   Expanded(
                     child: Text(

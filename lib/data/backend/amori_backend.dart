@@ -65,6 +65,15 @@ class AmoriBackend {
     }
   }
 
+  /// 비밀번호 재설정 메일 발송 — 에러는 signInWithEmail와 동일하게 한국어로 매핑.
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      throw BackendException(_authMessage(error), code: error.code);
+    }
+  }
+
   Future<void> signOut() async {
     AgentSessionStore.instance.reset();
     ProfileStore.instance.reset();

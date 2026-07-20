@@ -388,7 +388,7 @@ class _MessagePreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${name.substring(1)}님의 메시지',
+          '$name님의 메시지',
           style: AppTypography.caption
               .copyWith(color: AppColors.ink500, fontSize: 13),
         ),

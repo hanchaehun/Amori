@@ -12,6 +12,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/backend/scenario_answers_store.dart';
@@ -160,6 +161,11 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
             store.setDailyPersonaStatus(
               scenarioCode: previousCode,
               completedDate: null,
+            );
+            // 홈으로 이동한 뒤이므로 전역 스낵바로 실패를 알린다(무통지 방지).
+            AmoriSnackbar.showGlobal(
+              '오늘 질문을 저장하지 못했어요. 다시 시도해 주세요.',
+              type: AmoriSnackType.error,
             );
           }),
     );

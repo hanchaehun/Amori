@@ -156,8 +156,15 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.requestStatus,
-        pageBuilder: (context, state) =>
-            _fadePage(state, const RequestStatusScreen()),
+        pageBuilder: (context, state) {
+          final name = state.uri.queryParameters['name'];
+          return _fadePage(
+            state,
+            RequestStatusScreen(
+              targetName: (name == null || name.isEmpty) ? '상대' : name,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.requestDeclined,
@@ -188,8 +195,13 @@ class AppRouter {
       ),
       GoRoute(
         path: AppRoutes.feedback,
-        pageBuilder: (context, state) =>
-            _slidePage(state, const FeedbackScreen()),
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          FeedbackScreen(
+            partnerName: state.uri.queryParameters['name'],
+            matchId: state.uri.queryParameters['id'],
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.inbox,

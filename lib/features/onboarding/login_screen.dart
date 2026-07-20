@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
@@ -32,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _obscurePassword = true;
   bool _submitting = false;
+  bool _sendingReset = false;
   bool _keepLoggedIn = true;
   bool _saveEmail = false;
 
@@ -65,6 +67,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty) {
       _showError('이메일과 비밀번호를 입력하세요.');
+      return;
+    }
+
+    // Firebase 왕복 전에 형식부터 거른다 — 잘못된 이메일로 서버를 호출하지 않는다.
+    if (!_isEmailValid(_emailController.text.trim())) {
+      _showError('올바른 이메일 형식이 아니에요. (예: name@example.com)');
       return;
     }
 
@@ -110,6 +118,37 @@ class _LoginScreenState extends State<LoginScreen> {
       return AppRoutes.home;
     } catch (_) {
       return AppRoutes.home;
+    }
+  }
+
+  bool _isEmailValid(String email) {
+    final regex = RegExp(r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$');
+    return regex.hasMatch(email);
+  }
+
+  /// 비밀번호 재설정 — 화면의 이메일 필드 값을 그대로 쓴다.
+  Future<void> _sendPasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showError('이메일을 먼저 입력하세요.');
+      return;
+    }
+    if (!_isEmailValid(email)) {
+      _showError('올바른 이메일 형식이 아니에요. (예: name@example.com)');
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    setState(() => _sendingReset = true);
+    try {
+      await _backend.sendPasswordReset(email);
+      if (mounted) {
+        AmoriSnackbar.success(context, '재설정 메일을 보냈어요. 메일함을 확인해 주세요.');
+      }
+    } on BackendException catch (error) {
+      _showError(error.message);
+    } finally {
+      if (mounted) setState(() => _sendingReset = false);
     }
   }
 
@@ -165,6 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
             controller: _passwordController,
             obscureText: _obscurePassword,
             textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
             suffixIcon: IconButton(
               icon: Icon(
                 _obscurePassword
@@ -175,6 +215,24 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               onPressed: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
+            ),
+          ),
+          AppSpacing.vSm,
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed:
+                  (_submitting || _sendingReset) ? null : _sendPasswordReset,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                '비밀번호를 잊으셨나요?',
+                style:
+                    AppTypography.bodySmall.copyWith(color: AppColors.primary),
+              ),
             ),
           ),
           AppSpacing.vLg,
@@ -195,8 +253,9 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           AppSpacing.vXl,
           GradientButton(
-            label: _submitting ? '로그인 중...' : '로그인',
-            onPressed: _submitting ? null : _submit,
+            label: '로그인',
+            loading: _submitting,
+            onPressed: (_submitting || _sendingReset) ? null : _submit,
           ),
           AppSpacing.vMd,
           Center(

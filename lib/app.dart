@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/amori_snackbar.dart';
 
 class AmoriApp extends StatelessWidget {
   const AmoriApp({super.key});
@@ -12,6 +13,7 @@ class AmoriApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'amori',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: AmoriSnackbar.messengerKey,
       theme: AppTheme.light,
       routerConfig: AppRouter.router,
       locale: const Locale('ko', 'KR'),

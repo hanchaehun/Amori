@@ -280,6 +280,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword
@@ -295,19 +296,21 @@ class _SignupScreenState extends State<SignupScreen> {
               ],
             ),
           ),
-          if (!keyboardOpen) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                0,
-                AppSpacing.lg,
-                AppSpacing.md,
-              ),
-              child: GradientButton(
-                label: _submitting ? '계정 만드는 중...' : '계정 만들기',
-                onPressed: _submitting ? null : _submit,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.md,
             ),
+            child: GradientButton(
+              label: '계정 만들기',
+              loading: _submitting,
+              onPressed: _submitting ? null : _submit,
+            ),
+          ),
+          // 키보드가 열려도 제출 버튼은 위로 밀려 유지되고, 약관 문구만 접는다.
+          if (!keyboardOpen)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
               child: RichText(
@@ -338,7 +341,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
             ),
-          ],
         ],
       ),
     );

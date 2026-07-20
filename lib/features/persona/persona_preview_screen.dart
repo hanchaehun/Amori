@@ -6,6 +6,7 @@ import '../../core/router/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../data/repositories/persona_repository.dart';
 
 /// 페르소나 미리보기·수정 — "당신의 에이전트는 이렇게 말해요" (refatodo P0-C).
@@ -267,9 +268,7 @@ class _PersonaPreviewScreenState extends State<PersonaPreviewScreen> {
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
+          ? const AmoriLoader(message: '에이전트가 말할 준비를 하고 있어요…')
           : _loadError != null
           ? _ErrorBody(message: _loadError!, onRetry: _load, onSkip: _leave)
           : _body(),
