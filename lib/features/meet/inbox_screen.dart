@@ -159,13 +159,6 @@ class _InboxScreenState extends State<InboxScreen> {
     _InboxTab.completed => _completed,
   };
 
-  void _onSearch() {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('대화 검색 — 다음 턴 작업 예정')));
-  }
-
   Future<void> _onConversationTap(Conversation c) async {
     HapticFeedback.lightImpact();
     await context.push('${AppRoutes.chat}?id=${c.id}', extra: c);
@@ -249,7 +242,7 @@ class _InboxScreenState extends State<InboxScreen> {
           children: [
             Column(
               children: [
-                _TopBar(onSearch: _onSearch),
+                const _TopBar(),
                 _SubTabs(
                   active: _tab,
                   activeCount: _active.length,
@@ -376,8 +369,7 @@ class _FailedFab extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onSearch});
-  final VoidCallback onSearch;
+  const _TopBar();
 
   @override
   Widget build(BuildContext context) {
@@ -391,17 +383,6 @@ class _TopBar extends StatelessWidget {
         child: Row(
           children: [
             Text('연결된 인연', style: AppTypography.titleLarge),
-            const Spacer(),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(
-                Icons.search_rounded,
-                size: 22,
-                color: AppColors.ink900,
-              ),
-              onPressed: onSearch,
-            ),
           ],
         ),
       ),

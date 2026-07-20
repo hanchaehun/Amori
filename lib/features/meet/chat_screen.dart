@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/typing_dots.dart';
 import '../../data/api/api_exception.dart';
@@ -491,9 +493,111 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onMore() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('대화 옵션 (차단·신고 등) — 다음 턴 작업 예정')),
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.ink100,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _MoreOption(
+              icon: Icons.flag_outlined,
+              label: '신고하기',
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _onReport();
+              },
+            ),
+            _MoreOption(
+              icon: Icons.block_rounded,
+              label: '차단하기',
+              danger: true,
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _onBlock();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String body,
+    required String confirmLabel,
+    bool danger = false,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rLg),
+        title: Text(title, style: AppTypography.titleMedium),
+        content: Text(
+          body,
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.ink500,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ink500),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: danger ? AppColors.danger : AppColors.primary,
+            ),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _onReport() async {
+    final ok = await _confirm(
+      title: '이 대화를 신고할까요?',
+      body: '부적절한 행동이 있었다면 알려주세요. 접수 후 검토합니다.',
+      confirmLabel: '신고하기',
+      danger: true,
+    );
+    if (ok && mounted) {
+      AmoriSnackbar.success(context, '신고가 접수되었어요. 검토 후 조치할게요.');
+    }
+  }
+
+  Future<void> _onBlock() async {
+    final ok = await _confirm(
+      title: '$_displayName님을 차단할까요?',
+      body: '차단하면 서로의 대화가 더 이상 표시되지 않아요.',
+      confirmLabel: '차단하기',
+      danger: true,
+    );
+    if (ok && mounted) {
+      AmoriSnackbar.show(context, '차단했어요.');
+      if (context.canPop()) context.pop();
+    }
   }
 
   String get _displayName =>
@@ -1289,6 +1393,47 @@ class _InputBar extends StatelessWidget {
                     color: hasText ? Colors.white : AppColors.ink300,
                   ),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MoreOption extends StatelessWidget {
+  const _MoreOption({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? AppColors.danger : AppColors.ink900;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            AppSpacing.hMd,
+            Text(
+              label,
+              style: AppTypography.bodyLarge.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],

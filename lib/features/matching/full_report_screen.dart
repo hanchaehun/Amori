@@ -10,6 +10,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
@@ -45,7 +47,8 @@ class _FullReportScreenState extends State<FullReportScreen> {
   }
 
   /// 리포트·상대 프로필을 백엔드에서 병렬 로드 (실데이터 배선).
-  /// 개별 실패는 폴백(세션 스토어·기본 문구)으로 흡수한다.
+  /// 상대 프로필 실패는 폴백으로 흡수하되, 리포트 자체가 없으면 조작된
+  /// 더미를 보여주지 않고 에러 상태로 재시도를 유도한다.
   Future<void> _load() async {
     final id = widget.matchId;
     if (id == null || id.isEmpty) {
@@ -64,6 +67,11 @@ class _FullReportScreenState extends State<FullReportScreen> {
       _partner = results[1] as PartnerProfile?;
       _loading = false;
     });
+  }
+
+  void _reload() {
+    setState(() => _loading = true);
+    _load();
   }
 
   CompatibilityReport? get _report =>
@@ -88,9 +96,14 @@ class _FullReportScreenState extends State<FullReportScreen> {
 
   void _onShare() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('리포트 공유 — 다음 턴 작업 예정')));
+    final report = _report;
+    final summary = report == null
+        ? '나 × $_partnerName · amori 궁합 리포트'
+        : '나 × $_partnerName · 궁합 ${report.score}점\n'
+              '${report.findings.take(2).map((f) => '• ${f.title}').join('\n')}\n'
+              '— amori AI 프리데이팅';
+    Clipboard.setData(ClipboardData(text: summary));
+    AmoriSnackbar.success(context, '리포트 요약을 복사했어요.');
   }
 
   void _onRequestMeet() {
@@ -103,6 +116,10 @@ class _FullReportScreenState extends State<FullReportScreen> {
     return AppScaffold(
       appBar: BackAppBar(
         title: '리포트',
+        // 결제 후 go로 진입해 스택 루트가 된 경우에도 매칭 탭으로 나갈 수 있게.
+        onBack: () => context.canPop()
+            ? context.pop()
+            : context.go(AppRoutes.matchList),
         trailing: IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
@@ -114,54 +131,66 @@ class _FullReportScreenState extends State<FullReportScreen> {
           onPressed: _onShare,
         ),
       ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.coral),
-            )
-          : Column(
-        children: [
-          _HeroSection(
-            match: _match,
-            score: _score,
-            myPhotoUrl: ProfileStore.instance.profile?.photoUrl,
-            partnerPhotoUrl: _partner?.photoUrl,
-          ),
-          _TabBar(
-            active: _tabIndex,
-            tabs: _tabs,
-            onChange: (i) => setState(() => _tabIndex = i),
-          ),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              switchInCurve: Curves.easeOut,
-              transitionBuilder: (child, anim) =>
-                  FadeTransition(opacity: anim, child: child),
-              child: KeyedSubtree(
-                key: ValueKey(_tabIndex),
-                child: switch (_tabIndex) {
-                  0 => _SummaryTab(match: _match, report: _report),
-                  1 => _PartnerProfileTab(partner: _partner),
-                  _ => _GuideTab(match: _match, report: _report),
-                },
-              ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const AmoriLoader(message: '리포트를 불러오고 있어요');
+    }
+    final report = _report;
+    if (report == null) {
+      // 리포트를 못 받았을 때 조작된 더미를 보여주지 않는다(결제 신뢰 보호).
+      return AmoriErrorState(
+        title: '리포트를 불러오지 못했어요',
+        message: '잠시 후 다시 시도해 주세요. 요금은 다시 청구되지 않아요.',
+        onRetry: _reload,
+      );
+    }
+    return Column(
+      children: [
+        _HeroSection(
+          match: _match,
+          score: _score,
+          myPhotoUrl: ProfileStore.instance.profile?.photoUrl,
+          partnerPhotoUrl: _partner?.photoUrl,
+        ),
+        _TabBar(
+          active: _tabIndex,
+          tabs: _tabs,
+          onChange: (i) => setState(() => _tabIndex = i),
+        ),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOut,
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: KeyedSubtree(
+              key: ValueKey(_tabIndex),
+              child: switch (_tabIndex) {
+                0 => _SummaryTab(report: report),
+                1 => _PartnerProfileTab(partner: _partner),
+                _ => _GuideTab(report: report),
+              },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              0,
-              AppSpacing.lg,
-              AppSpacing.md,
-            ),
-            child: GradientButton(
-              label: '오프라인 만남 신청하기',
-              trailing: const GradientArrowTrailing(),
-              onPressed: _onRequestMeet,
-            ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.md,
           ),
-        ],
-      ),
+          child: GradientButton(
+            label: '오프라인 만남 신청하기',
+            trailing: const GradientArrowTrailing(),
+            onPressed: _onRequestMeet,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -368,25 +397,15 @@ class _TabBar extends StatelessWidget {
 }
 
 class _SummaryTab extends StatelessWidget {
-  const _SummaryTab({required this.match, this.report});
-  final MatchProfile match;
-  final CompatibilityReport? report;
-
-  static const _fallbackFindings = [
-    _Finding('🎵', '둘 다 인디 음악을 즐겨 들음', '취향 키워드: 잔잔한 멜로디, 어쿠스틱 기반'),
-    _Finding('📚', '비슷한 독서 취향', '에세이·소설을 주로 읽고, 자기계발서엔 거리감 있음'),
-    _Finding('🌱', '가치관: 안정성과 자유로움 균형 추구', '둘 다 큰 변화보다는 점진적 성장을 선호'),
-  ];
+  const _SummaryTab({required this.report});
+  final CompatibilityReport report;
 
   @override
   Widget build(BuildContext context) {
-    final findings = report != null
-        ? report!.findings
-            .map((f) => _Finding(f.emoji, f.title, f.detail))
-            .toList()
-        : _fallbackFindings;
-
-    final warnings = report?.warnings ?? [];
+    final findings = report.findings
+        .map((f) => _Finding(f.emoji, f.title, f.detail))
+        .toList();
+    final warnings = report.warnings;
 
     return ListView(
       physics: const BouncingScrollPhysics(),
@@ -406,28 +425,25 @@ class _SummaryTab extends StatelessWidget {
           _FindingCard(finding: f),
           AppSpacing.vSm,
         ],
-        AppSpacing.vMd,
-        Row(
-          children: [
-            const Text('⚠️', style: TextStyle(fontSize: 18)),
-            const SizedBox(width: 6),
-            Text(
-              '주의할 점',
-              style: AppTypography.titleMedium.copyWith(fontSize: 17),
-            ),
-          ],
-        ),
-        AppSpacing.vMd,
-        if (warnings.isNotEmpty)
+        // 주의할 점은 실제 리포트에 있을 때만 — 없으면 지어내지 않는다.
+        if (warnings.isNotEmpty) ...[
+          AppSpacing.vMd,
+          Row(
+            children: [
+              const Text('⚠️', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 6),
+              Text(
+                '주의할 점',
+                style: AppTypography.titleMedium.copyWith(fontSize: 17),
+              ),
+            ],
+          ),
+          AppSpacing.vMd,
           for (final w in warnings) ...[
             _WarningCard(title: w.title, body: w.detail),
             AppSpacing.vSm,
-          ]
-        else
-          const _WarningCard(
-            title: '대화 페이스 차이',
-            body: '상대가 다소 빠른 편 — 충분히 듣고 답하는 시간을 가져보세요',
-          ),
+          ],
+        ],
       ],
     );
   }
@@ -670,37 +686,16 @@ class _PartnerProfileTab extends StatelessWidget {
 }
 
 class _GuideTab extends StatelessWidget {
-  const _GuideTab({required this.match, this.report});
-  final MatchProfile match;
-  final CompatibilityReport? report;
-
-  static const _fallbackPlaces = [
-    _GuideItem('🍵', '조용한 동네 카페', '대화 페이스에 맞는 차분한 분위기'),
-    _GuideItem('🌳', '연남동 산책 코스', '걸으며 자연스럽게 대화 — 첫 만남 부담 ↓'),
-    _GuideItem('🖼', '작은 독립 전시', '취향 공통분모(독서·예술)를 자연스럽게 공유'),
-  ];
-
-  static const _fallbackStarters = [
-    '"최근에 본 전시 중에 가장 기억에 남는 거 있어요?"',
-    '"인디 추천해주실 만한 거 있나요? 요즘 새로 듣고 싶은데요."',
-    '"여행 가서 꼭 들르는 카페 같은 거 있어요?"',
-  ];
+  const _GuideTab({required this.report});
+  final CompatibilityReport report;
 
   @override
   Widget build(BuildContext context) {
-    final places = report != null
-        ? report!.recommendedPlaces
-            .map((p) => _GuideItem(p.emoji, p.title, p.detail))
-            .toList()
-        : _fallbackPlaces;
-
-    final starters = report?.conversationStarters.isNotEmpty == true
-        ? report!.conversationStarters
-        : _fallbackStarters;
-
-    final tip = report?.tip.isNotEmpty == true
-        ? report!.tip
-        : '상대는 응답 속도가 빠른 편이에요. 침묵을 어색해하지 마세요 — 본인 페이스로 답해도 충분히 매력적으로 받아들여집니다.';
+    final places = report.recommendedPlaces
+        .map((p) => _GuideItem(p.emoji, p.title, p.detail))
+        .toList();
+    final starters = report.conversationStarters;
+    final tip = report.tip;
 
     return ListView(
       physics: const BouncingScrollPhysics(),
@@ -711,19 +706,24 @@ class _GuideTab extends StatelessWidget {
         AppSpacing.md,
       ),
       children: [
-        Text('추천 장소', style: AppTypography.titleMedium.copyWith(fontSize: 17)),
-        AppSpacing.vMd,
-        for (final p in places) ...[_GuideCard(item: p), AppSpacing.vSm],
-        AppSpacing.vLg,
-        Text('대화 시작법', style: AppTypography.titleMedium.copyWith(fontSize: 17)),
-        AppSpacing.vMd,
-        for (final s in starters) ...[
-          _StarterCard(text: s),
-          AppSpacing.vSm,
+        if (places.isNotEmpty) ...[
+          Text('추천 장소',
+              style: AppTypography.titleMedium.copyWith(fontSize: 17)),
+          AppSpacing.vMd,
+          for (final p in places) ...[_GuideCard(item: p), AppSpacing.vSm],
+          AppSpacing.vLg,
         ],
-        AppSpacing.vLg,
-        _TipCard(title: '한 가지 팁', body:
-              tip),
+        if (starters.isNotEmpty) ...[
+          Text('대화 시작법',
+              style: AppTypography.titleMedium.copyWith(fontSize: 17)),
+          AppSpacing.vMd,
+          for (final s in starters) ...[
+            _StarterCard(text: s),
+            AppSpacing.vSm,
+          ],
+          AppSpacing.vLg,
+        ],
+        if (tip.isNotEmpty) _TipCard(title: '한 가지 팁', body: tip),
       ],
     );
   }
