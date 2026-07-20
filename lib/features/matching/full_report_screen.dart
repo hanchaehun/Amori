@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_avatar.dart';
 import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/app_scaffold.dart';
@@ -308,31 +309,18 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
-    return Container(
-      width: 36,
-      height: 36,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        shape: BoxShape.circle,
-        image: hasPhoto
-            ? DecorationImage(
-                image: NetworkImage(photoUrl!),
-                fit: BoxFit.cover,
-              )
-            : null,
+    // AmoriAvatar가 로딩/실패 시 이니셜로 폴백한다
+    // (DecorationImage(NetworkImage)는 실패해도 빈 회색 원만 남았다).
+    return AmoriAvatar(
+      initial: initial,
+      photoUrl: photoUrl,
+      size: 36,
+      backgroundColor: AppColors.surfaceMuted,
+      initialStyle: AppTypography.label.copyWith(
+        color: AppColors.ink700,
+        fontWeight: FontWeight.w900,
+        fontSize: 14,
       ),
-      child: hasPhoto
-          ? null
-          : Text(
-              initial,
-              style: AppTypography.label.copyWith(
-                color: AppColors.ink700,
-                fontWeight: FontWeight.w900,
-                fontSize: 14,
-              ),
-            ),
     );
   }
 }
@@ -593,30 +581,16 @@ class _PartnerProfileTab extends StatelessWidget {
                 : null,
             child: Hero(
               tag: 'partner-photo-${photo ?? p.displayName}',
-              child: Container(
-                width: 96,
-                height: 96,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.coral.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                  image: (photo != null && photo.isNotEmpty)
-                      ? DecorationImage(
-                          image: NetworkImage(photo),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
+              // AmoriAvatar가 로딩/실패 시 이니셜로 폴백한다.
+              child: AmoriAvatar(
+                initial:
+                    p.displayName.isEmpty ? '?' : p.displayName.substring(0, 1),
+                photoUrl: photo,
+                size: 96,
+                backgroundColor: AppColors.coral.withValues(alpha: 0.10),
+                initialStyle: AppTypography.titleXl.copyWith(
+                  color: AppColors.coral,
                 ),
-                child: (photo == null || photo.isEmpty)
-                    ? Text(
-                        p.displayName.isEmpty
-                            ? '?'
-                            : p.displayName.substring(0, 1),
-                        style: AppTypography.titleXl.copyWith(
-                          color: AppColors.coral,
-                        ),
-                      )
-                    : null,
               ),
             ),
           ),

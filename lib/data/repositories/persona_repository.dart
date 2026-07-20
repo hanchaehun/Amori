@@ -71,6 +71,7 @@ class PersonaDetail {
     required this.voiceConfidence,
     required this.attachmentHint,
     required this.psychVisible,
+    required this.voiceStats,
   });
 
   final List<PersonaTraitView> traits;
@@ -83,6 +84,67 @@ class PersonaDetail {
 
   /// 심리 카드 표시 여부 — 사용자가 숨길 수 있다 (프라이버시 원칙).
   final bool psychVisible;
+
+  /// 코드가 실측한 말투 통계의 사람 읽기 요약 — 없으면 아직 표본 부족.
+  final VoiceStatsView? voiceStats;
+}
+
+/// voice_stats(백엔드 코드 산출)를 미리보기에서 보여줄 사람 읽기 요약으로 변환.
+/// LLM 추측이 아니라 실측값이라 "에이전트가 내 말투를 얼마나 아는지"의 근거가 된다.
+class VoiceStatsView {
+  const VoiceStatsView({required this.sampleCount, required this.summaryLines});
+
+  final int sampleCount;
+  final List<String> summaryLines;
+
+  bool get hasData => sampleCount > 0 && summaryLines.isNotEmpty;
+
+  factory VoiceStatsView.fromJson(Map<String, dynamic> j) {
+    final lines = <String>[];
+    final sampleCount = (j['sample_count'] as num?)?.toInt() ?? 0;
+
+    final fr =
+        (j['formality_ratio'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final jon = (fr['존댓말'] as num?)?.toDouble() ?? 0;
+    final ban = (fr['반말'] as num?)?.toDouble() ?? 0;
+    if (jon + ban > 0) {
+      lines.add(
+        jon >= ban
+            ? '존댓말을 주로 써요 (${(jon * 100).round()}%)'
+            : '반말을 주로 써요 (${(ban * 100).round()}%)',
+      );
+    }
+
+    final laugh = (j['laugh'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final token = laugh['token'] as String? ?? '';
+    final laughPer = (laugh['per_msg'] as num?)?.toDouble() ?? 0;
+    final avgRun = (laugh['avg_run'] as num?)?.toDouble() ?? 0;
+    if (token.isNotEmpty && laughPer > 0) {
+      final run = avgRun >= 2 ? '${avgRun.round()}연속 ' : '';
+      lines.add("웃음은 '$token' $run자주 써요");
+    } else {
+      lines.add('웃음 표현은 거의 안 써요');
+    }
+
+    final emoji = (j['emoji'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final emojiPer = (emoji['per_msg'] as num?)?.toDouble() ?? 0;
+    final inv =
+        (emoji['inventory'] as List?)?.whereType<String>().toList() ?? const [];
+    if (emojiPer > 0 && inv.isNotEmpty) {
+      lines.add('이모지를 써요 (${inv.take(3).join(' ')})');
+    } else {
+      lines.add('이모지는 거의 안 써요');
+    }
+
+    final len = (j['len_chars'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final p50 = (len['p50'] as num?)?.toInt() ?? 0;
+    if (p50 > 0) lines.add('문장 길이는 보통 $p50자 안팎');
+
+    final qr = (j['question_ratio'] as num?)?.toDouble() ?? 0;
+    if (qr >= 0.25) lines.add('대화 중 자주 되묻는 편');
+
+    return VoiceStatsView(sampleCount: sampleCount, summaryLines: lines);
+  }
 }
 
 class PreviewUtterance {
@@ -136,6 +198,7 @@ class PersonaRepository {
     final json = await _api.getJson('/persona/me') as Map<String, dynamic>;
     final speech = json['speech_style'] as Map<String, dynamic>? ?? const {};
     final psych = json['psych_profile'] as Map<String, dynamic>? ?? const {};
+    final voiceStatsJson = json['voice_stats'] as Map<String, dynamic>?;
     return PersonaDetail(
       traits: (json['traits'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -146,6 +209,9 @@ class PersonaRepository {
       voiceConfidence: (json['voice_confidence'] as num?)?.toDouble(),
       attachmentHint: psych['attachment_hint'] as String? ?? '',
       psychVisible: psych['user_visible'] as bool? ?? true,
+      voiceStats: voiceStatsJson == null
+          ? null
+          : VoiceStatsView.fromJson(voiceStatsJson),
     );
   }
 

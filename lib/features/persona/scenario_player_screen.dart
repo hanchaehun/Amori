@@ -71,6 +71,13 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     return true;
   }
 
+  /// 주관식에 뭔가 쓰긴 했는데 최소 길이 미달 — 왜 못 넘어가는지 안내한다.
+  bool get _freeTextTooShort {
+    if (!_current.isFreeText) return false;
+    final answer = (_answers[_index] ?? '').trim();
+    return answer.isNotEmpty && answer.length < _minFreeTextLength;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -267,13 +274,28 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
                       ),
                     ),
                     AppSpacing.vMd,
-                    if (_current.isFreeText)
+                    if (_current.isFreeText) ...[
                       _FreeTextCard(
                         controller: _freeTextController,
                         hint: _current.hint ?? '평소 말투 그대로 써주세요',
                         onChanged: _onFreeTextChanged,
-                      )
-                    else
+                      ),
+                      if (_freeTextTooShort) ...[
+                        AppSpacing.vXs,
+                        Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded,
+                                size: 14, color: AppColors.ink500),
+                            const SizedBox(width: 4),
+                            Text(
+                              '조금만 더 써주세요 (최소 $_minFreeTextLength자)',
+                              style: AppTypography.caption
+                                  .copyWith(color: AppColors.ink500),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ] else
                       for (final c in _current.choices) ...[
                         _ChoiceCard(
                           letter: c.letter,

@@ -26,7 +26,7 @@ const kRegions = [
   '제주',
 ];
 
-/// 지역 선택 바텀시트. 선택한 지역을 반환하고, 닫으면 null.
+/// 지역 선택 바텀시트. 선택한 지역을 반환하고, "선택 안 함"은 빈 문자열, 닫으면 null.
 Future<String?> showRegionSheet(BuildContext context, {String? current}) {
   return showModalBottomSheet<String>(
     context: context,
@@ -69,7 +69,7 @@ class _RegionSheet extends StatelessWidget {
             Text('활동 지역', style: AppTypography.titleLarge),
             AppSpacing.vXs,
             Text(
-              '주로 활동하는 지역을 선택하면 가까운 상대와 먼저 매칭돼요.',
+              '주로 활동하는 지역을 선택하면 같은 지역의 상대와 매칭돼요.',
               style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
             ),
             AppSpacing.vLg,
@@ -88,6 +88,21 @@ class _RegionSheet extends StatelessWidget {
                   ),
               ],
             ),
+            if (current != null && current!.isNotEmpty) ...[
+              AppSpacing.vMd,
+              TextButton(
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  Navigator.of(context).pop('');
+                },
+                child: Text(
+                  '선택 안 함',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.ink500,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

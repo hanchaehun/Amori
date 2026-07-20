@@ -37,17 +37,17 @@ class _WalkthroughScreenState extends State<WalkthroughScreen> {
   static const List<_WalkPage> _pages = [
     _WalkPage(
       title: 'AI가 먼저\n만나봅니다',
-      body: '내 AI 에이전트가 다른 에이전트들과 자동\n가상 소개팅을 진행해요. 앱을 닫아도 24\n시간 실행돼요.',
+      body: '내 AI 에이전트가 다른 에이전트들과 자동 가상 소개팅을 진행해요. 앱을 닫아도 24시간 실행돼요.',
       illustration: _AgentMeetIllustration(),
     ),
     _WalkPage(
       title: '잘 맞는 인연만\n골라드려요',
-      body: 'AI가 수많은 대화를 거쳐, 정말 잘 통할\n사람만 리포트로 알려드립니다.',
+      body: 'AI가 수많은 대화를 거쳐, 정말 잘 통할 사람만 리포트로 알려드립니다.',
       illustration: _MatchIllustration(),
     ),
     _WalkPage(
       title: '내가 마음을 열면\n그때 연결돼요',
-      body: '리포트를 보고 만남을 신청하면\n진짜 대화가 시작됩니다.',
+      body: '리포트를 보고 만남을 신청하면 진짜 대화가 시작됩니다.',
       illustration: _ConnectIllustration(),
     ),
   ];
