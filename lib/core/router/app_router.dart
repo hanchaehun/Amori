@@ -271,8 +271,7 @@ class AppRouter {
         ),
       ),
     ],
-    errorBuilder: (context, state) =>
-        _ComingSoon(title: 'Route not found: ${state.uri}'),
+    errorBuilder: (context, state) => const _NotFoundScreen(),
   );
 
   static CustomTransitionPage<T> _fadePage<T>(
@@ -320,9 +319,9 @@ class AppRouter {
   }
 }
 
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({required this.title});
-  final String title;
+/// 알 수 없는 경로 진입 시의 폴백 — 개발용 "곧 만들어집니다" 대신 정직한 404.
+class _NotFoundScreen extends StatelessWidget {
+  const _NotFoundScreen();
 
   void _back(BuildContext context) {
     if (context.canPop()) {
@@ -344,9 +343,9 @@ class _ComingSoon extends StatelessWidget {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           color: AppColors.ink900,
+          tooltip: '뒤로',
           onPressed: () => _back(context),
         ),
-        title: Text(title, style: AppTypography.titleMedium),
         centerTitle: true,
       ),
       body: Center(
@@ -354,20 +353,25 @@ class _ComingSoon extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(
-              Icons.construction_rounded,
+              Icons.explore_off_rounded,
               size: 56,
               color: AppColors.ink300,
             ),
             const SizedBox(height: 16),
             Text(
-              '곧 만들어집니다',
-              style: AppTypography.bodyLarge.copyWith(color: AppColors.ink500),
+              '페이지를 찾을 수 없어요',
+              style: AppTypography.titleMedium.copyWith(color: AppColors.ink700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '요청하신 화면으로 이동할 수 없어요.',
+              style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
             ),
             const SizedBox(height: 32),
             TextButton.icon(
               onPressed: () => _back(context),
-              icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              label: const Text('돌아가기'),
+              icon: const Icon(Icons.home_rounded, size: 16),
+              label: const Text('홈으로'),
               style: TextButton.styleFrom(foregroundColor: AppColors.primary),
             ),
           ],
