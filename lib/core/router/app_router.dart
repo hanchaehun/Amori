@@ -26,6 +26,7 @@ import '../../features/meet/quota_exceeded_screen.dart';
 import '../../features/meet/request_declined_screen.dart';
 import '../../features/meet/request_status_screen.dart';
 import '../../features/meet/request_timeout_screen.dart';
+import '../../features/legal/legal_screen.dart';
 import '../../features/persona/persona_intro_screen.dart';
 import '../../features/persona/persona_loading_screen.dart';
 import '../../features/persona/persona_preview_screen.dart';
@@ -233,6 +234,29 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.login,
         pageBuilder: (context, state) => _slidePage(state, const LoginScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.terms,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          const LegalScreen(
+            title: '이용약관',
+            effectiveDate: '2026년 7월 20일',
+            sections: LegalScreen.terms,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.privacy,
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          const LegalScreen(
+            title: '개인정보처리방침',
+            effectiveDate: '2026년 7월 20일',
+            intro: 'amori는 회원의 개인정보를 소중히 여기며 관련 법령을 준수합니다.',
+            sections: LegalScreen.privacy,
+          ),
+        ),
       ),
     ],
     errorBuilder: (context, state) =>

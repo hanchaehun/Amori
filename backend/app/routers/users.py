@@ -7,14 +7,14 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.firebase import get_current_user
 from app.dependencies import get_db
 from app.llm.psych_mapping import valid_mbti
 from app.matching.ranker import ADULT_AGE, age_years
-from app.models.database import User
+from app.models.database import Feedback, LLMCallLog, Match, User
 from app.services.booking import get_booked_matches
 
 router = APIRouter()
@@ -166,6 +166,40 @@ async def upsert_my_profile(
         photo_url=user_obj.photo_url,
         available_slots=user_obj.available_slots or [],
     )
+
+
+@router.delete("/me")
+async def delete_my_account(
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """회원 탈퇴 — 사용자의 도메인 데이터를 실제로 삭제한다.
+
+    - 참가한 matches 삭제 → FK CASCADE로 simulation_jobs·chat_messages·
+      reports·meet_requests·해당 매치 feedback까지 연쇄 정리.
+    - users 삭제 → CASCADE로 personas 정리.
+    - user_id로만 연결된 feedback·llm_call_logs는 명시 삭제.
+
+    Firebase Auth 계정 삭제는 클라이언트가 재인증 후 처리한다.
+    """
+    uid = user["uid"]
+
+    matches = await db.execute(
+        select(Match).where(Match.participant_ids.any(uid))
+    )
+    for match in matches.scalars().all():
+        await db.delete(match)  # CASCADE: sim/chat/report/meet/feedback
+
+    await db.execute(delete(Feedback).where(Feedback.user_id == uid))
+    await db.execute(delete(LLMCallLog).where(LLMCallLog.user_id == uid))
+
+    result = await db.execute(select(User).where(User.id == uid))
+    user_obj = result.scalar_one_or_none()
+    if user_obj:
+        await db.delete(user_obj)  # CASCADE: personas
+
+    await db.commit()
+    return {"deleted": True}
 
 
 @router.get("/me", response_model=UserProfileResponse)

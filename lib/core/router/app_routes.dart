@@ -39,6 +39,10 @@ class AppRoutes {
   static const String notificationSettings = '/settings/notifications';
   static const String pushPreview = '/push';
 
+  // Legal
+  static const String terms = '/legal/terms';
+  static const String privacy = '/legal/privacy';
+
   // Login (placeholder)
   static const String login = '/login';
 

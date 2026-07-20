@@ -71,6 +71,22 @@ class AmoriBackend {
     await _auth.signOut();
   }
 
+  /// 회원 탈퇴 마무리 — 세션 스토어를 비우고 Firebase Auth 계정을 삭제한다.
+  /// (서버 도메인 데이터 삭제는 UserRepository.deleteAccount가 선행한다.)
+  /// Firebase 삭제가 재인증을 요구하거나 실패해도 최소한 로그아웃은 보장해
+  /// 탈퇴 흐름이 막다른 길이 되지 않게 한다(베스트에포트).
+  Future<void> deleteAccount() async {
+    AgentSessionStore.instance.reset();
+    ProfileStore.instance.reset();
+    final user = _auth.currentUser;
+    if (user == null) return; // DEV_UID 우회 모드 등
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (_) {
+      await _auth.signOut();
+    }
+  }
+
   Future<String?> getFcmToken() => _messaging.getToken();
 
   String _authMessage(FirebaseAuthException error) => switch (error.code) {

@@ -161,6 +161,12 @@ class UserRepository {
     });
   }
 
+  /// 회원 탈퇴 — 서버의 도메인 데이터(페르소나·매치·대화·리포트 등)를 삭제한다.
+  /// Firebase Auth 계정 삭제는 [AmoriBackend.deleteAccount]가 이어서 처리한다.
+  Future<void> deleteAccount() async {
+    await _api.deleteJson('/users/me');
+  }
+
   /// 내 프로필 조회 — 프로필 화면의 이름·나이·지역 표시용.
   Future<MyProfile> fetchMe() async {
     final json = await _api.getJson('/users/me') as Map<String, dynamic>;

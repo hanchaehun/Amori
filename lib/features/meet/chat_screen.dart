@@ -342,7 +342,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: days.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (_, i) {
                       final d = days[i];
                       final selected = day == d;

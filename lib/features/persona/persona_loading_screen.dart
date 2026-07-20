@@ -8,6 +8,7 @@ import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/gradient_button.dart';
 import '../../data/repositories/agent_flow.dart';
 
 class PersonaLoadingScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
   late final AnimationController _progress;
 
   bool _leaving = false;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -41,8 +43,13 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
     // 이 화면은 페르소나 생성까지만 책임진다 — 매칭·시뮬레이션은 백엔드
     // 스케줄러가 하루 랜덤 N회 알아서 실행한다 (services/auto_sim.py).
     AgentSessionStore.instance.addListener(_onPhaseChanged);
+    _start();
+  }
+
+  void _start() {
     AgentFlow().run().whenComplete(() {
       // 단계 신호를 못 받는 경로(조기 실패 등) 안전망.
+      // 실패로 이미 에러 화면을 띄운 경우엔 _finish가 스스로 무시한다.
       if (mounted) _finish();
     });
     _crawlTo(0.90, const Duration(seconds: 50)); // buildingPersona 진입 전 시작
@@ -57,11 +64,26 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
       case AgentFlowPhase.simulating:
       case AgentFlowPhase.reporting:
       case AgentFlowPhase.done:
-      case AgentFlowPhase.failed:
         _finish();
+      case AgentFlowPhase.failed:
+        // 생성 실패 — 100%·"완료" 위장 없이 전용 에러 상태를 노출한다.
+        _onFailed();
       case AgentFlowPhase.idle:
         break;
     }
+  }
+
+  void _onFailed() {
+    if (_leaving || _failed) return;
+    _progress.stop();
+    setState(() => _failed = true);
+  }
+
+  void _retry() {
+    if (_leaving) return;
+    setState(() => _failed = false);
+    _progress.value = 0.0;
+    _start();
   }
 
   /// easeOut 크롤 — 처음엔 빠르게, 목표치 근처에선 거의 멈춘 듯 기어간다.
@@ -72,7 +94,11 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
   }
 
   Future<void> _finish() async {
-    if (_leaving) return;
+    // 실패 상태에서는 완료 애니메이션·이동을 하지 않는다(위장 방지).
+    if (_leaving || _failed ||
+        AgentSessionStore.instance.phase == AgentFlowPhase.failed) {
+      return;
+    }
     _leaving = true;
     await _progress.animateTo(
       1.0,
@@ -92,13 +118,15 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
 
   void _goHome() {
     if (!mounted) return;
-    // 생성 성공 시 미리보기·수정으로 — 첫인상에서 "나 같은지" 직접 확인·교정
-    // (refatodo P0-C). 실패 경로는 페르소나가 없을 수 있어 홈으로.
-    if (AgentSessionStore.instance.phase == AgentFlowPhase.failed) {
-      context.go(AppRoutes.home);
-    } else {
-      context.go('${AppRoutes.personaPreview}?from=onboarding');
-    }
+    // 성공 경로 전용 — 미리보기·수정으로 이동해 첫인상에서 "나 같은지"
+    // 직접 확인·교정한다 (refatodo P0-C). 실패는 _onFailed가 처리한다.
+    context.go('${AppRoutes.personaPreview}?from=onboarding');
+  }
+
+  /// "나중에" — 답변은 ScenarioAnswersStore에 남아 있어 나중에 다시 시도할 수 있다.
+  void _goLater() {
+    if (!mounted) return;
+    context.go(AppRoutes.home);
   }
 
   String _stageFor(double t) {
@@ -124,7 +152,9 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
           body: Container(
             decoration: BoxDecoration(gradient: amori.primaryGradient),
             child: SafeArea(
-              child: Stack(
+              child: _failed
+                  ? _FailureBody(onRetry: _retry, onLater: _goLater)
+                  : Stack(
                 children: [
                   AnimatedBuilder(
                     animation: Listenable.merge([_pulse, _progress]),
@@ -192,6 +222,70 @@ class _PersonaLoadingScreenState extends State<PersonaLoadingScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FailureBody extends StatelessWidget {
+  const _FailureBody({required this.onRetry, required this.onLater});
+
+  final VoidCallback onRetry;
+  final VoidCallback onLater;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.16),
+            ),
+            child: const Icon(
+              Icons.sentiment_dissatisfied_rounded,
+              size: 48,
+              color: Colors.white,
+            ),
+          ),
+          AppSpacing.vXl,
+          Text(
+            '에이전트 생성에 실패했어요',
+            textAlign: TextAlign.center,
+            style: AppTypography.titleXl.copyWith(color: Colors.white),
+          ),
+          AppSpacing.vMd,
+          Text(
+            '네트워크가 잠시 불안정했을 수 있어요.\n답변은 그대로 남아 있으니 다시 시도해 주세요.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMedium.copyWith(
+              color: Colors.white.withValues(alpha: 0.85),
+              height: 1.5,
+            ),
+          ),
+          AppSpacing.vXxl,
+          WhiteSurfaceButton(label: '다시 시도', onPressed: onRetry),
+          AppSpacing.vSm,
+          TextButton(
+            onPressed: onLater,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: Text(
+              '나중에 할게요',
+              style: AppTypography.bodyMedium.copyWith(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

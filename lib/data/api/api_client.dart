@@ -12,10 +12,16 @@ import 'api_exception.dart';
 /// 모든 요청에 Firebase ID 토큰을 Bearer 헤더로 싣고,
 /// 표준 에러 응답을 [ApiException]으로 변환한다.
 class ApiClient {
-  ApiClient({FirebaseAuth? auth, http.Client? httpClient, Duration? readTimeout})
-    : _auth = auth,
-      _http = httpClient ?? http.Client(),
-      _readTimeout = readTimeout ?? const Duration(seconds: 15);
+  ApiClient({
+    FirebaseAuth? auth,
+    http.Client? httpClient,
+    Duration? readTimeout,
+    Duration? coldStartTimeout,
+  }) : _auth = auth,
+       _http = httpClient ?? http.Client(),
+       _readTimeout = readTimeout ?? const Duration(seconds: 15),
+       _coldStartTimeout =
+           coldStartTimeout ?? const Duration(seconds: 90);
 
   /// 앱 전역 공유 인스턴스 — 리포지토리마다 http.Client를 새로 만들면
   /// keep-alive 커넥션 재사용이 안 된다. 테스트는 생성자 주입으로 대체.
@@ -30,7 +36,8 @@ class ApiClient {
 
   /// Render 무료 티어 콜드스타트(~60초) — 유휴 후 첫 GET이 15초에 끊기면
   /// 서버가 깨어나는 중일 수 있으니 한 번만 길게 재시도한다.
-  static const _coldStartTimeout = Duration(seconds: 90);
+  /// (테스트는 생성자 주입으로 짧게 대체 — 무응답 연결에서 오래 매달리지 않게.)
+  final Duration _coldStartTimeout;
 
   /// 일반 조회/갱신 — 서버 도달 불가 시 화면이 폴백/에러를 빨리 보여줄 수 있게 짧게.
   final Duration _readTimeout;
@@ -111,6 +118,14 @@ class ApiClient {
     final response = await _send(
       _http.patch(_uri(path), headers: await _headers(), body: jsonEncode(body)),
       _llmTimeout,
+    );
+    return _decode(response);
+  }
+
+  Future<dynamic> deleteJson(String path) async {
+    final response = await _send(
+      _http.delete(_uri(path), headers: await _headers()),
+      _readTimeout,
     );
     return _decode(response);
   }

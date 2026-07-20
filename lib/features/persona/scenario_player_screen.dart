@@ -456,14 +456,6 @@ class _SituationCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
-              Text(
-                scenario.code,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.ink500,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
             ],
           ),
           AppSpacing.vMd,
