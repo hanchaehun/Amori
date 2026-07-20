@@ -109,7 +109,9 @@ async def upsert_my_profile(
     if body.interest_gender is not None:
         user_obj.interest_gender = body.interest_gender
     if body.region is not None:
-        user_obj.region = body.region
+        # 빈 문자열은 "지역 미설정" 의도 — None으로 정규화 (프로필 시트의
+        # '선택 안 함'과 정합, 매칭 쿼리가 빈 지역을 무시하도록).
+        user_obj.region = body.region or None
     if body.match_age_older is not None:
         user_obj.match_age_older = body.match_age_older
     if body.match_age_younger is not None:
@@ -131,18 +133,21 @@ async def upsert_my_profile(
             user_obj.mbti = normalized
     if body.bio is not None:
         user_obj.bio = body.bio.strip() or None
-    if body.photo_url is not None and body.photo_url != "":
-        # 상대방 앱에서 그대로 로드되는 URL — https만 허용 (보안 점검 7/15)
-        if not body.photo_url.startswith("https://"):
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error_code": "INVALID_PHOTO_URL",
-                    "message": "사진 URL은 https여야 합니다.",
-                },
-            )
     if body.photo_url is not None:
-        user_obj.photo_url = body.photo_url
+        # 빈 문자열은 "사진 삭제" 의도로 보고 None 처리 (bio와 동일 규칙).
+        if body.photo_url == "":
+            user_obj.photo_url = None
+        else:
+            # 상대방 앱에서 그대로 로드되는 URL — https만 허용 (보안 점검 7/15)
+            if not body.photo_url.startswith("https://"):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error_code": "INVALID_PHOTO_URL",
+                        "message": "사진 URL은 https여야 합니다.",
+                    },
+                )
+            user_obj.photo_url = body.photo_url
     if body.fcm_token is not None:
         user_obj.fcm_token = body.fcm_token
     if body.available_slots is not None:
