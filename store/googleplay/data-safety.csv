@@ -8,15 +8,15 @@ PSL_SUPPORTED_ACCOUNT_CREATION_METHODS,PSL_ACM_OAUTH,,MULTIPLE_CHOICE,다음 중
 PSL_SUPPORTED_ACCOUNT_CREATION_METHODS,PSL_ACM_OTHER,,MULTIPLE_CHOICE,다음 중 앱에서 지원하는 계정 생성 방법은 무엇인가요? 해당되는 항목을 모두 선택해 주세요./기타
 PSL_SUPPORTED_ACCOUNT_CREATION_METHODS,PSL_ACM_NONE,,MULTIPLE_CHOICE,다음 중 앱에서 지원하는 계정 생성 방법은 무엇인가요? 해당되는 항목을 모두 선택해 주세요./앱에서 사용자가 계정을 만들도록 허용하지 않음
 PSL_ACM_SPECIFY,,,MAYBE_REQUIRED,앱에서 지원하는 계정 생성 방법 설명
-PSL_ACCOUNT_DELETION_URL,,,MAYBE_REQUIRED,사용자가 계정 및 관련 데이터의 삭제를 요청하는 데 사용할 수 있는 링크 추가 
+PSL_ACCOUNT_DELETION_URL,,https://vience.co.kr/amori/account-deletion,MAYBE_REQUIRED,사용자가 계정 및 관련 데이터의 삭제를 요청하는 데 사용할 수 있는 링크 추가 
 PSL_SUPPORT_DATA_DELETION_BY_USER,DATA_DELETION_YES,true,SINGLE_CHOICE,사용자가 데이터 삭제를 요청할 수 있는 방편을 제공하나요?/예
 PSL_SUPPORT_DATA_DELETION_BY_USER,DATA_DELETION_NO,,SINGLE_CHOICE,사용자가 데이터 삭제를 요청할 수 있는 방편을 제공하나요?/아니요
 PSL_SUPPORT_DATA_DELETION_BY_USER,DATA_DELETION_NO_AUTO_DELETED,,SINGLE_CHOICE,사용자가 데이터 삭제를 요청할 수 있는 방편을 제공하나요?/아니요(하지만 사용자 데이터가 90일 이내에 자동으로 삭제됨)
-PSL_DATA_DELETION_URL,,,MAYBE_REQUIRED,데이터 URL 삭제
+PSL_DATA_DELETION_URL,,https://vience.co.kr/amori/account-deletion,MAYBE_REQUIRED,데이터 URL 삭제
 PSL_DATA_COLLECTION_COMPLIES_FAMILY_POLICY,,,OPTIONAL,앱의 대상 연령대에 아동이 포함되어 있다고 지정했거나 가족을 위한 앱 프로그램을 선택한 경우에만 이 질문에 답하세요. 위 두 가지에 모두 해당한다면 Google Play 가족 정책(https://support.google.com/googleplay/android-developer/answer/9893335)을 따라야 합니다. 스토어 등록정보의 데이터 보안 섹션에서 사용자에게 이러한 약속에 대해 안내하시겠어요?
 PSL_INDEPENDENTLY_VALIDATED,,,OPTIONAL,앱이 모바일 애플리케이션 보안 평가(MASA) 프레임워크에 따른 독립적인 보안 검토를 완료했나요? 검토 결과가 양호한 경우에만 '예'라고 답변하세요.
 PSL_UPI_BADGE_OPT_IN,,,OPTIONAL,스토어 등록정보에 이 배지를 표시하시겠어요?
-PSL_HAS_OUTSIDE_APP_ACCOUNTS,,false,OPTIONAL,사용자가 앱 외부에서 만든 계정으로 앱에 로그인할 수 있나요?
+PSL_HAS_OUTSIDE_APP_ACCOUNTS,,,OPTIONAL,사용자가 앱 외부에서 만든 계정으로 앱에 로그인할 수 있나요?
 PSL_OUTSIDE_APP_ACCOUNT_TYPES,PSL_LOGIN_WITH_OUTSIDE_APP_ID,,MULTIPLE_CHOICE,"계정이 어떻게 생성되나요?/앱 식별 외(예: SIM 바인딩, 서비스 정기 결제)"
 PSL_OUTSIDE_APP_ACCOUNT_TYPES,PSL_LOGIN_THROUGH_EMPLOYMENT_OR_ENTERPRISE_ACCOUNT,,MULTIPLE_CHOICE,계정이 어떻게 생성되나요?/직장 또는 회사 계정을 통해
 PSL_OUTSIDE_APP_ACCOUNT_TYPES,PSL_OUTSIDE_APP_ACCOUNT_TYPE_OTHER,,MULTIPLE_CHOICE,계정이 어떻게 생성되나요?/기타
