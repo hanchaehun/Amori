@@ -16,12 +16,6 @@ import '../../core/widgets/settings_row.dart';
 class LinkedAppsScreen extends StatelessWidget {
   const LinkedAppsScreen({super.key});
 
-  void _comingSoon(BuildContext context, String label) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text('$label 연동은 준비 중이에요')));
-  }
-
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -61,27 +55,6 @@ class LinkedAppsScreen extends StatelessWidget {
                       icon: Icons.contacts_rounded,
                       label: '주소록 (지인 필터)',
                       onTap: () => context.push(AppRoutes.contactFilter),
-                      last: true,
-                    ),
-                  ],
-                ),
-                SettingsSection(
-                  title: '준비 중',
-                  rows: [
-                    SettingsRow(
-                      icon: Icons.music_note_rounded,
-                      label: 'Spotify',
-                      onTap: () => _comingSoon(context, 'Spotify'),
-                    ),
-                    SettingsRow(
-                      icon: Icons.directions_run_rounded,
-                      label: 'Strava',
-                      onTap: () => _comingSoon(context, 'Strava'),
-                    ),
-                    SettingsRow(
-                      icon: Icons.photo_camera_rounded,
-                      label: 'Instagram',
-                      onTap: () => _comingSoon(context, 'Instagram'),
                       last: true,
                     ),
                   ],

@@ -124,7 +124,7 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => _showInfo(
                   context,
                   'amori',
-                  'AI 프리데이팅 — 내 AI 에이전트가 먼저 만나고, 나는 미리보기를 보고 결정합니다.\n\n버전 ${AppConfig.appVersion}\n공모전 출품 프로토타입',
+                  'AI 프리데이팅 — 내 AI 에이전트가 먼저 만나고, 나는 미리보기를 보고 결정합니다.\n\n버전 ${AppConfig.appVersion}\n© 2026 amori',
                 ),
                 last: true,
               ),

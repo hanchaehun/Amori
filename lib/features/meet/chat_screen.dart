@@ -667,23 +667,50 @@ class _ChatScreenState extends State<ChatScreen> {
       confirmLabel: '신고하기',
       danger: true,
     );
-    if (ok && mounted) {
+    if (!ok || !mounted) return;
+    final id = widget.conversationId;
+    if (id == null) {
+      // 오프라인/더미 대화 — 서버 대상이 없으므로 안내만.
       AmoriSnackbar.success(context, '신고가 접수되었어요. 검토 후 조치할게요.');
+      return;
+    }
+    try {
+      await _matches.reportPartner(id, reason: 'inappropriate');
+      if (mounted) {
+        AmoriSnackbar.success(context, '신고가 접수되었어요. 검토 후 조치할게요.');
+      }
+    } catch (_) {
+      if (mounted) {
+        AmoriSnackbar.error(context, '신고 접수에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      }
     }
   }
 
   Future<void> _onBlock() async {
     final ok = await _confirm(
       title: '$_displayName님을 차단할까요?',
-      body: '차단하면 서로의 대화가 더 이상 표시되지 않아요.',
+      body: '차단하면 서로의 대화와 매칭에서 더 이상 보이지 않아요.',
       confirmLabel: '차단하기',
       danger: true,
     );
-    if (ok && mounted) {
+    if (!ok || !mounted) return;
+    final id = widget.conversationId;
+    if (id == null) {
       if (context.canPop()) context.pop();
-      // 화면을 벗어난 뒤이므로 전역 스낵바로 안내. 실제 차단 반영은 서버 배선
-      // 후이므로 "접수"로 정직하게 표현(목록에서 즉시 사라진다고 단정하지 않음).
-      AmoriSnackbar.showGlobal('차단 요청을 접수했어요. 검토 후 조치할게요.');
+      AmoriSnackbar.showGlobal('차단했어요. 서로의 목록에서 사라져요.');
+      return;
+    }
+    try {
+      await _matches.blockPartner(id);
+      if (!mounted) return;
+      // 목록 화면이 복귀 시 재조회하며(inbox _load), 서버가 차단 상대를
+      // 제외하므로 이 대화는 목록에서 사라진다.
+      if (context.canPop()) context.pop();
+      AmoriSnackbar.showGlobal('차단했어요. 서로의 목록에서 사라져요.');
+    } catch (_) {
+      if (mounted) {
+        AmoriSnackbar.error(context, '차단에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      }
     }
   }
 

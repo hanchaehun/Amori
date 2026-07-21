@@ -43,6 +43,14 @@ class AppConfig {
   /// 적용" 안내 배너를 띄운다.
   static const bool contactFilterEnabled = true;
 
+  /// 리포트 유료화(페이월) 노출 게이트.
+  ///
+  /// v1 스토어 배포에서는 꺼 둔다 — 실 StoreKit/IAP 결제와 영수증 검증이
+  /// 붙기 전까지 ₩ 가격·구독 UI를 노출하면 App Store 심사(2.1/2.3.1)에서
+  /// 걸린다(결제 없이 콘텐츠를 여는 스텁). 꺼지면 모든 리포트를 무료로 열고
+  /// 페이월 경로로 진입하지 않는다. 실결제 연동 시 다시 켠다.
+  static const bool paidReportsEnabled = false;
+
   /// 로컬 개발용 인증 우회 uid — 설정 시 Firebase 로그인 없이
   /// `Bearer dev:<uid>`로 BFF에 인증한다 (백엔드 DEBUG=true 전용).
   /// 릴리스 빌드에서는 항상 null.

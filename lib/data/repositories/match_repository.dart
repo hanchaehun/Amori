@@ -367,4 +367,22 @@ class MatchRepository {
       notice: json['notice'] as String? ?? '약속이 취소됐어요.',
     );
   }
+
+  /// 상대 신고 — 검토 큐(abuse_reports)에 접수된다. [reason]은 고정 목록
+  /// (inappropriate·harassment·spam·fake·other) 중 하나.
+  Future<void> reportPartner(
+    String matchId, {
+    String reason = 'other',
+    String? detail,
+  }) async {
+    await _api.postJson('/matches/$matchId/report', {
+      'reason': reason,
+      if (detail != null && detail.isNotEmpty) 'detail': detail,
+    });
+  }
+
+  /// 상대 차단 — 이후 매칭 후보·대화 목록에서 상호 제외된다. 멱등.
+  Future<void> blockPartner(String matchId) async {
+    await _api.postJson('/matches/$matchId/block', const {});
+  }
 }

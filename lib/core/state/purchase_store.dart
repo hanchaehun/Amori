@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_config.dart';
+
 /// 리포트 열람 권한 — 구독 또는 매치 단건 구매 (v1 로컬 스텁).
 ///
 /// ⚠️ 실결제(IAP/PG) 연동 전의 테스트용 상태 저장소다. 결제 버튼을 누르면
@@ -34,7 +36,11 @@ class PurchaseStore {
   }
 
   /// 이 매치의 리포트를 볼 수 있는가 — 구독자이거나 단건 구매한 매치.
+  ///
+  /// 유료화가 꺼져 있으면(v1 스토어 배포) 항상 열람 가능 — 페이월·가격
+  /// UI로 진입하지 않는다(AppConfig.paidReportsEnabled 참조).
   Future<bool> canViewReport(String matchId) async {
+    if (!AppConfig.paidReportsEnabled) return true;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_subscribedKey) ?? false) return true;
     return (prefs.getStringList(_unlockedKey) ?? const []).contains(matchId);

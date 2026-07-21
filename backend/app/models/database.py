@@ -1,7 +1,8 @@
 """SQLAlchemy 모델 — Postgres 단일 데이터 원천 (리팩토링 결정 3).
 
-9개 테이블: users, personas, matches, simulation_jobs, reports,
-meet_requests, feedback, llm_call_logs, blocked_contacts.
+11개 테이블: users, personas, matches, simulation_jobs, reports,
+meet_requests, feedback, llm_call_logs, blocked_contacts,
+user_blocks, abuse_reports.
 
 페르소나 임베딩은 1024차원 pgvector 컬럼이며 HNSW 코사인 인덱스를 사용한다.
 ``Base.metadata`` 의 ``before_create`` 리스너가 vector 익스텐션을 먼저 설치한다.
@@ -327,6 +328,60 @@ class LLMCallLog(Base):
     response_time_ms: Mapped[int] = mapped_column(Integer)
     user_id: Mapped[str | None] = mapped_column(String(128), index=True)
     request_id: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class UserBlock(Base):
+    """사용자 간 차단 — 데이팅 UGC 안전(App Store 가이드라인 1.2) 필수 장치.
+
+    지인 필터(blocked_contacts, 주소록 해시)와 별개로, 매칭·채팅 중 만난
+    상대를 직접 차단한다. 매칭 후보 생성과 대화 목록에서 상호 제외한다 —
+    어느 한쪽이 차단하면 서로의 목록에서 사라진다. blocked_id는 Firebase uid
+    문자열(users.id와 동일 형식)이며, 탈퇴로 행이 사라져도 차단 기록은
+    독립적으로 남긴다(FK 미설정 — uid 문자열 참조).
+    """
+
+    __tablename__ = "user_blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    blocker_id: Mapped[str] = mapped_column(String(128), index=True)
+    blocked_id: Mapped[str] = mapped_column(String(128), index=True)
+    # 차단이 일어난 매치(맥락). 매치가 지워지면 기록은 남기고 참조만 끊는다.
+    match_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("matches.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("blocker_id", "blocked_id", name="uq_user_blocks_pair"),
+    )
+
+
+class AbuseReport(Base):
+    """부적절 행위 신고 — 검토 큐(App Store 가이드라인 1.2).
+
+    신고는 삭제하지 않고 누적한다(운영 검토·조치 근거). 신고와 동시에 차단이
+    함께 일어날 수 있으나(클라이언트가 두 API를 부른다) 데이터는 분리한다.
+    """
+
+    __tablename__ = "abuse_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    reporter_id: Mapped[str] = mapped_column(String(128), index=True)
+    reported_id: Mapped[str] = mapped_column(String(128), index=True)
+    match_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("matches.id", ondelete="SET NULL")
+    )
+    # inappropriate | harassment | spam | fake | other (클라이언트 고정 목록)
+    reason: Mapped[str] = mapped_column(String(20))
+    detail: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending"
+    )  # pending | reviewed | actioned | dismissed
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

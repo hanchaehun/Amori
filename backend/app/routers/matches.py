@@ -2,15 +2,24 @@ import uuid
 from datetime import date as date_cls, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import select
+from pydantic import BaseModel, Field
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.firebase import get_current_user
 from app.config import settings
 from app.dependencies import get_db
 from app.matching import find_candidates
-from app.models.database import ChatMessage, Match, Persona, Report, SimulationJob, User
+from app.models.database import (
+    AbuseReport,
+    ChatMessage,
+    Match,
+    Persona,
+    Report,
+    SimulationJob,
+    User,
+    UserBlock,
+)
 from app.schemas.common import (
     AgentTurnItem,
     AppointmentSetRequest,
@@ -37,6 +46,20 @@ def _warning_title(warning: object) -> str | None:
     if isinstance(warning, str):
         return warning or None
     return None
+
+
+async def blocked_user_ids(db: AsyncSession, uid: str) -> set[str]:
+    """나와 차단으로 얽힌 상대 uid 집합 — 상호 원칙(내가 차단했거나 나를
+    차단한 쪽 모두). 매칭 후보·대화 목록에서 이 사용자들을 제외한다."""
+    result = await db.execute(
+        select(UserBlock.blocker_id, UserBlock.blocked_id).where(
+            or_(UserBlock.blocker_id == uid, UserBlock.blocked_id == uid)
+        )
+    )
+    others: set[str] = set()
+    for blocker_id, blocked_id in result.all():
+        others.add(blocked_id if blocker_id == uid else blocker_id)
+    return others
 
 
 async def get_or_create_match(
@@ -76,6 +99,14 @@ async def list_my_matches(
         .order_by(Match.updated_at.desc())
     )
     matches = result.scalars().all()
+    # 차단한/차단당한 상대의 대화는 목록에서 감춘다 (상호 원칙).
+    blocked = await blocked_user_ids(db, uid)
+    if blocked:
+        matches = [
+            m
+            for m in matches
+            if next((p for p in m.participant_ids if p != uid), uid) not in blocked
+        ]
     if not matches:
         return []
 
@@ -233,6 +264,7 @@ async def find_matches(
         my_contact_hashes=(
             [h for h in (me.phone_hash, me.email_hash) if h] if me else None
         ),
+        blocked_user_ids=await blocked_user_ids(db, user["uid"]),
     )
 
     # 후보마다 Match 행을 find-or-create — 응답의 match_id가 곧 DB UUID라
@@ -437,6 +469,17 @@ async def send_message(
             detail={
                 "error_code": "CHAT_LOCKED",
                 "message": "서로 만남을 수락하면 직접 대화할 수 있어요.",
+                "request_id": request_id,
+            },
+        )
+
+    # 차단된 쌍이면 전송 거부 — 목록에서 숨기는 것과 별개로 서버에서도 막는다.
+    if _partner_uid(match_obj, uid) in await blocked_user_ids(db, uid):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error_code": "BLOCKED",
+                "message": "차단된 상대에게는 메시지를 보낼 수 없어요.",
                 "request_id": request_id,
             },
         )
@@ -676,3 +719,71 @@ async def set_appointment(
         status=match_obj.status,
         appointment_slot=label,
     )
+
+
+# ---- UGC 안전: 신고·차단 (App Store 가이드라인 1.2) ------------------------
+
+_REPORT_REASONS = {"inappropriate", "harassment", "spam", "fake", "other"}
+
+
+class ReportRequest(BaseModel):
+    reason: str = Field(default="other", max_length=20)
+    detail: str | None = Field(default=None, max_length=1000)
+
+
+class ModerationActionResponse(BaseModel):
+    ok: bool = True
+
+
+def _partner_uid(match_obj: Match, uid: str) -> str:
+    return next((p for p in match_obj.participant_ids if p != uid), uid)
+
+
+@router.post("/{match_id}/report", response_model=ModerationActionResponse)
+async def report_match_partner(
+    match_id: str,
+    body: ReportRequest,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """상대를 신고한다 — 검토 큐(abuse_reports)에 누적한다(삭제하지 않음)."""
+    request_id = str(uuid.uuid4())
+    match_obj = await _load_my_match(db, match_id, user["uid"], request_id)
+    uid = user["uid"]
+    reason = body.reason if body.reason in _REPORT_REASONS else "other"
+    db.add(
+        AbuseReport(
+            reporter_id=uid,
+            reported_id=_partner_uid(match_obj, uid),
+            match_id=match_obj.id,
+            reason=reason,
+            detail=(body.detail.strip() or None) if body.detail else None,
+        )
+    )
+    await db.commit()
+    return ModerationActionResponse()
+
+
+@router.post("/{match_id}/block", response_model=ModerationActionResponse)
+async def block_match_partner(
+    match_id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """상대를 차단한다 — 이후 매칭 후보·대화 목록에서 상호 제외한다
+    (user_blocks). 이미 차단한 상대면 멱등하게 성공 처리한다."""
+    request_id = str(uuid.uuid4())
+    match_obj = await _load_my_match(db, match_id, user["uid"], request_id)
+    uid = user["uid"]
+    blocked_id = _partner_uid(match_obj, uid)
+    existing = await db.execute(
+        select(UserBlock).where(
+            UserBlock.blocker_id == uid, UserBlock.blocked_id == blocked_id
+        )
+    )
+    if existing.scalar_one_or_none() is None:
+        db.add(
+            UserBlock(blocker_id=uid, blocked_id=blocked_id, match_id=match_obj.id)
+        )
+        await db.commit()
+    return ModerationActionResponse()

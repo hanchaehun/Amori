@@ -70,6 +70,7 @@ async def find_candidates(
     my_age_older: int | None = None,
     my_age_younger: int | None = None,
     my_contact_hashes: list[str] | None = None,
+    blocked_user_ids: set[str] | None = None,
 ) -> list[RankedCandidate]:
     """쿼리 임베딩과 가장 유사한 후보 top_k 를 점수와 함께 반환한다.
 
@@ -88,6 +89,9 @@ async def find_candidates(
     (성별 필터와 같은 상호 원칙). 허용 범위 미설정은 기본 5살, 생년월일 미설정은
     와일드카드 통과. 미성년(만 19세 미만) 후보는 설정과 무관하게 제외한다.
 
+    사용자 차단 (UGC 안전, App Store 1.2): blocked_user_ids에 든 상대는 설정과
+    무관하게 후보에서 제외한다 — 상호 원칙(내가 차단했거나 나를 차단한 쪽 모두).
+
     지인 필터 (제품 규칙, 2026-07-19 — settings.contact_filter_enforced로 잠금):
     내 차단 목록(blocked_contacts 해시)에 후보의 phone/email 해시가 있거나,
     후보의 차단 목록에 내 해시(my_contact_hashes)가 있으면 그 쌍은 제외한다
@@ -101,6 +105,9 @@ async def find_candidates(
         .where(Persona.user_id != exclude_user_id)
         .where(Persona.embedding.isnot(None))
     )
+    # 사용자 간 차단(user_blocks) — 상호 원칙으로 얽힌 상대는 후보에서 제외.
+    if blocked_user_ids:
+        query = query.where(Persona.user_id.notin_(blocked_user_ids))
     if my_interest_gender and my_interest_gender != "both":
         query = query.where(
             or_(User.gender.is_(None), User.gender == my_interest_gender)
