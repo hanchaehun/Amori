@@ -24,31 +24,45 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> {
   // 세션이 있으면 랜딩 버튼을 그리기 전에 자동 진입을 먼저 시도한다
   // (랜딩이 한 프레임 번쩍이는 것 방지).
-  late bool _resolving = AmoriBackend().currentUser != null;
+  bool _resolving = false;
 
   @override
   void initState() {
     super.initState();
-    if (_resolving) _resolveSession();
+    bool hasSession = false;
+    try {
+      hasSession = AmoriBackend().currentUser != null;
+    } catch (_) {
+      // Firebase 미초기화(테스트 등)나 예외 시엔 랜딩을 보여준다.
+      hasSession = false;
+    }
+    if (hasSession) {
+      _resolving = true;
+      _resolveSession();
+    }
   }
 
   /// 로그인 유지 ON + 세션 존재 → 자동 진입 (네트워크 호출 없음 — 오프라인
   /// 이어도 즉시). 페르소나 생성을 마친 기기는 홈, 온보딩 중단 기기는
   /// 생성 플로우로. 로그인 유지 OFF인데 세션이 남아 있으면 정리한다.
   Future<void> _resolveSession() async {
-    final keep = await AuthPrefs.instance.keepLoggedIn();
-    if (!mounted) return;
-    if (keep) {
-      // 디스크 캐시를 먼저 복원(수 ms, 네트워크 없음) — 프로필 진입 즉시
-      // 이름이 뜬다. 서버 최신화는 백그라운드로.
-      await ProfileStore.instance.hydrate();
-      ProfileStore.instance.refresh();
-      final ready = await AuthPrefs.instance.personaReady();
+    try {
+      final keep = await AuthPrefs.instance.keepLoggedIn();
       if (!mounted) return;
-      context.go(ready ? AppRoutes.home : AppRoutes.personaIntro);
-      return;
+      if (keep) {
+        // 디스크 캐시를 먼저 복원(수 ms, 네트워크 없음) — 프로필 진입 즉시
+        // 이름이 뜬다. 서버 최신화는 백그라운드로.
+        await ProfileStore.instance.hydrate();
+        ProfileStore.instance.refresh();
+        final ready = await AuthPrefs.instance.personaReady();
+        if (!mounted) return;
+        context.go(ready ? AppRoutes.home : AppRoutes.personaIntro);
+        return;
+      }
+      await AmoriBackend().signOut();
+    } catch (_) {
+      // 세션 확인 중 오류가 나도 로고에 갇히지 않도록 랜딩으로 폴백한다.
     }
-    await AmoriBackend().signOut();
     if (mounted) setState(() => _resolving = false);
   }
 

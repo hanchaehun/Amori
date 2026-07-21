@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 
 class RequestStatusScreen extends StatefulWidget {
   const RequestStatusScreen({super.key, this.targetName = '상대'});
@@ -22,44 +22,6 @@ class RequestStatusScreen extends StatefulWidget {
 }
 
 class _RequestStatusScreenState extends State<RequestStatusScreen> {
-  static const Duration _initial = Duration(hours: 23, minutes: 47, seconds: 12);
-
-  late Duration _remaining;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _remaining = _initial;
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() {
-        if (_remaining.inSeconds > 0) {
-          _remaining -= const Duration(seconds: 1);
-        }
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  double get _progress {
-    final total = const Duration(hours: 24).inSeconds;
-    return 1.0 - (_remaining.inSeconds / total);
-  }
-
-  String get _remainingFormatted {
-    final h = _remaining.inHours;
-    final m = _remaining.inMinutes.remainder(60);
-    final s = _remaining.inSeconds.remainder(60);
-    String pad(int n) => n.toString().padLeft(2, '0');
-    return '${pad(h)}:${pad(m)}:${pad(s)}';
-  }
-
   void _onShowOtherMatches() {
     HapticFeedback.lightImpact();
     context.go(AppRoutes.matchList);
@@ -74,6 +36,8 @@ class _RequestStatusScreenState extends State<RequestStatusScreen> {
     );
     if (shouldCancel == true && mounted) {
       context.go(AppRoutes.home);
+      // 화면 이동 후이므로 전역 스낵바로 안내한다.
+      AmoriSnackbar.showGlobal('신청을 취소했어요.');
     }
   }
 
@@ -134,10 +98,7 @@ class _RequestStatusScreenState extends State<RequestStatusScreen> {
                             ),
                           ),
                           AppSpacing.vXl,
-                          _CountdownCard(
-                            remaining: _remainingFormatted,
-                            progress: _progress,
-                          ),
+                          const _WaitingCard(),
                           AppSpacing.vMd,
                           _OtherMatchesCard(onTap: _onShowOtherMatches),
                         ],
@@ -287,11 +248,8 @@ class _DashedArcPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _CountdownCard extends StatelessWidget {
-  const _CountdownCard({required this.remaining, required this.progress});
-
-  final String remaining;
-  final double progress;
+class _WaitingCard extends StatelessWidget {
+  const _WaitingCard();
 
   @override
   Widget build(BuildContext context) {
@@ -325,70 +283,19 @@ class _CountdownCard extends StatelessWidget {
               ),
             ],
           ),
-          AppSpacing.vMd,
+          AppSpacing.vSm,
           Text(
-            remaining,
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: -1.0,
-              height: 1.0,
-              fontFeatures: [FontFeature.tabularFigures()],
+            '상대가 신청을 확인하면\n알림으로 알려드릴게요',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMedium.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+              height: 1.5,
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '남음',
-            style: AppTypography.bodySmall.copyWith(
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
-          ),
-          AppSpacing.vMd,
-          SizedBox(
-            width: 60,
-            height: 60,
-            child: CustomPaint(painter: _CircularProgressPainter(progress)),
           ),
         ],
       ),
     );
   }
-}
-
-class _CircularProgressPainter extends CustomPainter {
-  _CircularProgressPainter(this.progress);
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    const radius = 26.0;
-    const strokeWidth = 6.0;
-
-    final track = Paint()
-      ..color = Colors.white.withValues(alpha: 0.25)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-    canvas.drawCircle(center, radius, track);
-
-    final fill = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2,
-      2 * math.pi * progress.clamp(0.0, 1.0),
-      false,
-      fill,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _CircularProgressPainter old) =>
-      old.progress != progress;
 }
 
 class _OtherMatchesCard extends StatelessWidget {
@@ -494,7 +401,7 @@ class _CancelConfirmDialog extends StatelessWidget {
                 style: AppTypography.titleLarge),
             AppSpacing.vSm,
             Text(
-              '취소된 신청은 되돌릴 수 없어요.\n오늘 신청 횟수 1회가 차감됩니다.',
+              '취소하면 상대에게 신청이 전달되지 않아요.',
               style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.ink500,
                 height: 1.5,

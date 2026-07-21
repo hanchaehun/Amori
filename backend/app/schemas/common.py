@@ -33,11 +33,13 @@ class MeetRequestResponse(BaseModel):
 
 
 class FeedbackCreate(BaseModel):
+    # 길이/값 상한을 DB 컬럼(String(20)/String(50))과 맞춘다 — 없으면 초과 입력이
+    # DataError 500이 된다(users.py와 동일한 방어).
     match_id: str
-    impression: str
+    impression: Literal["good", "ok", "bad"]
     accuracy: float = Field(ge=0, le=1)
-    next_step: str
-    note: str | None = None
+    next_step: str = Field(max_length=50)
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class MatchResponse(BaseModel):

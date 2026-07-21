@@ -42,7 +42,10 @@ extension on _NextStep {
 }
 
 class FeedbackScreen extends StatefulWidget {
-  const FeedbackScreen({super.key});
+  const FeedbackScreen({super.key, this.partnerName, this.matchId});
+
+  final String? partnerName;
+  final String? matchId;
 
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
@@ -71,8 +74,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     setState(() => _submitting = true);
     // 피드백은 매칭 품질 개선 신호 — BFF(Postgres)로 전송.
     // 백엔드 Match가 없는 더미 데모 플로우에서는 저장 없이 진행한다.
-    final matchId = AgentSessionStore.instance.activeMatchId;
-    if (_backend.currentUser != null && matchId != null) {
+    final matchId =
+        widget.matchId ?? AgentSessionStore.instance.activeMatchId;
+    if (_backend.isAuthenticated && matchId != null) {
       try {
         await FeedbackRepository().submit(
           matchId: matchId,
@@ -113,7 +117,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 AppSpacing.lg,
               ),
               children: [
-                const _Hero(name: '상대', initial: '상', date: '11월 12일 · 성수 카페'),
+                _Hero(
+                  name: (widget.partnerName?.isNotEmpty ?? false)
+                      ? widget.partnerName!
+                      : '상대',
+                  initial: (widget.partnerName?.isNotEmpty ?? false)
+                      ? widget.partnerName!.substring(0, 1)
+                      : '상',
+                ),
                 AppSpacing.vXl,
                 _QuestionLabel(n: 1, text: '실제 인상은 어땠나요?'),
                 AppSpacing.vSm,
@@ -178,10 +189,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.name, required this.initial, required this.date});
+  const _Hero({required this.name, required this.initial});
   final String name;
   final String initial;
-  final String date;
 
   @override
   Widget build(BuildContext context) {
@@ -237,11 +247,6 @@ class _Hero extends StatelessWidget {
           '$name님과의 만남\n어땠어요?',
           textAlign: TextAlign.center,
           style: AppTypography.titleLarge.copyWith(fontSize: 22, height: 1.3),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          date,
-          style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
         ),
       ],
     );

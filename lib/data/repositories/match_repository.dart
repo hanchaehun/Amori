@@ -128,6 +128,9 @@ class AgentTurn {
 }
 
 /// 직접 채팅 메시지 한 건. [kind]가 'system'이면 약속 취소 같은 안내문구.
+/// 직접 채팅 메시지의 전송 상태 — 낙관적 UI(전송 중/실패 재시도)용.
+enum DirectMessageStatus { sent, sending, failed }
+
 class DirectMessage {
   const DirectMessage({
     required this.id,
@@ -135,6 +138,7 @@ class DirectMessage {
     required this.isMe,
     required this.text,
     this.createdAt,
+    this.status = DirectMessageStatus.sent,
   });
 
   final String id;
@@ -143,7 +147,21 @@ class DirectMessage {
   final String text;
   final DateTime? createdAt;
 
+  /// 서버에서 온 메시지는 항상 sent. 낙관적으로 삽입한 로컬 메시지만
+  /// sending/failed 상태를 가진다.
+  final DirectMessageStatus status;
+
   bool get isSystem => kind == 'system';
+
+  DirectMessage copyWith({String? id, DirectMessageStatus? status}) =>
+      DirectMessage(
+        id: id ?? this.id,
+        kind: kind,
+        isMe: isMe,
+        text: text,
+        createdAt: createdAt,
+        status: status ?? this.status,
+      );
 
   factory DirectMessage.fromJson(Map<String, dynamic> json) => DirectMessage(
     id: json['id'] as String? ?? '',

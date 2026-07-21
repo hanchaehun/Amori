@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/router/app_routes.dart';
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
@@ -82,30 +83,33 @@ class KycBlockScreen extends StatelessWidget {
                 style: AppTypography.caption.copyWith(color: AppColors.ink500),
               ),
             ),
-            AppSpacing.vXl,
-            const _SectionDivider(label: '개발 전용'),
-            AppSpacing.vMd,
-            Row(
-              children: [
-                Expanded(
-                  child: _DevButton(
-                    label: '인증 실패',
-                    color: AppColors.danger,
-                    icon: Icons.close_rounded,
-                    onPressed: () => _onDevFail(context),
+            // 개발 전용 우회 버튼 — 릴리스(devUid=null)에선 노출하지 않는다.
+            if (AppConfig.devUid != null) ...[
+              AppSpacing.vXl,
+              const _SectionDivider(label: '개발 전용'),
+              AppSpacing.vMd,
+              Row(
+                children: [
+                  Expanded(
+                    child: _DevButton(
+                      label: '인증 실패',
+                      color: AppColors.danger,
+                      icon: Icons.close_rounded,
+                      onPressed: () => _onDevFail(context),
+                    ),
                   ),
-                ),
-                AppSpacing.hSm,
-                Expanded(
-                  child: _DevButton(
-                    label: '인증 성공',
-                    color: AppColors.success,
-                    icon: Icons.check_rounded,
-                    onPressed: () => _onDevSuccess(context),
+                  AppSpacing.hSm,
+                  Expanded(
+                    child: _DevButton(
+                      label: '인증 성공',
+                      color: AppColors.success,
+                      icon: Icons.check_rounded,
+                      onPressed: () => _onDevSuccess(context),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             AppSpacing.vLg,
           ],
         ),

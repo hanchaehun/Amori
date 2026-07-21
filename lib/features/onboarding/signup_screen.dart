@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -43,6 +44,12 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _obscurePassword = true;
   bool _submitting = false;
 
+  // 약관·개인정보 링크 탭 — paywall·settings와 동일하게 실제 화면으로 연결.
+  late final _termsTap = TapGestureRecognizer()
+    ..onTap = () => context.push(AppRoutes.terms);
+  late final _privacyTap = TapGestureRecognizer()
+    ..onTap = () => context.push(AppRoutes.privacy);
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -50,6 +57,8 @@ class _SignupScreenState extends State<SignupScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _termsTap.dispose();
+    _privacyTap.dispose();
     super.dispose();
   }
 
@@ -307,6 +316,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword
@@ -322,19 +332,21 @@ class _SignupScreenState extends State<SignupScreen> {
               ],
             ),
           ),
-          if (!keyboardOpen) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                0,
-                AppSpacing.lg,
-                AppSpacing.md,
-              ),
-              child: GradientButton(
-                label: _submitting ? '계정 만드는 중...' : '계정 만들기',
-                onPressed: _submitting ? null : _submit,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.md,
             ),
+            child: GradientButton(
+              label: '계정 만들기',
+              loading: _submitting,
+              onPressed: _submitting ? null : _submit,
+            ),
+          ),
+          // 키보드가 열려도 제출 버튼은 위로 밀려 유지되고, 약관 문구만 접는다.
+          if (!keyboardOpen)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
               child: RichText(
@@ -347,17 +359,21 @@ class _SignupScreenState extends State<SignupScreen> {
                     const TextSpan(text: '가입하면 '),
                     TextSpan(
                       text: '이용약관',
+                      recognizer: _termsTap,
                       style: AppTypography.caption.copyWith(
                         color: AppColors.ink900,
                         fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
                       ),
                     ),
                     const TextSpan(text: ' 및 '),
                     TextSpan(
                       text: '개인정보처리방침',
+                      recognizer: _privacyTap,
                       style: AppTypography.caption.copyWith(
                         color: AppColors.ink900,
                         fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
                       ),
                     ),
                     const TextSpan(text: '에 동의합니다.'),
@@ -365,7 +381,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
             ),
-          ],
         ],
       ),
     );

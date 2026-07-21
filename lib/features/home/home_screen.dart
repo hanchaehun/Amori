@@ -68,6 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 리포트가 아직 잠긴(시차 송출 중) 매치 — '리포트 준비 중' 섹션 실데이터.
   List<MatchSummary> _pendingReports = [];
 
+  /// 홈 진행 지표 — listMatches 실데이터에서 도출. null이면 실데이터가 없어
+  /// (미로딩·오프라인) 진척 대신 '이용 흐름' 안내로 보여준다(거짓 진척 방지).
+  List<_StageItem>? _stages;
+
   bool get _showDailyQuestion =>
       _dailyStatus != null &&
       !_dailyStatus!.completedToday &&
@@ -92,11 +96,16 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _hero = _summarize(matches);
         _pendingReports = matches.where((m) => m.agentLive).toList();
+        _stages = _computeStages(matches);
       });
     } catch (error) {
       if (!mounted) return;
-      // 백엔드 미연결(오프라인/dev 미설정) — 데모용 정적 상태로.
-      setState(() => _hero = const _HeroData(_HeroMode.offline));
+      // 백엔드 미연결(오프라인) — 가짜 진척을 만들지 않고 정직한 오프라인 상태로.
+      setState(() {
+        _hero = const _HeroData(_HeroMode.offline);
+        _pendingReports = [];
+        _stages = null;
+      });
     }
     final dailyStatus = await dailyStatusFuture;
     if (mounted) {
@@ -151,6 +160,48 @@ class _HomeScreenState extends State<HomeScreen> {
     return const _HeroData(_HeroMode.idle);
   }
 
+  /// 진행 지표를 실데이터에서 산출한다 — 하드코딩 금지.
+  /// 홈에 도달했다면 페르소나는 이미 있다(done). 이후 단계는 실제 매치 상태로:
+  /// 소개팅 완료(비-live) → Pre-Dating done, 검증된 매칭(리포트 점수) 또는 연결
+  /// 존재 → 리포트 done, 약속/만남(scheduled·met) → 만남 연결 진행/완료.
+  List<_StageItem> _computeStages(List<MatchSummary> matches) {
+    final hasCompleted = matches.any((m) => !m.agentLive);
+    final anyReport = matches.any((m) => !m.failed && m.reportScore != null);
+    final anyConnection = matches.any(
+      (m) => m.status == 'scheduled' || m.status == 'met',
+    );
+    final anyMet = matches.any((m) => m.status == 'met');
+
+    final _StageState predating = hasCompleted
+        ? _StageState.done
+        : _StageState.active;
+
+    final _StageState report;
+    if (anyConnection || anyReport) {
+      report = _StageState.done;
+    } else if (hasCompleted) {
+      report = _StageState.active;
+    } else {
+      report = _StageState.locked;
+    }
+
+    final _StageState meet;
+    if (anyMet) {
+      meet = _StageState.done;
+    } else if (anyConnection) {
+      meet = _StageState.active;
+    } else {
+      meet = _StageState.locked;
+    }
+
+    return [
+      const _StageItem(Icons.check_rounded, '페르소나 생성', _StageState.done),
+      _StageItem(Icons.sync_rounded, 'Pre-Dating', predating),
+      _StageItem(Icons.description_outlined, '리포트 발행', report),
+      _StageItem(Icons.favorite_outline_rounded, '만남 연결', meet),
+    ];
+  }
+
   void _openConnect() {
     // 히어로 카드는 별도 화면을 띄우지 않고 '연결'(진행 중) 탭으로 넘어간다 —
     // 하단 탭바에서 연결을 누른 것과 동일하게 동작한다(inbox 기본 탭=진행 중).
@@ -191,81 +242,79 @@ class _HomeScreenState extends State<HomeScreen> {
       isHome: true,
       child: AppScaffold(
         bottomBar: const AmoriTabBar(active: AmoriTab.home),
-        body: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            const SliverToBoxAdapter(child: _TopBar()),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.xs,
-                AppSpacing.lg,
-                AppSpacing.xl,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  ListenableBuilder(
-                    listenable: ProfileStore.instance,
-                    builder: (_, _) => _Greeting(
-                      name: _friendlyName(
-                        ProfileStore.instance.profile?.displayName,
+        // 홈은 "에이전트가 다녀오면 나타난다" — 당겨서 매칭·데일리 상태를 다시 로드.
+        body: RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: _load,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              const SliverToBoxAdapter(child: _TopBar()),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.xs,
+                  AppSpacing.lg,
+                  AppSpacing.xl,
+                ),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    ListenableBuilder(
+                      listenable: ProfileStore.instance,
+                      builder: (_, _) => _Greeting(
+                        name: _friendlyName(
+                          ProfileStore.instance.profile?.displayName,
+                        ),
                       ),
                     ),
-                  ),
-                  AppSpacing.vLg,
-                  _HeroAICard(data: _hero, onTap: _openConnect),
-                  if (_showDailyQuestion) ...[
-                    AppSpacing.vMd,
-                    _DailyQuestionCard(
-                      answerCount: _dailyStatus!.answerCount,
-                      onTap: _openDailyQuestion,
+                    AppSpacing.vLg,
+                    _HeroAICard(
+                      data: _hero,
+                      // 오프라인 카드는 '다시 시도' — 탭하면 재로드.
+                      onTap: () {
+                        if (_hero.mode == _HeroMode.offline) {
+                          _load();
+                        } else {
+                          _openConnect();
+                        }
+                      },
                     ),
-                  ],
-                  if (AppConfig.devUid != null) ...[
-                    AppSpacing.vSm,
-                    _DevAdvanceDayButton(
-                      isLoading: _advancingDay,
-                      onPressed: _advanceDayForDev,
-                    ),
-                  ],
-                  AppSpacing.vXl,
-                  const _StatusTracker(
-                    stages: [
-                      _StageItem(
-                        Icons.check_rounded,
-                        '페르소나 생성',
-                        _StageState.done,
-                      ),
-                      _StageItem(
-                        Icons.sync_rounded,
-                        'Pre-Dating',
-                        _StageState.active,
-                      ),
-                      _StageItem(
-                        Icons.description_outlined,
-                        '리포트 발행',
-                        _StageState.locked,
-                      ),
-                      _StageItem(
-                        Icons.favorite_outline_rounded,
-                        '만남 연결',
-                        _StageState.locked,
+                    if (_showDailyQuestion) ...[
+                      AppSpacing.vMd,
+                      _DailyQuestionCard(
+                        answerCount: _dailyStatus!.answerCount,
+                        onTap: _openDailyQuestion,
                       ),
                     ],
-                  ),
-                  if (_pendingReports.isNotEmpty) ...[
+                    if (AppConfig.devUid != null) ...[
+                      AppSpacing.vSm,
+                      _DevAdvanceDayButton(
+                        isLoading: _advancingDay,
+                        onPressed: _advanceDayForDev,
+                      ),
+                    ],
                     AppSpacing.vXl,
-                    _ReportSection(
-                      matches: _pendingReports,
-                      onHeaderTap: () => context.push(AppRoutes.matchList),
-                      onCardTap: (m) =>
-                          context.push('${AppRoutes.chat}?id=${m.matchId}'),
+                    // 실데이터가 있으면 진행 지표, 없으면(오프라인·미로딩) 이용 흐름 안내.
+                    _StatusTracker(
+                      stages: _stages ?? _kJourneyStages,
+                      intro: _stages == null,
                     ),
-                  ],
-                ]),
+                    if (_pendingReports.isNotEmpty) ...[
+                      AppSpacing.vXl,
+                      _ReportSection(
+                        matches: _pendingReports,
+                        onHeaderTap: () => context.push(AppRoutes.matchList),
+                        onCardTap: (m) =>
+                            context.push('${AppRoutes.chat}?id=${m.matchId}'),
+                      ),
+                    ],
+                  ]),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -573,25 +622,24 @@ class _HeroAICardState extends State<_HeroAICard> {
                   color: AppColors.ink500,
                 ),
               ),
-              AppSpacing.vMd,
-              _HeroProgress(value: c.progress),
-              AppSpacing.vXs,
+              if (c.showProgress) ...[
+                AppSpacing.vMd,
+                _HeroProgress(value: c.progress),
+                AppSpacing.vXs,
+              ] else
+                AppSpacing.vMd,
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(
-                    '자세히 보기',
+                    c.actionLabel,
                     style: AppTypography.caption.copyWith(
                       color: AppColors.ink500,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 14,
-                    color: AppColors.ink500,
-                  ),
+                  Icon(c.actionIcon, size: 14, color: AppColors.ink500),
                 ],
               ),
             ],
@@ -637,17 +685,20 @@ class _HeroAICardState extends State<_HeroAICard> {
         );
       case _HeroMode.offline:
         return const _HeroContent(
-          title: '소개팅 시뮬레이션\n진행 중',
-          subtitle: '에이전트가 열심히 일하고 있어요',
-          badgeLabel: 'AI 활동 중',
-          badgeColor: AppColors.danger,
-          progress: 0.65,
+          title: '지금은 소식을\n불러오지 못했어요',
+          subtitle: '네트워크 상태를 확인하고 다시 시도해 주세요',
+          badgeLabel: '오프라인',
+          badgeColor: AppColors.ink300,
+          progress: 0,
+          actionLabel: '다시 시도',
+          actionIcon: Icons.refresh_rounded,
+          showProgress: false,
         );
       case _HeroMode.loading:
         return const _HeroContent(
           title: '소개팅 현황\n불러오는 중',
           subtitle: '잠시만요...',
-          badgeLabel: 'AI 활동 중',
+          badgeLabel: '불러오는 중',
           badgeColor: AppColors.ink300,
           progress: 0.2,
         );
@@ -662,6 +713,9 @@ class _HeroContent {
     required this.badgeLabel,
     required this.badgeColor,
     required this.progress,
+    this.actionLabel = '자세히 보기',
+    this.actionIcon = Icons.arrow_forward_rounded,
+    this.showProgress = true,
   });
 
   final String title;
@@ -669,6 +723,12 @@ class _HeroContent {
   final String badgeLabel;
   final Color badgeColor;
   final double progress;
+  final String actionLabel;
+  final IconData actionIcon;
+
+  /// 진척 바 표시 여부 — 오프라인처럼 진척이 없는 상태에서는 숨겨
+  /// 가짜 진행률을 보여주지 않는다.
+  final bool showProgress;
 }
 
 class _DevAdvanceDayButton extends StatelessWidget {
@@ -846,47 +906,83 @@ class _HeroProgress extends StatelessWidget {
   }
 }
 
+/// 실데이터가 없을 때(오프라인·미로딩) 보여줄 이용 흐름 안내 — 진척이 아니라
+/// 서비스 흐름 소개용. intro 모드에서 단계 상태(state)는 스타일에 쓰이지 않는다.
+const List<_StageItem> _kJourneyStages = [
+  _StageItem(Icons.check_rounded, '페르소나 생성', _StageState.done),
+  _StageItem(Icons.sync_rounded, 'Pre-Dating', _StageState.active),
+  _StageItem(Icons.description_outlined, '리포트 발행', _StageState.locked),
+  _StageItem(Icons.favorite_outline_rounded, '만남 연결', _StageState.locked),
+];
+
 class _StatusTracker extends StatelessWidget {
-  const _StatusTracker({required this.stages});
+  const _StatusTracker({required this.stages, this.intro = false});
   final List<_StageItem> stages;
+
+  /// true면 진척 지표가 아니라 '이렇게 진행돼요' 흐름 안내로 렌더링한다.
+  final bool intro;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < stages.length; i++) ...[
-            _StageColumn(stage: stages[i]),
-            if (i < stages.length - 1)
-              Expanded(
-                child: _Connector(
-                  filled:
-                      stages[i].state == _StageState.done &&
-                      stages[i + 1].state != _StageState.locked,
-                ),
-              ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          intro ? '이렇게 진행돼요' : '진행 상황',
+          style: AppTypography.titleMedium.copyWith(fontSize: 16),
+        ),
+        if (intro) ...[
+          AppSpacing.vXxs,
+          Text(
+            'amori가 대신 소개팅을 다녀오는 과정이에요',
+            style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
+          ),
         ],
-      ),
+        AppSpacing.vMd,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < stages.length; i++) ...[
+                _StageColumn(stage: stages[i], intro: intro),
+                if (i < stages.length - 1)
+                  Expanded(
+                    child: _Connector(
+                      filled:
+                          !intro &&
+                          stages[i].state == _StageState.done &&
+                          stages[i + 1].state != _StageState.locked,
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _StageColumn extends StatelessWidget {
-  const _StageColumn({required this.stage});
+  const _StageColumn({required this.stage, this.intro = false});
   final _StageItem stage;
+
+  /// true면 진척 스타일(잠김/활성) 대신 균일한 안내 스타일로 그린다.
+  final bool intro;
 
   @override
   Widget build(BuildContext context) {
     final amori = context.amori;
-    final isLocked = stage.state == _StageState.locked;
-    final isActive = stage.state == _StageState.active;
+    final isLocked = !intro && stage.state == _StageState.locked;
+    final isActive = !intro && stage.state == _StageState.active;
 
     Color labelColor;
     FontWeight labelWeight;
-    if (isActive) {
+    if (intro) {
+      labelColor = AppColors.ink700;
+      labelWeight = FontWeight.w700;
+    } else if (isActive) {
       labelColor = AppColors.primary;
       labelWeight = FontWeight.w800;
     } else if (isLocked) {
@@ -906,9 +1002,11 @@ class _StageColumn extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: isLocked ? null : amori.primaryGradient,
-              color: isLocked ? Colors.white : null,
-              border: isLocked
+              gradient: intro
+                  ? amori.softGradient
+                  : (isLocked ? null : amori.primaryGradient),
+              color: (!intro && isLocked) ? Colors.white : null,
+              border: (!intro && isLocked)
                   ? Border.all(color: AppColors.ink100, width: 1.5)
                   : null,
               boxShadow: isActive ? amori.glowShadow : const [],
@@ -916,7 +1014,9 @@ class _StageColumn extends StatelessWidget {
             child: Icon(
               stage.icon,
               size: 18,
-              color: isLocked ? AppColors.ink300 : Colors.white,
+              color: intro
+                  ? AppColors.primary
+                  : (isLocked ? AppColors.ink300 : Colors.white),
             ),
           ),
           AppSpacing.vXs,

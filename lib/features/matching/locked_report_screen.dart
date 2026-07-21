@@ -12,6 +12,7 @@ import '../../core/theme/app_gradients.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/photo_viewer.dart';
 import '../../data/dummy/matches.dart';
 import '../../data/repositories/match_repository.dart';
@@ -30,7 +31,10 @@ class _LockedReportScreenState extends State<LockedReportScreen> {
 
   // 실데이터 — 잠금 화면이라도 케미 점수·상대 이니셜·사진은 진짜를 보여준다
   // (0점 플레이스홀더는 신뢰를 깎는다 — 2026-07-15 제품 결정).
-  int _score = 0;
+  // 로드 전/실패엔 0을 그리지 않는다: 점수는 성공 후에만, 실패는 에러 상태로 분기.
+  bool _loading = true;
+  bool _hasError = false;
+  int? _score; // null이면 아직 실점수 없음 → 0 대신 스켈레톤
   String _partnerInitial = '?';
   String _partnerName = '상대';
   String? _partnerPhotoUrl;
@@ -43,7 +47,32 @@ class _LockedReportScreenState extends State<LockedReportScreen> {
 
   Future<void> _load() async {
     final id = matchId;
-    if (id == null || id.isEmpty) return;
+    if (id == null || id.isEmpty) {
+      // 매치 id 없는 데모 진입 — 실점수가 없으니 0점 대신 스켈레톤만 유지.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _hasError = false;
+        });
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _hasError = false;
+      });
+    }
+
+    // 이미 구매·구독한 사용자에겐 잠금 티저·가격 CTA를 다시 보여주지 않고
+    // 곧바로 전체 리포트로 보낸다(재잠금 방지).
+    final canView = await PurchaseStore.instance.canViewReport(id);
+    if (!mounted) return;
+    if (canView) {
+      context.pushReplacement('${AppRoutes.fullReport}?id=$id');
+      return;
+    }
+
     try {
       final repository = MatchRepository();
       final results = await Future.wait<Object?>([
@@ -56,18 +85,39 @@ class _LockedReportScreenState extends State<LockedReportScreen> {
       final summaries = results[0] as List<MatchSummary>?;
       final partner = results[1] as PartnerProfile?;
       final match = summaries?.where((s) => s.matchId == id).firstOrNull;
+      if (match == null) {
+        // 케미 점수를 못 받았다 — 0점을 지어내지 않고 에러로 재시도를 유도.
+        setState(() {
+          _loading = false;
+          _hasError = true;
+        });
+        return;
+      }
+      final name = match.partnerName ?? '';
       setState(() {
-        if (match != null) {
-          _score = match.reportScore ?? match.score?.round() ?? 0;
-          final name = match.partnerName ?? '';
-          _partnerInitial = name.isEmpty ? '?' : name.substring(0, 1);
-          if (name.isNotEmpty) _partnerName = name;
-        }
+        _score = match.reportScore ?? match.score?.round();
+        _partnerInitial = name.isEmpty ? '?' : name.substring(0, 1);
+        if (name.isNotEmpty) _partnerName = name;
         _partnerPhotoUrl = partner?.photoUrl;
+        _loading = false;
+        _hasError = false;
       });
     } catch (_) {
-      // 네트워크 실패 — 0점 표시 유지
+      if (!mounted) return;
+      // 네트워크 실패 — 0점을 남기지 않고 에러 상태로 전환.
+      setState(() {
+        _loading = false;
+        _hasError = true;
+      });
     }
+  }
+
+  void _reload() {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    _load();
   }
 
   void _onClose(BuildContext context) {
@@ -114,40 +164,55 @@ class _LockedReportScreenState extends State<LockedReportScreen> {
               children: [
                 _Header(onClose: () => _onClose(context)),
                 Expanded(
-                  child: ListView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg,
-                      AppSpacing.md,
-                      AppSpacing.lg,
-                      AppSpacing.md,
-                    ),
-                    children: [
-                      _Hero(
-                        myInitial: '나',
-                        themInitial: _partnerInitial,
-                        themName: _partnerName,
-                        score: _score,
-                        myPhotoUrl: ProfileStore.instance.profile?.photoUrl,
-                        themPhotoUrl: _partnerPhotoUrl,
-                      ),
-                      AppSpacing.vXl,
-                      const _SectionLabel(
-                        text: '더 자세한 인사이트',
-                        trailingLock: true,
-                      ),
-                      AppSpacing.vSm,
-                      const _LockedInsightCard(title: 'AI 대화 로그 요약', lines: 3),
-                      AppSpacing.vSm,
-                      const _LockedInsightCard(title: '첫 만남 추천 가이드', lines: 2),
-                      AppSpacing.vXl,
-                    ],
+                  child: _hasError
+                      ? AmoriErrorState(
+                          title: '리포트를 불러오지 못했어요',
+                          message: '잠시 후 다시 시도해 주세요.',
+                          onRetry: _reload,
+                        )
+                      : ListView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg,
+                            AppSpacing.md,
+                            AppSpacing.lg,
+                            AppSpacing.md,
+                          ),
+                          children: [
+                            _Hero(
+                              myInitial: '나',
+                              themInitial: _partnerInitial,
+                              themName: _partnerName,
+                              score: _score,
+                              loading: _loading,
+                              myPhotoUrl:
+                                  ProfileStore.instance.profile?.photoUrl,
+                              themPhotoUrl: _partnerPhotoUrl,
+                            ),
+                            AppSpacing.vXl,
+                            const _SectionLabel(
+                              text: '더 자세한 인사이트',
+                              trailingLock: true,
+                            ),
+                            AppSpacing.vSm,
+                            const _LockedInsightCard(
+                              title: 'AI 대화 로그 요약',
+                              lines: 3,
+                            ),
+                            AppSpacing.vSm,
+                            const _LockedInsightCard(
+                              title: '첫 만남 추천 가이드',
+                              lines: 2,
+                            ),
+                            AppSpacing.vXl,
+                          ],
+                        ),
+                ),
+                if (!_hasError)
+                  _BottomCta(
+                    onUnlock: () => _onUnlock(context),
+                    onSubscribe: () => _onSubscribe(context),
                   ),
-                ),
-                _BottomCta(
-                  onUnlock: () => _onUnlock(context),
-                  onSubscribe: () => _onSubscribe(context),
-                ),
               ],
             ),
           ),
@@ -218,6 +283,7 @@ class _Hero extends StatelessWidget {
     required this.myInitial,
     required this.themInitial,
     required this.score,
+    this.loading = false,
     this.themName,
     this.myPhotoUrl,
     this.themPhotoUrl,
@@ -226,7 +292,8 @@ class _Hero extends StatelessWidget {
   final String myInitial;
   final String themInitial;
   final String? themName;
-  final int score;
+  final int? score; // null이면 아직 실점수 없음 → 0 대신 스켈레톤/로더
+  final bool loading;
   final String? myPhotoUrl;
   final String? themPhotoUrl;
 
@@ -253,16 +320,39 @@ class _Hero extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              '$score',
-              style: const TextStyle(
-                fontSize: 88,
-                height: 1.0,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: -3,
+            if (score != null)
+              Text(
+                '$score',
+                style: const TextStyle(
+                  fontSize: 88,
+                  height: 1.0,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -3,
+                ),
+              )
+            else
+              // 로딩·데이터 없음 — 0점을 그리지 않고 로더/스켈레톤으로 대체.
+              Container(
+                width: 108,
+                height: 62,
+                margin: const EdgeInsets.only(bottom: 8),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: loading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      )
+                    : null,
               ),
-            ),
             const SizedBox(width: 4),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -295,13 +385,27 @@ class _AvatarRing extends StatelessWidget {
   final String? photoUrl; // 있으면 사진, 없으면 이니셜
   final String? caption; // 사진 확대 뷰어의 이름 표시
 
+  Widget _initialText() {
+    return Text(
+      initial,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w900,
+        fontSize: 22,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
+    // 사진은 Image.network로 그려 로드 실패 시 이니셜로 폴백한다
+    // (DecorationImage는 실패해도 빈 원만 남아 신뢰를 깎았다).
     final ring = Container(
       width: 64,
       height: 64,
       alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.white.withValues(alpha: 0.18),
@@ -309,23 +413,16 @@ class _AvatarRing extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.45),
           width: 1.5,
         ),
-        image: hasPhoto
-            ? DecorationImage(
-                image: NetworkImage(photoUrl!),
-                fit: BoxFit.cover,
-              )
-            : null,
       ),
       child: hasPhoto
-          ? null
-          : Text(
-              initial,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 22,
-              ),
-            ),
+          ? Image.network(
+              photoUrl!,
+              width: 64,
+              height: 64,
+              fit: BoxFit.cover,
+              errorBuilder: (context, _, _) => _initialText(),
+            )
+          : _initialText(),
     );
     if (!hasPhoto) return ring;
     return GestureDetector(

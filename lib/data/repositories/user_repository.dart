@@ -163,6 +163,13 @@ class UserRepository {
     });
   }
 
+  /// 회원 탈퇴 — 서버의 도메인 데이터(페르소나·매치·대화·리포트 등)를 삭제한다.
+  /// [authToken]이 주어지면 그 토큰으로 인증한다(Firebase 계정을 먼저 삭제한
+  /// 경우 미리 확보한 토큰 전달용).
+  Future<void> deleteAccount({String? authToken}) async {
+    await _api.deleteJson('/users/me', authorization: authToken);
+  }
+
   /// 내 프로필 조회 — 프로필 화면의 이름·나이·지역 표시용.
   Future<MyProfile> fetchMe() async {
     final json = await _api.getJson('/users/me') as Map<String, dynamic>;

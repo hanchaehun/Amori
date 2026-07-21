@@ -15,7 +15,7 @@ from app.config import settings
 from app.dependencies import get_db
 from app.llm.psych_mapping import valid_mbti
 from app.matching.ranker import ADULT_AGE, age_years
-from app.models.database import BlockedContact, User
+from app.models.database import BlockedContact, Feedback, LLMCallLog, Match, User
 from app.services import contact_hash
 from app.services.booking import get_booked_matches
 
@@ -119,7 +119,9 @@ async def upsert_my_profile(
     if body.interest_gender is not None:
         user_obj.interest_gender = body.interest_gender
     if body.region is not None:
-        user_obj.region = body.region
+        # 빈 문자열은 "지역 미설정" 의도 — None으로 정규화 (프로필 시트의
+        # '선택 안 함'과 정합, 매칭 쿼리가 빈 지역을 무시하도록).
+        user_obj.region = body.region or None
     if body.match_age_older is not None:
         user_obj.match_age_older = body.match_age_older
     if body.match_age_younger is not None:
@@ -162,18 +164,21 @@ async def upsert_my_profile(
                 )
             user_obj.phone_number = normalized
             user_obj.phone_hash = contact_hash.sha256_hex(normalized)
-    if body.photo_url is not None and body.photo_url != "":
-        # 상대방 앱에서 그대로 로드되는 URL — https만 허용 (보안 점검 7/15)
-        if not body.photo_url.startswith("https://"):
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error_code": "INVALID_PHOTO_URL",
-                    "message": "사진 URL은 https여야 합니다.",
-                },
-            )
     if body.photo_url is not None:
-        user_obj.photo_url = body.photo_url
+        # 빈 문자열은 "사진 삭제" 의도로 보고 None 처리 (bio와 동일 규칙).
+        if body.photo_url == "":
+            user_obj.photo_url = None
+        else:
+            # 상대방 앱에서 그대로 로드되는 URL — https만 허용 (보안 점검 7/15)
+            if not body.photo_url.startswith("https://"):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error_code": "INVALID_PHOTO_URL",
+                        "message": "사진 URL은 https여야 합니다.",
+                    },
+                )
+            user_obj.photo_url = body.photo_url
     if body.fcm_token is not None:
         user_obj.fcm_token = body.fcm_token
     if body.available_slots is not None:
@@ -413,6 +418,40 @@ async def delete_blocked_contact(
     await db.delete(row)
     await db.commit()
     return await list_blocked_contacts(user, db)
+
+
+@router.delete("/me")
+async def delete_my_account(
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """회원 탈퇴 — 사용자의 도메인 데이터를 실제로 삭제한다.
+
+    - 참가한 matches 삭제 → FK CASCADE로 simulation_jobs·chat_messages·
+      reports·meet_requests·해당 매치 feedback까지 연쇄 정리.
+    - users 삭제 → CASCADE로 personas 정리.
+    - user_id로만 연결된 feedback·llm_call_logs는 명시 삭제.
+
+    Firebase Auth 계정 삭제는 클라이언트가 재인증 후 처리한다.
+    """
+    uid = user["uid"]
+
+    matches = await db.execute(
+        select(Match).where(Match.participant_ids.any(uid))
+    )
+    for match in matches.scalars().all():
+        await db.delete(match)  # CASCADE: sim/chat/report/meet/feedback
+
+    await db.execute(delete(Feedback).where(Feedback.user_id == uid))
+    await db.execute(delete(LLMCallLog).where(LLMCallLog.user_id == uid))
+
+    result = await db.execute(select(User).where(User.id == uid))
+    user_obj = result.scalar_one_or_none()
+    if user_obj:
+        await db.delete(user_obj)  # CASCADE: personas
+
+    await db.commit()
+    return {"deleted": True}
 
 
 @router.get("/me", response_model=UserProfileResponse)

@@ -20,10 +20,13 @@ void main() {
     dotenv.loadFromString(envString: 'DEV_UID=test_user');
   });
 
-  test('GET은 readTimeout 안에 ApiException(TIMEOUT)으로 실패한다', () async {
+  test('GET은 타임아웃(첫 시도 + 콜드스타트 재시도) 후 ApiException(TIMEOUT)으로 실패한다',
+      () async {
     final api = ApiClient(
       httpClient: _HangingClient(),
       readTimeout: const Duration(milliseconds: 100),
+      // 콜드스타트 재시도도 짧게 — 무응답 연결에서 테스트가 오래 매달리지 않게.
+      coldStartTimeout: const Duration(milliseconds: 200),
     );
     await expectLater(
       api.getJson('/matches'),

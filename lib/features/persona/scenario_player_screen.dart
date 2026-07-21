@@ -12,6 +12,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/backend/scenario_answers_store.dart';
@@ -68,6 +69,13 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
     if (answer == null) return false;
     if (_current.isFreeText) return answer.trim().length >= _minFreeTextLength;
     return true;
+  }
+
+  /// 주관식에 뭔가 쓰긴 했는데 최소 길이 미달 — 왜 못 넘어가는지 안내한다.
+  bool get _freeTextTooShort {
+    if (!_current.isFreeText) return false;
+    final answer = (_answers[_index] ?? '').trim();
+    return answer.isNotEmpty && answer.length < _minFreeTextLength;
   }
 
   @override
@@ -160,6 +168,11 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
             store.setDailyPersonaStatus(
               scenarioCode: previousCode,
               completedDate: null,
+            );
+            // 홈으로 이동한 뒤이므로 전역 스낵바로 실패를 알린다(무통지 방지).
+            AmoriSnackbar.showGlobal(
+              '오늘 질문을 저장하지 못했어요. 다시 시도해 주세요.',
+              type: AmoriSnackType.error,
             );
           }),
     );
@@ -261,13 +274,28 @@ class _ScenarioPlayerScreenState extends State<ScenarioPlayerScreen> {
                       ),
                     ),
                     AppSpacing.vMd,
-                    if (_current.isFreeText)
+                    if (_current.isFreeText) ...[
                       _FreeTextCard(
                         controller: _freeTextController,
                         hint: _current.hint ?? '평소 말투 그대로 써주세요',
                         onChanged: _onFreeTextChanged,
-                      )
-                    else
+                      ),
+                      if (_freeTextTooShort) ...[
+                        AppSpacing.vXs,
+                        Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded,
+                                size: 14, color: AppColors.ink500),
+                            const SizedBox(width: 4),
+                            Text(
+                              '조금만 더 써주세요 (최소 $_minFreeTextLength자)',
+                              style: AppTypography.caption
+                                  .copyWith(color: AppColors.ink500),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ] else
                       for (final c in _current.choices) ...[
                         _ChoiceCard(
                           letter: c.letter,
@@ -454,14 +482,6 @@ class _SituationCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 11,
                   ),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                scenario.code,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.ink500,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

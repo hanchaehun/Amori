@@ -118,10 +118,15 @@ class _TabItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = selected ? activeColor : AppColors.ink300;
     return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Column(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '$label 탭',
+        container: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Stack(
@@ -155,6 +160,7 @@ class _TabItem extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

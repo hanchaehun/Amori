@@ -352,6 +352,88 @@ def _topic_for(persona: dict) -> str:
     return topics[_stable_index(cs, len(topics))]
 
 
+# 대화 주제(archetype)에 맞춘 리포트 조각 — 하드코딩 여행/음악 리포트가 강아지·책
+# 대화 뒤에 뜨던 "어색한 더미" 문제를 없앤다. 각 항목: 대표 발견/장소/대화 시작.
+_REPORT_TOPICS: dict[str, dict] = {
+    "travel": {
+        "finding": ("✈️", "여행 스타일 궁합", "훌쩍 떠나는 여행을 둘 다 좋아하고, 즉흥과 계획이 오히려 균형을 이뤄요."),
+        "place": ("🧳", "근교 원데이 트립", "짧게 떠나며 서로의 여행 스타일을 자연스럽게 알 수 있어요"),
+        "starter": "가장 기억에 남는 여행지가 어디예요? 저도 그 근처 가보고 싶어요.",
+    },
+    "food": {
+        "finding": ("🍜", "먹는 취향의 교집합", "유명한 곳보다 동네 맛집을 찾아다니는 성향이 잘 맞아요."),
+        "place": ("🍝", "골목 맛집 탐방", "숨은 노포와 카페를 함께 탐험하기 좋아요"),
+        "starter": "요즘 제일 자주 가는 맛집 있어요? 추천 좀 받고 싶어요.",
+    },
+    "movie": {
+        "finding": ("🎬", "영화·드라마 취향", "감상 후 여운과 해석을 나누는 걸 둘 다 즐겨요."),
+        "place": ("🍿", "독립영화관", "한 편 보고 이야기 나누기 좋은 차분한 분위기"),
+        "starter": "최근에 본 것 중에 여운이 오래 남은 작품 있어요?",
+    },
+    "fitness": {
+        "finding": ("🏃", "활동적인 루틴", "몸을 움직이는 걸 좋아해 함께하면 금방 편해질 궁합이에요."),
+        "place": ("🌳", "한강 산책·러닝", "가볍게 걸으며 대화하기 좋고 첫 만남 부담이 적어요"),
+        "starter": "요즘 운동 루틴 있으세요? 같이 하면 재밌을 것 같아요.",
+    },
+    "book": {
+        "finding": ("📚", "느린 대화의 결", "책과 조용한 공간을 좋아하는 사유의 톤이 닮았어요."),
+        "place": ("📖", "독립서점", "천천히 둘러보며 취향을 나누기 좋아요"),
+        "starter": "요즘 읽는 책 있어요? 좋은 문장 있으면 공유해 주세요.",
+    },
+    "music": {
+        "finding": ("🎵", "음악 취향 교집합", "인디·소규모 공연의 분위기를 함께 즐길 수 있는 궁합이에요."),
+        "place": ("🎶", "소규모 공연장", "라이브의 분위기를 함께 느끼기 좋아요"),
+        "starter": "요즘 듣는 플레이리스트 공유해 주실래요? 취향 궁금해요.",
+    },
+    "pet": {
+        "finding": ("🐶", "다정한 결", "작은 존재를 살피는 따뜻함이 대화에서 비슷하게 드러나요."),
+        "place": ("🌿", "반려동물 친화 카페", "편안한 분위기에서 부담 없이 대화하기 좋아요"),
+        "starter": "반려동물 좋아하세요? 사진 있으면 자랑해 주세요 ㅎㅎ",
+    },
+    "cafe": {
+        "finding": ("☕", "일상의 취향", "산책과 카페 같은 잔잔한 일상을 즐기는 결이 맞아요."),
+        "place": ("☕", "조용한 동네 카페", "대화에 집중하기 좋은 차분한 공간"),
+        "starter": "자주 가는 카페 있어요? 분위기 좋은 데 추천받고 싶어요.",
+    },
+    "art": {
+        "finding": ("🖼", "감성의 접점", "전시와 예술적 경험을 즐기는 취향이 통해요."),
+        "place": ("🖼", "작은 독립 전시", "함께 보며 감상을 나누기 좋아요"),
+        "starter": "최근에 본 전시 중에 인상 깊은 거 있어요?",
+    },
+    "photo": {
+        "finding": ("📷", "순간을 담는 취향", "일상의 장면을 기록하는 감각이 서로 잘 맞아요."),
+        "place": ("🌆", "골목·야경 산책", "걸으며 사진 찍고 대화하기 좋은 코스"),
+        "starter": "사진 찍는 거 좋아하세요? 자주 가는 스팟 있으면 알려주세요.",
+    },
+    "craft": {
+        "finding": ("🎨", "만드는 재미의 접점", "직접 손으로 무언가 만드는 걸 즐기는 결이 닮았어요."),
+        "place": ("🏺", "원데이 공방 클래스", "함께 만들며 자연스럽게 가까워지기 좋아요"),
+        "starter": "요즘 배워보고 싶은 만들기 클래스 있어요? 같이 해보면 재밌을 듯해요.",
+    },
+}
+
+# 모든 주제에 무난하게 적용되는 공통 조각 (대화 스타일·다음 단계).
+_REPORT_GENERIC_FINDING = (
+    "💬",
+    "대화 스타일 일치",
+    "서로 질문을 주고받으며 관심을 표현하는 균형 잡힌 소통 패턴이에요.",
+)
+_REPORT_GENERIC_PLACE = (
+    "🌳",
+    "가벼운 산책 코스",
+    "걸으며 자연스럽게 이야기 나누기 좋아요",
+)
+
+
+def _mock_report_score(their_persona: dict) -> int:
+    """상대 페르소나로 결정적으로 산출한 케미 점수(68~92) — 재현 가능한 데모.
+    일부 쌍은 게이트(75) 미만이 되어 '닿지 않은 인연' 카드도 시연된다."""
+    basis = (their_persona.get("communication_style", "") or "") + str(
+        their_persona.get("value_keywords", "")
+    )
+    return 68 + _stable_index(basis or "mock", 25)
+
+
 class MockLLMProvider(LLMProvider):
 
     async def build_persona(self, user_id: str, answers: list[dict]) -> dict:
@@ -450,58 +532,43 @@ class MockLLMProvider(LLMProvider):
         their_persona: dict,
         simulation_log: list[dict],
     ) -> dict:
+        # 대화 주제(시뮬에서 실제로 오간 topic)에 맞춘 리포트를 만든다.
+        topic = _topic_for(their_persona)
+        t = _REPORT_TOPICS.get(topic, _REPORT_TOPICS["cafe"])
+        score = _mock_report_score(their_persona)
+
+        def _card(triple: tuple) -> dict:
+            emoji, title, sub = triple
+            return {"emoji": emoji, "title": title, "sub": sub}
+
+        findings = [_card(t["finding"]), _card(_REPORT_GENERIC_FINDING)]
+        places = [_card(t["place"]), _card(_REPORT_GENERIC_PLACE)]
+        starters = [
+            t["starter"],
+            "주말엔 보통 어떻게 보내세요? 비슷할 것 같아서 궁금해요.",
+        ]
+
+        # 케미가 낮은 쌍(게이트 근처)엔 주의 문구를 더 얹는다.
+        warnings = [
+            {
+                "title": "깊은 가치관 대화 필요",
+                "body": "아직 갈등 해결 방식이나 관계 속도에 대한 대화는 나누지 않았어요. 자연스럽게 알아가 보세요.",
+            }
+        ]
+        if score < 75:
+            warnings.append(
+                {
+                    "title": "대화 텐션 차이",
+                    "body": "몇몇 순간 대화의 결이 어긋났어요. 서로의 속도를 존중하며 맞춰가 보세요.",
+                }
+            )
+
         return {
-            "score": 82,
-            "findings": [
-                {
-                    "emoji": "✈️",
-                    "title": "여행 스타일 궁합",
-                    "sub": "둘 다 자연 속 힐링 여행을 선호하고, 제주도·올레길에서 공통 관심사가 발견되었어요.",
-                },
-                {
-                    "emoji": "🎵",
-                    "title": "음악 취향 교집합",
-                    "sub": "인디 밴드와 소규모 공연장을 함께 즐길 수 있는 궁합이에요.",
-                },
-                {
-                    "emoji": "💬",
-                    "title": "대화 스타일 일치",
-                    "sub": "서로 질문을 주고받으며 관심을 표현하는 균형 잡힌 소통 패턴이에요.",
-                },
-                {
-                    "emoji": "📍",
-                    "title": "생활권 공유",
-                    "sub": "홍대·마포 지역에 대한 공통 관심이 있어 만남 장소 설정이 자연스러워요.",
-                },
-            ],
-            "warnings": [
-                {
-                    "title": "깊은 가치관 대화 필요",
-                    "body": "아직 갈등 해결 방식이나 관계 속도에 대한 대화는 나누지 않았어요. 자연스럽게 알아가 보세요.",
-                },
-            ],
-            "places": [
-                {
-                    "emoji": "☕",
-                    "title": "연남동 카페 거리",
-                    "sub": "카페와 산책을 좋아하는 두 분에게 딱이에요",
-                },
-                {
-                    "emoji": "🎶",
-                    "title": "문화비축기지",
-                    "sub": "소규모 공연과 야외 산책을 함께 즐길 수 있어요",
-                },
-                {
-                    "emoji": "🍝",
-                    "title": "이태원 경리단길",
-                    "sub": "다양한 음식과 분위기 있는 카페를 탐험할 수 있어요",
-                },
-            ],
-            "starters": [
-                "혹시 이번 주말에 연남동 카페 탐방 같이 하실래요?",
-                "좋아하는 인디 밴드 공연 있으면 같이 가봐요!",
-                "제주도 맛집 리스트 공유해 드릴까요? 저도 얼마 전에 갔거든요 ㅎㅎ",
-            ],
+            "score": score,
+            "findings": findings,
+            "warnings": warnings,
+            "places": places,
+            "starters": starters,
             "tip": "첫 만남은 카페처럼 편한 공간에서 시작하면 대화가 더 자연스러워요.",
             "ai_generated": True,
         }

@@ -12,10 +12,16 @@ import 'api_exception.dart';
 /// 모든 요청에 Firebase ID 토큰을 Bearer 헤더로 싣고,
 /// 표준 에러 응답을 [ApiException]으로 변환한다.
 class ApiClient {
-  ApiClient({FirebaseAuth? auth, http.Client? httpClient, Duration? readTimeout})
-    : _auth = auth,
-      _http = httpClient ?? http.Client(),
-      _readTimeout = readTimeout ?? const Duration(seconds: 15);
+  ApiClient({
+    FirebaseAuth? auth,
+    http.Client? httpClient,
+    Duration? readTimeout,
+    Duration? coldStartTimeout,
+  }) : _auth = auth,
+       _http = httpClient ?? http.Client(),
+       _readTimeout = readTimeout ?? const Duration(seconds: 15),
+       _coldStartTimeout =
+           coldStartTimeout ?? const Duration(seconds: 90);
 
   /// 앱 전역 공유 인스턴스 — 리포지토리마다 http.Client를 새로 만들면
   /// keep-alive 커넥션 재사용이 안 된다. 테스트는 생성자 주입으로 대체.
@@ -30,7 +36,8 @@ class ApiClient {
 
   /// Render 무료 티어 콜드스타트(~60초) — 유휴 후 첫 GET이 15초에 끊기면
   /// 서버가 깨어나는 중일 수 있으니 한 번만 길게 재시도한다.
-  static const _coldStartTimeout = Duration(seconds: 90);
+  /// (테스트는 생성자 주입으로 짧게 대체 — 무응답 연결에서 오래 매달리지 않게.)
+  final Duration _coldStartTimeout;
 
   /// 일반 조회/갱신 — 서버 도달 불가 시 화면이 폴백/에러를 빨리 보여줄 수 있게 짧게.
   final Duration _readTimeout;
@@ -106,14 +113,6 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<dynamic> deleteJson(String path) async {
-    final response = await _send(
-      _http.delete(_uri(path), headers: await _headers()),
-      _readTimeout,
-    );
-    return _decode(response);
-  }
-
   /// 부분 수정 — persona PATCH는 임베딩 재계산(LLM)까지 갈 수 있어 넉넉하게.
   Future<dynamic> patchJson(String path, Object body) async {
     final response = await _send(
@@ -121,6 +120,29 @@ class ApiClient {
       _llmTimeout,
     );
     return _decode(response);
+  }
+
+  /// [authorization]가 주어지면 그 헤더로 인증한다 — 회원 탈퇴에서 Firebase
+  /// 계정을 먼저 삭제한 뒤(그 시점엔 currentUser가 null이라 토큰 재발급 불가)
+  /// 미리 확보한 토큰으로 서버를 지우기 위함. DELETE는 멱등이라 콜드스타트 재시도.
+  Future<dynamic> deleteJson(String path, {String? authorization}) async {
+    Future<Map<String, String>> headers() async => authorization == null
+        ? await _headers()
+        : {'Authorization': authorization, 'Content-Type': 'application/json'};
+    try {
+      final response = await _send(
+        _http.delete(_uri(path), headers: await headers()),
+        _readTimeout,
+      );
+      return _decode(response);
+    } on ApiException catch (error) {
+      if (error.errorCode != 'TIMEOUT') rethrow;
+      final response = await _send(
+        _http.delete(_uri(path), headers: await headers()),
+        _coldStartTimeout,
+      );
+      return _decode(response);
+    }
   }
 
   /// SSE(`text/event-stream`) POST — 이벤트의 data(JSON)를 순차 방출한다.

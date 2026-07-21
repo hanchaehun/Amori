@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/back_app_bar.dart';
 import '../../core/widgets/gradient_button.dart';
@@ -107,10 +108,15 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
     });
   }
 
+  String _statusRoute(String name) =>
+      '${AppRoutes.requestStatus}?name=${Uri.encodeComponent(name)}';
+
   Future<void> _send() async {
     HapticFeedback.mediumImpact();
-    if (_backend.currentUser == null) {
-      context.go(AppRoutes.requestStatus);
+    // DEV_UID 우회 모드도 인증으로 취급 — currentUser(Firebase)만 보면 dev
+    // 데모에서 신청이 아예 전송되지 않고 "보낸 척"만 하던 문제.
+    if (!_backend.isAuthenticated) {
+      context.go(_statusRoute(_match.name));
       return;
     }
 
@@ -134,12 +140,12 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
         receiverId: target.partnerId,
         message: _controller.text.trim(),
       );
-      if (mounted) context.go(AppRoutes.requestStatus);
+      if (mounted) {
+        context.go(_statusRoute(target.partnerName ?? _match.name));
+      }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('만남 신청 저장에 실패했어요. 잠시 후 다시 시도해주세요.')),
-        );
+        AmoriSnackbar.error(context, '만남 신청을 보내지 못했어요. 잠시 후 다시 시도해 주세요.');
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -205,7 +211,7 @@ class _MeetRequestSendScreenState extends State<MeetRequestSendScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: Text(
-                '오늘 신청 가능: 1 / 3건 (프리미엄)',
+                '신청은 신중하게 — 상대에게 바로 전달돼요',
                 style: AppTypography.caption.copyWith(color: AppColors.ink500),
               ),
             ),

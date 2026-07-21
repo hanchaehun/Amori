@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../data/repositories/persona_repository.dart';
 
 /// 페르소나 미리보기·수정 — "당신의 에이전트는 이렇게 말해요" (refatodo P0-C).
@@ -267,9 +269,7 @@ class _PersonaPreviewScreenState extends State<PersonaPreviewScreen> {
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
+          ? const AmoriLoader(message: '에이전트가 말할 준비를 하고 있어요…')
           : _loadError != null
           ? _ErrorBody(message: _loadError!, onRetry: _load, onSkip: _leave)
           : _body(),
@@ -423,6 +423,13 @@ class _PersonaPreviewScreenState extends State<PersonaPreviewScreen> {
           '자주 쓰는 말버릇이나 표기가 있다면 알려 주세요. 의도적인 오타도 좋아요.',
           style: AppTypography.bodySmall.copyWith(color: AppColors.ink500),
         ),
+        if (detail.voiceStats?.hasData ?? false) ...[
+          AppSpacing.vMd,
+          _VoiceStatsCard(
+            stats: detail.voiceStats!,
+            confidence: detail.voiceConfidence,
+          ),
+        ],
         AppSpacing.vMd,
         _HabitTile(
           label: '말버릇·감탄사',
@@ -700,6 +707,99 @@ class _DeletedTraitCard extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 코드가 실측한 말투 통계의 읽기 전용 요약 카드 — LLM 추측이 아니라 실제
+/// 답변에서 뽑은 값이라 "에이전트가 내 말투를 얼마나 아는지"의 근거가 된다.
+class _VoiceStatsCard extends StatelessWidget {
+  const _VoiceStatsCard({required this.stats, required this.confidence});
+
+  final VoiceStatsView stats;
+  final double? confidence;
+
+  (String, Color) get _confidenceLabel {
+    final c = confidence ?? 0;
+    if (c >= 0.6) return ('높음', AppColors.success);
+    if (c >= 0.35) return ('보통', AppColors.primary);
+    return ('알아가는 중', AppColors.warning);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = _confidenceLabel;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSoft,
+        borderRadius: AppRadius.rMd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.graphic_eq_rounded,
+                  size: 18, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Text(
+                'AI가 측정한 내 말투',
+                style: AppTypography.label.copyWith(
+                  color: AppColors.ink900,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  '정확도 $label',
+                  style: AppTypography.caption.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '실제 답변 ${stats.sampleCount}개에서 뽑았어요 — 답할수록 더 정확해져요',
+            style: AppTypography.caption.copyWith(color: AppColors.ink500),
+          ),
+          AppSpacing.vSm,
+          for (final line in stats.summaryLines) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Icon(Icons.circle,
+                      size: 4, color: AppColors.ink300),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    line,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.ink700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
         ],
       ),
     );

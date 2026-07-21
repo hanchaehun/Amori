@@ -9,12 +9,15 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/exit_guard.dart';
 import '../../core/state/profile_store.dart';
 import '../../core/widgets/settings_row.dart';
 import '../../data/backend/amori_backend.dart';
+import '../../data/backend/backend_exception.dart';
 import '../../data/backend/profile_photo_uploader.dart';
 import '../../data/repositories/user_repository.dart';
 import 'match_pref_sheet.dart';
@@ -45,16 +48,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted && latest != null) setState(() => _profile = latest);
   }
 
-  void _comingSoon(BuildContext context, String label) {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$label — 다음 턴 작업 예정')));
-  }
-
   void _onSettings(BuildContext context) {
     HapticFeedback.lightImpact();
     context.push(AppRoutes.settings);
+  }
+
+  void _comingSoon(BuildContext context, String label) {
+    HapticFeedback.selectionClick();
+    AmoriSnackbar.show(context, '$label — 다음 턴 작업 예정');
   }
 
   bool _uploadingPhoto = false;
@@ -223,6 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+    controller.dispose();
     if (bio == null || bio == (_profile?.bio ?? '')) return;
     try {
       await UserRepository().saveProfile(bio: bio);
@@ -267,10 +269,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         danger: true,
       ),
     );
-    if (confirmed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('회원 탈퇴 처리 중... — 다음 턴 작업 예정')),
-      );
+    if (confirmed != true || !context.mounted) return;
+
+    final router = GoRouter.of(context);
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    // 처리 중 블로킹 로더 — 삭제는 서버 왕복이 있어 즉시 끝나지 않는다.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(child: AmoriLoader()),
+      ),
+    );
+    final backend = AmoriBackend();
+    try {
+      // 순서 중요(좀비 계정 방지): ①토큰 확보 → ②Firebase 계정 삭제(재인증
+      // 필요 시 여기서 중단, 서버 미삭제) → ③확보한 토큰으로 서버 데이터 삭제.
+      final token = await backend.captureBearerToken();
+      await backend.deleteFirebaseAccount();
+      await UserRepository().deleteAccount(authToken: token);
+      backend.clearSession();
+      rootNav.pop(); // 로더 닫기
+      router.go(AppRoutes.splash);
+    } on BackendException catch (e) {
+      rootNav.pop(); // 로더 닫기 (서버 데이터는 아직 삭제되지 않음)
+      if (context.mounted) AmoriSnackbar.error(context, e.message);
+    } catch (_) {
+      rootNav.pop(); // 로더 닫기
+      if (context.mounted) {
+        AmoriSnackbar.error(context, '회원 탈퇴에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      }
     }
   }
 
@@ -322,7 +351,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ? () => context.push(AppRoutes.linkedApps)
                     : () => _comingSoon(
                         context, '연동 앱 (주소록 · Spotify · Strava)'),
-                onComingSoon: (label) => _comingSoon(context, label),
                 onLogout: () => _onLogout(context),
                 onDeleteAccount: () => _onDeleteAccount(context),
               ),
@@ -388,6 +416,16 @@ class _ProfileHero extends StatelessWidget {
     ].join(' · ');
   }
 
+  Widget _initialAvatar() {
+    return Text(
+      _name == '—' ? '' : _name.characters.first,
+      style: AppTypography.displayMedium.copyWith(
+        color: AppColors.ink700,
+        fontSize: 36,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -404,25 +442,25 @@ class _ProfileHero extends StatelessWidget {
                   width: 88,
                   height: 88,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: const BoxDecoration(
                     color: AppColors.surfaceMuted,
                     shape: BoxShape.circle,
-                    image: (profile?.photoUrl?.isNotEmpty ?? false)
-                        ? DecorationImage(
-                            image: NetworkImage(profile!.photoUrl!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
                   ),
                   child: (profile?.photoUrl?.isNotEmpty ?? false)
-                      ? null
-                      : Text(
-                          _name == '—' ? '' : _name.characters.first,
-                          style: AppTypography.displayMedium.copyWith(
-                            color: AppColors.ink700,
-                            fontSize: 36,
-                          ),
-                        ),
+                      ? Image.network(
+                          profile!.photoUrl!,
+                          width: 88,
+                          height: 88,
+                          fit: BoxFit.cover,
+                          // 로딩·실패 시 빈 회색 원 대신 이니셜 폴백을 보장한다.
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null
+                                  ? child
+                                  : const AmoriLoader(size: 20),
+                          errorBuilder: (context, _, _) => _initialAvatar(),
+                        )
+                      : _initialAvatar(),
                 ),
                 Positioned(
                   right: 0,
@@ -604,7 +642,6 @@ class _SettingsList extends StatelessWidget {
     required this.onMbti,
     required this.onBio,
     required this.onLinkedApps,
-    required this.onComingSoon,
     required this.onLogout,
     required this.onDeleteAccount,
   });
@@ -618,7 +655,6 @@ class _SettingsList extends StatelessWidget {
   final VoidCallback onMbti;
   final VoidCallback onBio;
   final VoidCallback onLinkedApps;
-  final ValueChanged<String> onComingSoon;
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
 
@@ -664,30 +700,8 @@ class _SettingsList extends StatelessWidget {
             ],
           ),
           SettingsSection(
-            title: '결제 & 구독',
+            title: '계정',
             rows: [
-              SettingsRow(
-                icon: Icons.credit_card_rounded,
-                label: '구독 관리',
-                detail: '무료',
-                onTap: () => onComingSoon('구독 관리'),
-              ),
-              SettingsRow(
-                icon: Icons.receipt_long_rounded,
-                label: '결제 내역',
-                onTap: () => onComingSoon('결제 내역'),
-                last: true,
-              ),
-            ],
-          ),
-          SettingsSection(
-            title: '기타',
-            rows: [
-              SettingsRow(
-                icon: Icons.block_rounded,
-                label: '차단 목록',
-                onTap: () => onComingSoon('차단 목록'),
-              ),
               SettingsRow(
                 icon: Icons.logout_rounded,
                 label: '로그아웃',
@@ -715,7 +729,7 @@ class _SettingsList extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'amori v1.0.0',
+            'amori v${AppConfig.appVersion}',
             style: AppTypography.caption.copyWith(
               color: AppColors.ink300,
               fontSize: 11,

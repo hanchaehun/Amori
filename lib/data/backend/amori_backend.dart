@@ -65,10 +65,57 @@ class AmoriBackend {
     }
   }
 
+  /// 비밀번호 재설정 메일 발송 — 에러는 signInWithEmail와 동일하게 한국어로 매핑.
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      throw BackendException(_authMessage(error), code: error.code);
+    }
+  }
+
   Future<void> signOut() async {
     AgentSessionStore.instance.reset();
     ProfileStore.instance.reset();
     await _auth.signOut();
+  }
+
+  /// 서버 삭제에 쓸 Bearer 토큰을 확보한다 — Firebase 계정을 삭제하면
+  /// currentUser가 null이 되어 토큰을 못 얻으므로 삭제 "전에" 미리 확보한다.
+  /// DEV_UID 모드(Firebase 계정 없음)에선 null → 서버는 dev 헤더로 인증.
+  Future<String?> captureBearerToken() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      final token = await user.getIdToken();
+      return token == null ? null : 'Bearer $token';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 회원 탈퇴 1단계 — Firebase Auth 계정을 삭제한다. **서버 데이터 삭제보다
+  /// 먼저** 호출한다: 재인증이 필요하면 서버 데이터를 지우기 전에 예외로 중단해
+  /// "서버 데이터만 사라진 좀비 계정"이 생기지 않게 한다. (검수 7/20)
+  Future<void> deleteFirebaseAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return; // DEV_UID 모드 — Firebase 계정 없음
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (error) {
+      throw BackendException(
+        error.code == 'requires-recent-login'
+            ? '보안을 위해 로그아웃 후 다시 로그인한 뒤 탈퇴를 진행해 주세요.'
+            : _authMessage(error),
+        code: error.code,
+      );
+    }
+  }
+
+  /// 세션 스토어 정리 — 로그아웃/탈퇴 마무리.
+  void clearSession() {
+    AgentSessionStore.instance.reset();
+    ProfileStore.instance.reset();
   }
 
   Future<String?> getFcmToken() => _messaging.getToken();

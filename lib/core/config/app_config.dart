@@ -10,6 +10,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class AppConfig {
   AppConfig._();
 
+  /// 앱 버전 — 설정·프로필 화면 등에서 공통 참조(하드코딩 분산 방지).
+  static const String appVersion = '1.0.0';
+
   static String get apiBaseUrl {
     final fromEnv = dotenv.env['API_BASE_URL'];
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;

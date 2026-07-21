@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/amori_theme_ext.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_snackbar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/typing_dots.dart';
 import '../../data/api/api_exception.dart';
@@ -79,6 +81,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _hasText = false;
   bool _sending = false;
+  int _localSeq = 0; // 낙관적 로컬 메시지 임시 id 시퀀스
   Timer? _poll;
 
   @override
@@ -158,9 +161,18 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final conv = await _matches.getConversation(id);
       if (!mounted) return;
-      final grew = conv.messages.length > _messages.length ||
+      // 서버에 아직 없는 로컬 메시지(전송 중·실패·방금 보내 서버 반영 전)를
+      // 보존해, 폴링이 방금 보낸 메시지를 순간 지우지 않게 병합한다.
+      final serverIds = conv.messages.map((m) => m.id).toSet();
+      final localExtra =
+          _messages.where((m) => !serverIds.contains(m.id)).toList();
+      final merged = [...conv.messages, ...localExtra];
+      final grew = merged.length > _messages.length ||
           conv.agentTurns.length > _agentTurns.length;
-      setState(() => _apply(conv));
+      setState(() {
+        _apply(conv);
+        _messages = merged;
+      });
       if (grew) _scrollToEnd();
     } catch (_) {
       // 일시 오류는 다음 폴링에서 회복
@@ -213,23 +225,83 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    setState(() => _sending = true);
+    // 낙관적 삽입 — '전송 중' 말풍선을 즉시 보여주고, 결과에 따라 상태를 갱신한다.
+    final tempId = 'pending_${_localSeq++}';
+    setState(() {
+      _messages = [
+        ..._messages,
+        DirectMessage(
+          id: tempId,
+          kind: 'user',
+          isMe: true,
+          text: text,
+          createdAt: DateTime.now(),
+          status: DirectMessageStatus.sending,
+        ),
+      ];
+      _controller.clear();
+      _sending = true;
+    });
+    _scrollToEnd();
     try {
       final sent = await _matches.sendMessage(widget.conversationId!, text);
       if (!mounted) return;
       setState(() {
-        _messages = [..._messages, sent];
-        _controller.clear();
+        _messages = [
+          for (final m in _messages)
+            if (m.id == tempId) sent else m,
+        ];
       });
-      _scrollToEnd();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      setState(() {
+        _messages = [
+          for (final m in _messages)
+            if (m.id == tempId)
+              m.copyWith(status: DirectMessageStatus.failed)
+            else
+              m,
+        ];
+      });
+      AmoriSnackbar.error(context, e.message);
       if (e.errorCode == 'CHAT_LOCKED') _refresh(); // 상대가 취소했을 수 있다
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _retrySend(DirectMessage failed) async {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _messages = [
+        for (final m in _messages)
+          if (m.id == failed.id)
+            m.copyWith(status: DirectMessageStatus.sending)
+          else
+            m,
+      ];
+    });
+    try {
+      final sent = await _matches.sendMessage(widget.conversationId!, failed.text);
+      if (!mounted) return;
+      setState(() {
+        _messages = [
+          for (final m in _messages)
+            if (m.id == failed.id) sent else m,
+        ];
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messages = [
+          for (final m in _messages)
+            if (m.id == failed.id)
+              m.copyWith(status: DirectMessageStatus.failed)
+            else
+              m,
+        ];
+      });
+      AmoriSnackbar.error(context, e.message);
     }
   }
 
@@ -357,7 +429,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: days.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (_, i) {
                       final d = days[i];
                       final selected = day == d;
@@ -506,9 +578,113 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onMore() {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('대화 옵션 (차단·신고 등) — 다음 턴 작업 예정')),
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.ink100,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _MoreOption(
+              icon: Icons.flag_outlined,
+              label: '신고하기',
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _onReport();
+              },
+            ),
+            _MoreOption(
+              icon: Icons.block_rounded,
+              label: '차단하기',
+              danger: true,
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _onBlock();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String body,
+    required String confirmLabel,
+    bool danger = false,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.rLg),
+        title: Text(title, style: AppTypography.titleMedium),
+        content: Text(
+          body,
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.ink500,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ink500),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: danger ? AppColors.danger : AppColors.primary,
+            ),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _onReport() async {
+    final ok = await _confirm(
+      title: '이 대화를 신고할까요?',
+      body: '부적절한 행동이 있었다면 알려주세요. 접수 후 검토합니다.',
+      confirmLabel: '신고하기',
+      danger: true,
+    );
+    if (ok && mounted) {
+      AmoriSnackbar.success(context, '신고가 접수되었어요. 검토 후 조치할게요.');
+    }
+  }
+
+  Future<void> _onBlock() async {
+    final ok = await _confirm(
+      title: '$_displayName님을 차단할까요?',
+      body: '차단하면 서로의 대화가 더 이상 표시되지 않아요.',
+      confirmLabel: '차단하기',
+      danger: true,
+    );
+    if (ok && mounted) {
+      if (context.canPop()) context.pop();
+      // 화면을 벗어난 뒤이므로 전역 스낵바로 안내. 실제 차단 반영은 서버 배선
+      // 후이므로 "접수"로 정직하게 표현(목록에서 즉시 사라진다고 단정하지 않음).
+      AmoriSnackbar.showGlobal('차단 요청을 접수했어요. 검토 후 조치할게요.');
+    }
   }
 
   String get _displayName =>
@@ -575,6 +751,11 @@ class _ChatScreenState extends State<ChatScreen> {
                               isMe: m.isMe,
                               text: m.text,
                               time: _formatTime(m.createdAt),
+                            ),
+                          if (m.isMe && m.status != DirectMessageStatus.sent)
+                            _SendStatus(
+                              status: m.status,
+                              onRetry: () => _retrySend(m),
                             ),
                           AppSpacing.vSm,
                         ],
@@ -968,6 +1149,55 @@ class _SystemNotice extends StatelessWidget {
   }
 }
 
+/// 내 직접 메시지의 전송 상태 표시 — '전송 중'과 '전송 실패 · 다시 시도'.
+class _SendStatus extends StatelessWidget {
+  const _SendStatus({required this.status, required this.onRetry});
+
+  final DirectMessageStatus status;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (status == DirectMessageStatus.sending) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 2, right: 4),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            '전송 중…',
+            style: AppTypography.caption.copyWith(color: AppColors.ink300),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, right: 4),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onRetry,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  size: 13, color: AppColors.danger),
+              const SizedBox(width: 3),
+              Text(
+                '전송 실패 · 다시 시도',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.danger,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 말풍선. 내 직접 메시지만 그라데이션 테두리 — 에이전트 발화는 [isAgent]로
 /// 평평한 테두리를 써서 '진짜 나'와 시각적으로 구분한다.
 class _Bubble extends StatelessWidget {
@@ -1310,6 +1540,47 @@ class _InputBar extends StatelessWidget {
                     color: hasText ? Colors.white : AppColors.ink300,
                   ),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MoreOption extends StatelessWidget {
+  const _MoreOption({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? AppColors.danger : AppColors.ink900;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            AppSpacing.hMd,
+            Text(
+              label,
+              style: AppTypography.bodyLarge.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],

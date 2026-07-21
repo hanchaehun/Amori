@@ -146,15 +146,47 @@ async def main() -> int:
                 if partner in REPORTS:
                     rep = REPORTS[partner]
                     m.score = float(rep["score"])
+                    # ReportResponse 계약(findings/places≥2, starters≥2,
+                    # warnings=[{title,body}])을 만족해야 GET /matches·/report가
+                    # 500 없이 응답한다 — 데모 시드가 스키마를 지키게 채운다.
                     db.add(
                         Report(
                             match_id=m.id,
                             score=rep["score"],
-                            findings=[],
-                            warnings=[rep["warning"]] if rep["warning"] else [],
-                            places=[],
-                            starters=[],
-                            tip=None,
+                            findings=[
+                                {
+                                    "emoji": "🎬",
+                                    "title": "영화·드라마 취향이 잘 맞아요",
+                                    "sub": "느긋하게 감상하는 주말 스타일이 비슷해요",
+                                },
+                                {
+                                    "emoji": "🍜",
+                                    "title": "먹는 걸 좋아하는 공통점",
+                                    "sub": "새로운 맛집 탐방에 둘 다 적극적이에요",
+                                },
+                            ],
+                            warnings=(
+                                [{"title": "이런 점은 참고하세요", "body": rep["warning"]}]
+                                if rep["warning"]
+                                else []
+                            ),
+                            places=[
+                                {
+                                    "emoji": "☕",
+                                    "title": "조용한 동네 카페",
+                                    "sub": "대화에 집중하기 좋은 차분한 분위기",
+                                },
+                                {
+                                    "emoji": "🌳",
+                                    "title": "가벼운 산책 코스",
+                                    "sub": "걸으며 자연스럽게 이야기 나누기 좋아요",
+                                },
+                            ],
+                            starters=[
+                                "요즘 제일 자주 듣는 노래 있어요?",
+                                "주말엔 보통 어떻게 보내세요?",
+                            ],
+                            tip="편하게, 본인 페이스로 대화해도 충분히 잘 통할 거예요.",
                             ai_generated=True,
                             created_at=datetime.now(timezone.utc)
                             - timedelta(days=rep["days_ago"]),

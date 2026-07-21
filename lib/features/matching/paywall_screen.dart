@@ -46,11 +46,9 @@ class PaywallScreen extends StatelessWidget {
     }
   }
 
-  void _onLegal(BuildContext context, String label) {
+  void _onLegal(BuildContext context, String route) {
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$label — 외부 페이지 (다음 턴 작업 예정)')));
+    context.push(route);
   }
 
   @override
@@ -78,8 +76,8 @@ class PaywallScreen extends StatelessWidget {
             ),
           ),
           _LegalFooter(
-            onTerms: () => _onLegal(context, '이용약관'),
-            onRefund: () => _onLegal(context, '환불 정책'),
+            onTerms: () => _onLegal(context, AppRoutes.terms),
+            onRefund: () => _onLegal(context, AppRoutes.terms),
           ),
         ],
       ),

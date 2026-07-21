@@ -17,6 +17,7 @@ class PrimaryTextField extends StatefulWidget {
     this.readOnly = false,
     this.onTap,
     this.onChanged,
+    this.onSubmitted,
     this.validator,
     this.maxLength,
     this.textInputAction,
@@ -31,6 +32,9 @@ class PrimaryTextField extends StatefulWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
+
+  /// 키보드 완료(done/go) 액션에서 호출 — 마지막 필드에서 바로 제출할 때.
+  final ValueChanged<String>? onSubmitted;
   final FormFieldValidator<String>? validator;
   final int? maxLength;
   final TextInputAction? textInputAction;
@@ -85,6 +89,7 @@ class _PrimaryTextFieldState extends State<PrimaryTextField> {
             readOnly: widget.readOnly,
             onTap: widget.onTap,
             onChanged: widget.onChanged,
+            onFieldSubmitted: widget.onSubmitted,
             validator: widget.validator,
             maxLength: widget.maxLength,
             textInputAction: widget.textInputAction,

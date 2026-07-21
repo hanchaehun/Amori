@@ -8,6 +8,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/widgets/amori_avatar.dart';
+import '../../core/widgets/amori_states.dart';
 import '../../core/widgets/amori_tab_bar.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/exit_guard.dart';
@@ -29,6 +31,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   final MatchRepository _matches = MatchRepository();
   bool _loading = true;
+  bool _error = false;
 
   /// 백엔드 목록을 받아왔는가. false면 더미 폴백 상태 — 수락도 로컬에서만 처리한다.
   bool _fromBackend = false;
@@ -56,6 +59,7 @@ class _InboxScreenState extends State<InboxScreen> {
       setState(() {
         _fromBackend = true;
         _loading = false;
+        _error = false;
         _active = convs
             .where(
               (c) =>
@@ -72,15 +76,16 @@ class _InboxScreenState extends State<InboxScreen> {
         _failed = failed;
       });
     } catch (e) {
-      debugPrint('inbox: GET /matches 실패 — 빈 상태로 표시: $e');
+      debugPrint('inbox: GET /matches 실패 — 에러 상태로 표시: $e');
       if (!mounted) return;
       setState(() {
         _fromBackend = false;
         _loading = false;
-        _active = [];
-        _scheduled = [];
-        _completed = [];
-        _failed = [];
+        // 네트워크 실패를 "인연 없음"으로 위장하지 않고 에러 상태로 노출한다.
+        // 단, 이미 목록이 있으면 유지(당겨서 새로고침 실패 시 통째로 지우지 않음).
+        if (_active.isEmpty && _scheduled.isEmpty && _completed.isEmpty) {
+          _error = true;
+        }
       });
     }
   }
@@ -159,11 +164,11 @@ class _InboxScreenState extends State<InboxScreen> {
     _InboxTab.completed => _completed,
   };
 
-  void _onSearch() {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('대화 검색 — 다음 턴 작업 예정')));
+  void _onFeedback(Conversation c) {
+    HapticFeedback.lightImpact();
+    context.push(
+      '${AppRoutes.feedback}?id=${c.id}&name=${Uri.encodeComponent(c.name)}',
+    );
   }
 
   Future<void> _onConversationTap(Conversation c) async {
@@ -249,7 +254,7 @@ class _InboxScreenState extends State<InboxScreen> {
           children: [
             Column(
               children: [
-                _TopBar(onSearch: _onSearch),
+                const _TopBar(),
                 _SubTabs(
                   active: _tab,
                   activeCount: _active.length,
@@ -262,7 +267,22 @@ class _InboxScreenState extends State<InboxScreen> {
                       ? const Center(child: CircularProgressIndicator())
                       : RefreshIndicator(
                           onRefresh: _load,
-                          child: _conversations.isEmpty
+                          child: (_error && _conversations.isEmpty)
+                              ? LayoutBuilder(
+                                  builder: (context, constraints) =>
+                                      SingleChildScrollView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        child: SizedBox(
+                                          height: constraints.maxHeight,
+                                          child: AmoriErrorState(
+                                            title: '연결 목록을 불러오지 못했어요',
+                                            onRetry: _load,
+                                          ),
+                                        ),
+                                      ),
+                                )
+                              : _conversations.isEmpty
                               ? LayoutBuilder(
                                   builder: (context, constraints) =>
                                       SingleChildScrollView(
@@ -294,6 +314,8 @@ class _InboxScreenState extends State<InboxScreen> {
                                         _onAccept(_conversations[i]),
                                     onViewReport: () =>
                                         _onViewReport(_conversations[i]),
+                                    onFeedback: () =>
+                                        _onFeedback(_conversations[i]),
                                   ),
                                 ),
                         ),
@@ -376,8 +398,7 @@ class _FailedFab extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onSearch});
-  final VoidCallback onSearch;
+  const _TopBar();
 
   @override
   Widget build(BuildContext context) {
@@ -391,17 +412,6 @@ class _TopBar extends StatelessWidget {
         child: Row(
           children: [
             Text('연결된 인연', style: AppTypography.titleLarge),
-            const Spacer(),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              icon: const Icon(
-                Icons.search_rounded,
-                size: 22,
-                color: AppColors.ink900,
-              ),
-              onPressed: onSearch,
-            ),
           ],
         ),
       ),
@@ -485,11 +495,13 @@ class _ConversationCard extends StatefulWidget {
     required this.onTap,
     required this.onAccept,
     required this.onViewReport,
+    required this.onFeedback,
   });
   final Conversation conversation;
   final VoidCallback onTap;
   final VoidCallback onAccept;
   final VoidCallback onViewReport;
+  final VoidCallback onFeedback;
 
   @override
   State<_ConversationCard> createState() => _ConversationCardState();
@@ -535,30 +547,7 @@ class _ConversationCardState extends State<_ConversationCard> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      shape: BoxShape.circle,
-                      image: (c.photoUrl?.isNotEmpty ?? false)
-                          ? DecorationImage(
-                              image: NetworkImage(c.photoUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: (c.photoUrl?.isNotEmpty ?? false)
-                        ? null
-                        : Text(
-                            c.initial,
-                            style: AppTypography.titleMedium.copyWith(
-                              color: AppColors.ink700,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                  ),
+                  AmoriAvatar(initial: c.initial, photoUrl: c.photoUrl),
                   AppSpacing.hMd,
                   Expanded(
                     child: Column(
@@ -699,6 +688,12 @@ class _ConversationCardState extends State<_ConversationCard> {
                   onAccept: widget.onAccept,
                 ),
               ],
+              // 만남을 마친 상대에게는 피드백 남기기 진입점 — 피드백 화면이
+              // 도달 불가(dead)였던 문제 해소 + AI 정확도 개선 신호 수집.
+              if (c.status == ConversationStatus.completed) ...[
+                const SizedBox(height: 12),
+                _FeedbackAction(onTap: widget.onFeedback),
+              ],
             ],
           ),
         ),
@@ -737,6 +732,46 @@ class _AppointmentBadge extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FeedbackAction extends StatelessWidget {
+  const _FeedbackAction({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: double.infinity,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primary, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.rate_review_outlined,
+                size: 16, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              '만남 피드백 남기기',
+              style: AppTypography.label.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

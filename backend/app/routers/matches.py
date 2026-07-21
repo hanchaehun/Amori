@@ -29,6 +29,16 @@ from app.services.reveal import next_hidden_speaker, reveal_complete, revealed_t
 router = APIRouter()
 
 
+def _warning_title(warning: object) -> str | None:
+    """warning은 보통 {title, body} dict지만, 구버전/시드가 남긴 문자열도
+    안전하게 처리한다 (문자열 warning에 .get 호출 시 목록 전체 500 방지)."""
+    if isinstance(warning, dict):
+        return warning.get("title") or warning.get("body")
+    if isinstance(warning, str):
+        return warning or None
+    return None
+
+
 async def get_or_create_match(
     db: AsyncSession, uid_a: str, uid_b: str
 ) -> Match:
@@ -166,8 +176,9 @@ async def list_my_matches(
                 failed=failed,
                 # warnings 항목은 {title, body} dict — 문자열 필드에 dict를 넣으면
                 # 응답 검증이 죽어 목록 전체가 500이 된다 (E2E 7/15 발견).
+                # 구버전/시드가 남긴 문자열 warning도 삼키도록 방어한다.
                 failure_reason=(
-                    (report.warnings[0].get("title") or report.warnings[0].get("body"))
+                    _warning_title(report.warnings[0])
                     if failed and report.warnings
                     else None
                 ),
