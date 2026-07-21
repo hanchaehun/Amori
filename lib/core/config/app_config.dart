@@ -13,14 +13,23 @@ class AppConfig {
   /// 앱 버전 — 설정·프로필 화면 등에서 공통 참조(하드코딩 분산 방지).
   static const String appVersion = '1.0.0';
 
+  /// 배포 백엔드(BFF) — 릴리스 빌드의 단일 원천.
+  static const String _prodBaseUrl = 'https://amori-backend-3ldw.onrender.com';
+
   static String get apiBaseUrl {
     final fromEnv = dotenv.env['API_BASE_URL'];
+    // 개발용 로컬 주소(에뮬레이터·로컬호스트)는 릴리스에서 무시한다.
+    final envIsLocal = fromEnv == null ||
+        fromEnv.isEmpty ||
+        fromEnv.contains('localhost') ||
+        fromEnv.contains('127.0.0.1') ||
+        fromEnv.contains('10.0.2.2');
+    // 릴리스 빌드는 반드시 실서버(HTTPS)로 붙는다. 번들된 개발용 .env가
+    // localhost를 가리켜도(App Store 배포 시 평문 HTTP·무동작·ATS 위반 방지)
+    // 로컬 주소는 버리고 배포 백엔드로 폴백한다. 실 원격 URL을 명시로 넣은
+    // 경우엔(예: 스테이징) 그 값을 그대로 존중한다.
+    if (kReleaseMode && envIsLocal) return _prodBaseUrl;
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-    // 웹 릴리스(QA 배포): 호스팅이 assets/.env(닷파일)를 서빙하지 못해도
-    // 실서버 BFF로 동작해야 한다 — 배포 백엔드 URL로 폴백.
-    if (kIsWeb && kReleaseMode) {
-      return 'https://amori-backend-3ldw.onrender.com';
-    }
     // Android 에뮬레이터는 호스트 머신이 10.0.2.2
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000';
     return 'http://localhost:8000';
