@@ -3,6 +3,16 @@
 Play Console → 앱 → **스토어 설정 → 기본 스토어 등록정보**에 아래 파일을 그대로 올리면 됩니다.
 모든 파일은 Google Play 규격(크기·형식)에 맞춰 제작되어 있습니다.
 
+## ⚠️ 앱 패키지 이름 (applicationId) — 업로드 전 필독
+- **패키지 이름: `kr.co.vience.amori`** (iOS 번들 ID와 통일)
+- 기존 `com.example.amori`는 Play가 **거부**하는 예시용 이름이라 `kr.co.vience.amori`로 변경 완료했습니다
+  (`android/app/build.gradle.kts`, `MainActivity.kt`, `google-services.json`).
+- **패키지 이름은 첫 업로드 후 영구 고정 — 절대 변경 불가.** 다른 이름을 원하면 **첫 업로드 전에** 알려주세요.
+- **Firebase 후속작업(필수):** Firebase 콘솔에서 Android 앱 `kr.co.vience.amori`를 추가하고
+  **실제 `google-services.json`을 내려받아 `android/app/google-services.json`을 교체**하세요.
+  (현재 파일은 패키지 이름만 맞춘 상태 — 교체 안 하면 푸시/일부 기능이 실서비스에서 어긋날 수 있음)
+- 릴리스 서명키(upload keystore)도 아직 debug 키입니다 — 배포 전 릴리스 keystore를 만들어 `build.gradle.kts`에 연결하세요.
+
 ## 이미지 파일
 
 | 업로드 위치 (Play Console) | 파일 | 크기 | 규격 |
