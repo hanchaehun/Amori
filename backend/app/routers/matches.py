@@ -150,7 +150,7 @@ async def list_my_matches(
         live = bool(job) and not reveal_complete(all_turns, now)
         last_text = shown[-1].get("text") if shown else None
         report = reports.get(match_obj.id)
-        # 진행 실패: 케미 점수가 게이트 미만인 simulated 매치 — 75점 게이트가 왕.
+        # 진행 실패: 케미 점수가 게이트 미만인 simulated 매치 — report_pass_score 게이트가 왕.
         # 분위기에 휩쓸려 약속이 잡혔어도 게이트 미만이면 약속째로 무효
         # (리포트 생성 시점에 appointment_ready를 내리지만, 구버전 행 방어로
         # 응답에서도 약속 필드를 무효화한다). 송출 중(live)이면 결과 미확정이라

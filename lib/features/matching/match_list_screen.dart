@@ -17,10 +17,10 @@ import '../../data/backend/amori_backend.dart';
 import '../../data/dummy/matches.dart';
 import '../../data/repositories/match_repository.dart';
 
-/// 케미 게이트(백엔드 report_pass_score=75) 통과 매치만 이 탭에 띄운다.
+/// 케미 게이트(백엔드 report_pass_score=80) 통과 매치만 이 탭에 띄운다.
 /// 후보 검색(/matches/find)이 아니라 시뮬 대화·리포트가 끝난 결과(/matches)가
 /// 원천 — "AI가 먼저 만나보고 검증된 인연"이라는 제품 약속과 배너 문구의 구현.
-const int kVerifiedScoreThreshold = 75;
+const int kVerifiedScoreThreshold = 80;
 
 class MatchListScreen extends StatefulWidget {
   const MatchListScreen({super.key});
@@ -211,7 +211,7 @@ class _VerifiedBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '75점 이상 검증된 매칭만 표시됩니다',
+              '80점 이상 검증된 매칭만 표시됩니다',
               style: AppTypography.bodySmall.copyWith(
                 color: AppColors.ink700,
                 fontWeight: FontWeight.w600,

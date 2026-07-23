@@ -190,7 +190,7 @@ async def run_auto_simulation(
         await db.commit()
         return None
 
-    # 리포트까지 생성해야 inbox 카드가 점수·75점 게이트 분류를 바로 갖는다.
+    # 리포트까지 생성해야 inbox 카드가 점수·게이트(report_pass_score) 분류를 바로 갖는다.
     report_score = await _ensure_report(
         db, llm, match_obj, my_persona, their_persona, job, uid
     )
@@ -253,7 +253,7 @@ async def _ensure_report(
             ai_generated=True,
         )
     )
-    # 게이트가 왕 — 75점 미만이면 수락 진행분도 무효 (scheduled는 불가침)
+    # 게이트가 왕 — report_pass_score 미만이면 수락 진행분도 무효 (scheduled는 불가침)
     if (
         report_data["score"] < settings.report_pass_score
         and match_obj.status == "simulated"

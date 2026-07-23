@@ -10,7 +10,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../data/dummy/conversations.dart';
 
-/// 닿지 않은 인연 — 케미 점수가 75점을 넘지 못한 대화 모음.
+/// 닿지 않은 인연 — 케미 점수가 80점을 넘지 못한 대화 모음.
 /// 연결 화면 우하단 원형 버튼으로 진입한다. 3일이 지나면 자연 소멸.
 class FailedMatchesScreen extends StatelessWidget {
   const FailedMatchesScreen({super.key, required this.items});
@@ -32,7 +32,7 @@ class FailedMatchesScreen extends StatelessWidget {
               AppSpacing.md,
             ),
             child: Text(
-              'AI 소개팅에서 케미 점수가 75점에 닿지 못한 인연이에요.\n카드를 누르면 대화를 볼 수 있고, 3일이 지나면 자연스럽게 사라져요.',
+              'AI 소개팅에서 케미 점수가 80점에 닿지 못한 인연이에요.\n카드를 누르면 대화를 볼 수 있고, 3일이 지나면 자연스럽게 사라져요.',
               style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.ink500,
                 fontSize: 13,

@@ -40,7 +40,7 @@ class _InboxScreenState extends State<InboxScreen> {
   List<Conversation> _scheduled = [];
   List<Conversation> _completed = [];
 
-  /// 케미 점수가 75점에 닿지 못한 대화 — 우하단 버튼으로 진입하는 별도 화면에 표시.
+  /// 케미 점수가 80점에 닿지 못한 대화 — 우하단 버튼으로 진입하는 별도 화면에 표시.
   List<FailedMatch> _failed = [];
 
   @override
@@ -322,7 +322,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 ),
               ],
             ),
-            // 닿지 않은 인연(케미 75점 미만) 진입 버튼 — 데이터가 있을 때만 노출
+            // 닿지 않은 인연(케미 80점 미만) 진입 버튼 — 데이터가 있을 때만 노출
             if (!_loading && _failed.isNotEmpty)
               Positioned(
                 right: AppSpacing.lg,

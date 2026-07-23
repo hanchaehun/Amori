@@ -53,7 +53,7 @@ class PushPreviewScreen extends StatelessWidget {
     _PushNoti(
       icon: Icons.auto_awesome_rounded,
       title: '오늘의 검증된 매칭이 도착했어요',
-      body: '4명의 새로운 인연이 75점 이상으로 매칭됐어요',
+      body: '4명의 새로운 인연이 80점 이상으로 매칭됐어요',
       time: '오전 9:00',
       target: AppRoutes.matchList,
     ),

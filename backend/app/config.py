@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # 케미 리포트 게이트 — 미만이면 '진행 실패(닿지 않은 인연)'로 분류,
     # TTL이 지나면 GET /matches 목록에서 자연 소멸한다 (행은 보존)
-    report_pass_score: int = 75
+    report_pass_score: int = 80
     failed_match_ttl_days: int = 3
 
     # Server

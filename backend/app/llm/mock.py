@@ -427,7 +427,7 @@ _REPORT_GENERIC_PLACE = (
 
 def _mock_report_score(their_persona: dict) -> int:
     """상대 페르소나로 결정적으로 산출한 케미 점수(68~92) — 재현 가능한 데모.
-    일부 쌍은 게이트(75) 미만이 되어 '닿지 않은 인연' 카드도 시연된다."""
+    일부 쌍은 게이트(80) 미만이 되어 '닿지 않은 인연' 카드도 시연된다."""
     basis = (their_persona.get("communication_style", "") or "") + str(
         their_persona.get("value_keywords", "")
     )
@@ -555,7 +555,7 @@ class MockLLMProvider(LLMProvider):
                 "body": "아직 갈등 해결 방식이나 관계 속도에 대한 대화는 나누지 않았어요. 자연스럽게 알아가 보세요.",
             }
         ]
-        if score < 75:
+        if score < 80:
             warnings.append(
                 {
                     "title": "대화 텐션 차이",

@@ -80,7 +80,7 @@ class MatchSummary {
   /// 케미 점수(리포트). [score]는 벡터 매칭 점수.
   final int? reportScore;
 
-  /// 케미 점수가 게이트(75) 미만 — '닿지 않은 인연' 화면으로 분리된다.
+  /// 케미 점수가 게이트(80) 미만 — '닿지 않은 인연' 화면으로 분리된다.
   final bool failed;
   final String? failureReason;
 
